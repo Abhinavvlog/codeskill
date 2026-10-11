@@ -10,7 +10,10 @@ export default function ContestsAdminPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
+  const [createdSlug, setCreatedSlug] = useState<string | null>(null);
+
   useEffect(() => {
+    setCreatedSlug(new URLSearchParams(window.location.search).get("created"));
     fetchContests();
   }, []);
 
@@ -66,6 +69,15 @@ export default function ContestsAdminPage() {
           Create Contest
         </Link>
       </div>
+
+      {createdSlug && (
+        <div className="mb-6 p-4 rounded-xl border border-green-500/30 bg-green-500/10 text-sm text-green-700 dark:text-green-400 flex flex-wrap items-center justify-between gap-3">
+          <span>Contest created successfully.</span>
+          <span className="font-mono">
+            {typeof window !== "undefined" ? window.location.origin : ""}/contests/{createdSlug}
+          </span>
+        </div>
+      )}
 
       <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden flex flex-col">
         {/* Toolbar */}

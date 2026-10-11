@@ -22,9 +22,7 @@ export class CreateQuestionDto {
   })
   @IsOptional()
   @IsArray()
-  @ArrayUnique({ message: 'Options must be unique (no duplicate choices).' })
-  @IsString({ each: true, message: 'Each option must be a valid string.' })
-  options?: string[];
+  options?: Array<string | { text: string; isCorrect?: boolean; explanation?: string }>;
 
   @ApiPropertyOptional({
     example: 1,
@@ -73,12 +71,37 @@ export class CreateQuestionDto {
   language?: string = 'general';
 
   @ApiPropertyOptional({
-    enum: ['single_choice', 'multiple_choice'],
+    enum: [
+      'single_choice',
+      'multiple_choice',
+      'coding',
+      'algorithmic',
+      'MCQ',
+      'MULTIPLE_CHOICE',
+      'TRUE_FALSE',
+      'CODE_OUTPUT',
+      'DSA',
+    ],
     default: 'single_choice',
   })
   @IsOptional()
-  @IsIn(['single_choice', 'multiple_choice'])
-  questionType?: 'single_choice' | 'multiple_choice' = 'single_choice';
+  @IsIn([
+    'single_choice',
+    'multiple_choice',
+    'coding',
+    'algorithmic',
+    'MCQ',
+    'MULTIPLE_CHOICE',
+    'TRUE_FALSE',
+    'CODE_OUTPUT',
+    'DSA',
+  ])
+  questionType?: string = 'single_choice';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
 
   @ApiPropertyOptional({
     type: [String],

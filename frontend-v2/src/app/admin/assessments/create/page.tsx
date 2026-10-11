@@ -47,6 +47,14 @@ function AssessmentBuilder() {
       addToast("error", "Validation Error", "At least one question is required across sections.");
       return;
     }
+    if (!(Number(store.durationMinutes) > 0)) {
+      addToast("error", "Validation Error", "Duration must be at least 1 minute.");
+      return;
+    }
+    if (store.passingMarks !== '' && (Number(store.passingMarks) < 0 || Number(store.passingMarks) > totalMarks)) {
+      addToast("error", "Validation Error", `Passing marks must be between 0 and total marks (${totalMarks}).`);
+      return;
+    }
 
     setIsPublishing(true);
     try {

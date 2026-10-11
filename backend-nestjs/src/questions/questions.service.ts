@@ -62,7 +62,7 @@ export class QuestionsService {
         qbInner.where('question.question ILIKE :search', { search })
                .orWhere('question.topic ILIKE :search', { search })
                .orWhere('question.subtopic ILIKE :search', { search })
-               .orWhere(`EXISTS (SELECT 1 FROM jsonb_array_elements_text(question.tags) AS t WHERE t ILIKE :search)`);
+               .orWhere(`EXISTS (SELECT 1 FROM unnest(question.tags) AS t WHERE t ILIKE :search)`);
       }));
     }
 
@@ -132,19 +132,65 @@ export class QuestionsService {
     ip = '',
     userAgent = '',
   ) {
-    if (dto.correctAnswer! < 0 || dto.correctAnswer! >= dto.options!.length) {
-      throw new BadRequestException(
-        `correctAnswer must be a valid zero-based index between 0 and ${dto.options!.length - 1}`,
-      );
+    const { options: rawOptions, status: _ignoredStatus, ...rest } = dto as any;
+    const type = String(dto.questionType || 'single_choice');
+    const isChoice = [
+      'single_choice',
+      'multiple_choice',
+      'MCQ',
+      'MULTIPLE_CHOICE',
+      'TRUE_FALSE',
+    ].includes(type);
+
+    let options: string[] = [];
+    let correctAnswers: number[] = dto.correctAnswers || [];
+    let correctAnswer = dto.correctAnswer ?? 0;
+
+    if (isChoice) {
+      const source =
+        Array.isArray(rawOptions) && rawOptions.length > 0
+          ? rawOptions
+          : type === 'TRUE_FALSE'
+            ? ['True', 'False']
+            : [];
+      options = source.map((o: any) => (typeof o === 'string' ? o : o?.text || ''));
+      const flagged = source
+        .map((o: any, i: number) => (typeof o === 'object' && o?.isCorrect ? i : -1))
+        .filter((i: number) => i >= 0);
+      if (flagged.length > 0) {
+        correctAnswers = flagged;
+        correctAnswer = flagged[0];
+      }
+      if (options.length < 2 || options.some((o) => !o.trim())) {
+        throw new BadRequestException(
+          'Choice questions need at least 2 non-empty options',
+        );
+      }
+      if (correctAnswer < 0 || correctAnswer >= options.length) {
+        throw new BadRequestException(
+          `correctAnswer must be a valid zero-based index between 0 and ${options.length - 1}`,
+        );
+      }
+    }
+
+    if (!(dto.question || dto.title)) {
+      throw new BadRequestException('Question text is required');
+    }
+    if (dto.marks !== undefined && dto.marks <= 0) {
+      throw new BadRequestException('Marks must be greater than 0');
     }
 
     const newQuestion = this.questionRepository.create({
-      ...dto,
+      ...rest,
+      question: dto.question || dto.title,
+      options,
+      correctAnswer,
+      correctAnswers,
       created_by_id: adminUser.id || adminUser._id,
       status: 'approved',
       approved_by_id: adminUser.id || adminUser._id,
       approvedAt: new Date(),
-    });
+    } as any) as unknown as QuestionEntity;
 
     const question = await this.questionRepository.save(newQuestion);
 

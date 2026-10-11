@@ -18,7 +18,9 @@ export default function AdminProblemsPage() {
     try {
       setIsLoading(true);
       const res = await adminProblemsAPI.getAll();
-      if (res.data?.data) {
+      if (Array.isArray(res.data?.problems)) {
+        setProblems(res.data.problems);
+      } else if (res.data?.data) {
         setProblems(res.data.data);
       } else if (Array.isArray(res.data)) {
         setProblems(res.data);

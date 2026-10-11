@@ -68,6 +68,14 @@ export default function CreateContestPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (selectedProblems.length === 0) {
+      setError("Select at least one problem for the contest.");
+      return;
+    }
+    if (new Date(formData.endTime) <= new Date(formData.startTime)) {
+      setError("End time must be after start time.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -75,7 +83,7 @@ export default function CreateContestPage() {
         ...formData,
         problems: selectedProblems
       });
-      router.push("/admin/contests");
+      router.push(`/admin/contests?created=${encodeURIComponent(formData.slug)}`);
     } catch (err: any) {
       setError(err.response?.data?.message || err.message || "Failed to create contest");
       setLoading(false);
@@ -181,7 +189,7 @@ export default function CreateContestPage() {
             {/* Problem Selection Section */}
             <div className="bg-card border border-border rounded-xl shadow-sm p-6 space-y-6 flex flex-col h-[500px]">
               <div className="flex items-center justify-between border-b border-border pb-2">
-                <h2 className="text-lg font-semibold text-foreground">Select Problems</h2>
+                <h2 className="text-lg font-semibold text-foreground">Select Problems <span className="text-red-500">*</span></h2>
                 <span className="text-sm font-medium text-primary bg-primary/10 px-2.5 py-0.5 rounded-full">
                   {selectedProblems.length} Selected
                 </span>
@@ -289,7 +297,7 @@ export default function CreateContestPage() {
             <div className="flex flex-col gap-3">
               <button 
                 type="submit"
-                disabled={loading || selectedProblems.length === 0}
+                disabled={loading}
                 className="flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-primary rounded-xl hover:bg-primary/90 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? <Spinner className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}

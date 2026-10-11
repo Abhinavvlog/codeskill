@@ -44,13 +44,13 @@ export class AdminContestsController {
   @Post()
   @ApiOperation({ summary: 'Create a new contest' })
   async createContest(@Body() body: any) {
-    return { success: true, message: 'Contest created via Admin portal' };
+    return this.adminService.createContest(body);
   }
 
   @Put(':id')
   @ApiOperation({ summary: 'Update a contest' })
   async updateContest(@Param('id') id: string, @Body() body: any) {
-    return { success: true, message: `Contest ${id} updated` };
+    return this.adminService.updateContest(id, body);
   }
 
   @Delete(':id')

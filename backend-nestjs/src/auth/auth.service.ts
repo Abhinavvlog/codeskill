@@ -147,51 +147,27 @@ export class AuthService implements OnModuleInit {
   }
 
   async sendRegistrationOtp(dto: SendOtpDto) {
-    const existingUser = await this.userRepository.findOne({ where: { email: dto.email } });
-    if (existingUser) {
-      if (existingUser.isAssessmentStudent) {
-        throw new BadRequestException(
-          'Assessment students cannot register publicly. Please log in using your University UID and password.',
-        );
-      }
-      throw new BadRequestException('Email already registered. Please login.');
-    }
-    return this.otpService.sendOTP(dto.email);
+    throw new BadRequestException(
+      'Public registration is currently disabled. Please contact your administrator.',
+    );
   }
 
   async register(dto: RegisterDto) {
-    await this.otpService.verifyOTP(dto.email, dto.otp);
-
-    const userExists = await this.userRepository.findOne({ where: { email: dto.email } });
-    if (userExists) {
-      if (userExists.isAssessmentStudent) {
-        throw new BadRequestException(
-          'Assessment students cannot register publicly. Please log in using your University UID and password.',
-        );
-      }
-      throw new BadRequestException('User already exists');
-    }
-
-    const pgUser = this.userRepository.create({
-      name: dto.name,
-      email: dto.email,
-      password: dto.password,
-      stats: {},
-      profile: {},
-      studentProfile: {},
-    });
-    const user = await this.userRepository.save(pgUser);
-
-    return this.authResponse(user);
+    throw new BadRequestException(
+      'Public registration is currently disabled. Please contact your administrator.',
+    );
   }
 
   async login(dto: LoginDto) {
     const user = await this.userRepository.findOne({
       where: { email: dto.email },
-      select: { id: true, name: true, email: true, password: true, role: true, isAdmin: true, uid: true, isAssessmentStudent: true, forcePasswordChange: true, studentProfile: true, avatar: true, bio: true, profile: true, stats: true, authProvider: true }
+      select: { id: true, name: true, email: true, password: true, role: true, isAdmin: true, uid: true, isAssessmentStudent: true, forcePasswordChange: true, studentProfile: true, avatar: true, bio: true, profile: true, stats: true, authProvider: true, isActive: true }
     });
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+    if (user.isActive === false) {
+      throw new UnauthorizedException('Your account has been deactivated. Please contact your administrator.');
     }
 
     if (user.authProvider !== 'local' && !user.password) {
@@ -213,15 +189,12 @@ export class AuthService implements OnModuleInit {
 
     let user = await this.userRepository.findOne({ where: { email: dto.email } });
     if (!user) {
-      const newUser = this.userRepository.create({
-        name: dto.name || dto.email.split('@')[0],
-        email: dto.email,
-        authProvider: 'otp',
-        stats: {},
-        profile: {},
-        studentProfile: {},
-      });
-      user = await this.userRepository.save(newUser);
+      throw new UnauthorizedException(
+        'Account not found. Sign-up is disabled. Please contact your administrator.',
+      );
+    }
+    if (user.isActive === false) {
+      throw new UnauthorizedException('Your account has been deactivated. Please contact your administrator.');
     }
 
     return this.authResponse(user);
@@ -258,6 +231,11 @@ export class AuthService implements OnModuleInit {
           'Assessment students cannot use social login. Please log in using your University UID and password.',
         );
       }
+      if (user.isActive === false) {
+        throw new UnauthorizedException(
+          'Your account has been deactivated. Please contact your administrator.',
+        );
+      }
       if (!user.googleId) {
         user.googleId = sub;
         if (!user.avatar) user.avatar = picture;
@@ -265,7 +243,7 @@ export class AuthService implements OnModuleInit {
       }
     } else {
       throw new UnauthorizedException(
-        'Account not found. Google sign-up is currently disabled. Please register an account first.',
+        'Account not found. Sign-up is disabled. Please contact your administrator.',
       );
     }
 
@@ -307,6 +285,11 @@ export class AuthService implements OnModuleInit {
 
       let user = await this.userRepository.findOne({ where: { email: primaryEmail } });
       if (user) {
+        if (user.isActive === false) {
+          throw new UnauthorizedException(
+            'Your account has been deactivated. Please contact your administrator.',
+          );
+        }
         if (user.isAssessmentStudent) {
           throw new UnauthorizedException(
             'Assessment students cannot use social login. Please log in using your University UID and password.',
@@ -318,21 +301,14 @@ export class AuthService implements OnModuleInit {
           await this.userRepository.save(user);
         }
       } else {
-        const newUser = this.userRepository.create({
-          name: name || login,
-          email: primaryEmail,
-          githubId: id.toString(),
-          avatar: avatar_url,
-          authProvider: 'github',
-          stats: {},
-          profile: {},
-          studentProfile: {},
-        });
-        user = await this.userRepository.save(newUser);
+        throw new UnauthorizedException(
+          'Account not found. Sign-up is disabled. Please contact your administrator.',
+        );
       }
 
       return this.authResponse(user);
     } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException('GitHub authentication failed');
     }
   }
@@ -369,6 +345,11 @@ export class AuthService implements OnModuleInit {
 
       let user = await this.userRepository.findOne({ where: { email } });
       if (user) {
+        if (user.isActive === false) {
+          throw new UnauthorizedException(
+            'Your account has been deactivated. Please contact your administrator.',
+          );
+        }
         if (user.isAssessmentStudent) {
           throw new UnauthorizedException(
             'Assessment students cannot use social login. Please log in using your University UID and password.',
@@ -380,21 +361,14 @@ export class AuthService implements OnModuleInit {
           await this.userRepository.save(user);
         }
       } else {
-        const newUser = this.userRepository.create({
-          name,
-          email,
-          linkedinId: sub,
-          avatar: picture,
-          authProvider: 'linkedin',
-          stats: {},
-          profile: {},
-          studentProfile: {},
-        });
-        user = await this.userRepository.save(newUser);
+        throw new UnauthorizedException(
+          'Account not found. Sign-up is disabled. Please contact your administrator.',
+        );
       }
 
       return this.authResponse(user);
     } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException('LinkedIn authentication failed');
     }
   }

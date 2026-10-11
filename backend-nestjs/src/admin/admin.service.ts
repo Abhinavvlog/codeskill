@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 
@@ -177,6 +182,79 @@ export class AdminService {
     const contest = await this.contestModel.findByIdAndDelete(id);
     if (!contest) throw new NotFoundException('Contest not found');
     return { success: true, message: 'Contest deleted' };
+  }
+
+  private validateContestPayload(body: any) {
+    const title = String(body?.title || '').trim();
+    const slug = String(body?.slug || '')
+      .trim()
+      .toLowerCase();
+    const description = String(body?.description || '').trim();
+    if (!title) throw new BadRequestException('Contest title is required');
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+      throw new BadRequestException(
+        'Slug may only contain lowercase letters, numbers and hyphens',
+      );
+    }
+    if (!description) {
+      throw new BadRequestException('Contest description is required');
+    }
+    const startTime = new Date(body?.startTime);
+    const endTime = new Date(body?.endTime);
+    if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+      throw new BadRequestException('Valid start and end times are required');
+    }
+    if (endTime <= startTime) {
+      throw new BadRequestException('End time must be after start time');
+    }
+    const problems = Array.isArray(body?.problems) ? body.problems : [];
+    if (problems.length === 0) {
+      throw new BadRequestException('Select at least one problem');
+    }
+    if (body?.isPrivate && !String(body?.password || '').trim()) {
+      throw new BadRequestException('Private contests require a password');
+    }
+    return {
+      title,
+      slug,
+      description,
+      startTime,
+      endTime,
+      problems,
+      isPrivate: !!body?.isPrivate,
+      password: body?.isPrivate ? String(body.password).trim() : undefined,
+      isPublished: !!body?.isPublished,
+    };
+  }
+
+  async createContest(body: any) {
+    const data = this.validateContestPayload(body);
+    if (await this.contestModel.exists({ slug: data.slug })) {
+      throw new ConflictException(`Slug '${data.slug}' is already in use`);
+    }
+    const contest = await this.contestModel.create(data);
+    return {
+      success: true,
+      message: 'Contest created',
+      contest,
+      shareUrl: `/contests/${contest.slug}`,
+    };
+  }
+
+  async updateContest(id: string, body: any) {
+    const data = this.validateContestPayload(body);
+    const clash = await this.contestModel.exists({
+      slug: data.slug,
+      _id: { $ne: id },
+    });
+    if (clash) {
+      throw new ConflictException(`Slug '${data.slug}' is already in use`);
+    }
+    const contest = await this.contestModel.findByIdAndUpdate(id, data, {
+      new: true,
+    });
+    if (!contest) throw new NotFoundException('Contest not found');
+    return { success: true, message: 'Contest updated', contest };
   }
 
   // --- Problems ---
