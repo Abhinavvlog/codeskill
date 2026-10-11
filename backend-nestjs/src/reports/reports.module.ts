@@ -1,23 +1,13 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { ReportsController } from './reports.controller';
-import {
-  AssessmentAttempt,
-  AssessmentAttemptSchema,
-} from '../database/schemas/assessment-attempt.schema';
-import {
-  Assessment,
-  AssessmentSchema,
-} from '../database/schemas/assessment.schema';
-import { Question, QuestionSchema } from '../database/schemas/question.schema';
+import { AssessmentAttempt } from '../database/entities/assessment-attempt.entity';
+import { Assessment } from '../database/entities/assessment.entity';
+import { Question } from '../database/entities/question.entity';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: AssessmentAttempt.name, schema: AssessmentAttemptSchema },
-      { name: Assessment.name, schema: AssessmentSchema },
-      { name: Question.name, schema: QuestionSchema },
-    ]),
+    TypeOrmModule.forFeature([AssessmentAttempt, Assessment, Question]),
   ],
   controllers: [ReportsController],
 })

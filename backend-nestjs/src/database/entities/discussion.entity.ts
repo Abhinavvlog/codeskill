@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index, ManyToMany, JoinTable } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { User } from './user.entity';
 
 @Entity('discussions')
@@ -15,11 +15,11 @@ export class Discussion {
   @Index()
   problemId: string;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'author_id' })
   author: User;
 
-  @Column()
+  @Column({ nullable: true })
   author_id: string;
 
   @Column({ length: 200 })
@@ -37,21 +37,11 @@ export class Discussion {
   @Column({ default: 0 })
   downvotes: number;
 
-  @ManyToMany(() => User)
-  @JoinTable({
-    name: 'discussion_upvotes',
-    joinColumn: { name: 'discussion_id', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'user_id', referencedColumnName: 'id' }
-  })
-  upvotedBy: User[];
+  @Column('text', { array: true, default: '{}' })
+  upvotedBy: string[];
 
-  @ManyToMany(() => User)
-  @JoinTable({
-    name: 'discussion_downvotes',
-    joinColumn: { name: 'discussion_id', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'user_id', referencedColumnName: 'id' }
-  })
-  downvotedBy: User[];
+  @Column('text', { array: true, default: '{}' })
+  downvotedBy: string[];
 
   @Column({ default: 0 })
   replyCount: number;

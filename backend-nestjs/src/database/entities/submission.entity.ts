@@ -71,8 +71,32 @@ export class Submission {
     error?: string;
   }>;
 
-  @Column({ type: 'float', default: 0 })
-  score: number;
+  @Column({ type: 'varchar', nullable: true })
+  mongoId?: string;
+
+  @Column({ type: 'float', nullable: true })
+  runtime?: number;
+
+  @Column({ type: 'float', nullable: true })
+  memory?: number;
+
+  @Column({ type: 'int', nullable: true })
+  testCasesPassed?: number;
+
+  @Column({ type: 'int', nullable: true })
+  totalTestCases?: number;
+
+  @Column({ type: 'text', nullable: true })
+  compileOutput?: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  queuedAt?: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  startedAt?: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  completedAt?: Date;
 
   @CreateDateColumn()
   createdAt: Date;

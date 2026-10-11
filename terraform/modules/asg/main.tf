@@ -93,7 +93,6 @@ cat << 'ENVFILE' > /opt/codeskill/backend-nestjs/.env
 DATABASE_URL="postgresql://${var.db_username}:${var.db_password}@${var.db_endpoint}/${var.db_name}?schema=public"
 REDIS_HOST="${var.redis_endpoint}"
 REDIS_PORT=6379
-MONGODB_URI=mongodb+srv://mdshadabazamansari:123123123123@cluster0.gwcfd5x.mongodb.net/codeskill?retryWrites=true&w=majority
 JWT_SECRET=supersecretcodeskilljwt
 JWT_EXPIRE=30d
 ADMIN_EMAILS=admin@codeskill.com,admin@cuchd.in,md.shadab.azam.ansari@gmail.com,kanhamishra555@gmail.com,shaikhmustakim2942@gmail.com
@@ -105,10 +104,9 @@ NODE_ENV=production
 ENVFILE
 chown ec2-user:ec2-user /opt/codeskill/backend-nestjs/.env
 
-# Sync database schema and migrate users
+# Sync database schema with RDS PostgreSQL
 cd /opt/codeskill/backend-nestjs
 npm run typeorm:sync
-npm run migrate:users
 
 pm2 start dist/main.js --name "codeskill-backend"
 cd /opt/codeskill/frontend-v2 && pm2 start npm --name "codeskill-frontend" -- run start

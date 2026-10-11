@@ -1,9 +1,18 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
+} from 'typeorm';
 import { User } from './user.entity';
 import { Assessment } from './assessment.entity';
 
 @Entity('exam_sessions')
-@Index(['assessment_id', 'candidate_id'], { unique: true })
+@Index(['assessmentId', 'candidateId'], { unique: true })
 export class ExamSession {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -11,19 +20,33 @@ export class ExamSession {
   @Column({ nullable: true })
   mongoId: string;
 
-  @ManyToOne(() => Assessment, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Assessment, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'assessment_id' })
   assessment: Assessment;
 
-  @Column()
-  assessment_id: string;
+  @Column({ name: 'assessment_id' })
+  assessmentId: string;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  get assessment_id(): string {
+    return this.assessmentId;
+  }
+  set assessment_id(val: string) {
+    this.assessmentId = val;
+  }
+
+  @ManyToOne(() => User, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'candidate_id' })
   candidate: User;
 
-  @Column()
-  candidate_id: string;
+  @Column({ name: 'candidate_id' })
+  candidateId: string;
+
+  get candidate_id(): string {
+    return this.candidateId;
+  }
+  set candidate_id(val: string) {
+    this.candidateId = val;
+  }
 
   @Column({ default: 'CREATED' })
   status: string;

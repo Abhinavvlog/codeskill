@@ -1,92 +1,101 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import {
-  University,
-  UniversityDocument,
-} from '../database/schemas/university.schema';
-import {
-  UniversityUser,
-  UniversityUserDocument,
-} from '../database/schemas/university-user.schema';
-import { BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { University } from '../database/entities/university.entity';
+import { UniversityUser } from '../database/entities/university-user.entity';
 
 @Injectable()
 export class CampusService {
   constructor(
-    @InjectModel(University.name)
-    private universityModel: Model<UniversityDocument>,
-    @InjectModel(UniversityUser.name)
-    private universityUserModel: Model<UniversityUserDocument>,
+    @InjectRepository(University)
+    private readonly universityRepo: Repository<University>,
+    @InjectRepository(UniversityUser)
+    private readonly universityUserRepo: Repository<UniversityUser>,
   ) {}
 
   async getUniversities() {
-    return this.universityModel
-      .find({ isVerified: true })
-      .sort({ createdAt: -1 })
-      .lean();
+    const list = await this.universityRepo.find({
+      where: { isVerified: true },
+      order: { createdAt: 'DESC' },
+    });
+    return list.map((u) => ({ ...u, _id: u.id }));
   }
 
   async getUniversityProfile(username: string) {
-    const university = await this.universityModel
-      .findOne({ username, isVerified: true })
-      .lean();
+    const university = await this.universityRepo.findOne({
+      where: { username, isVerified: true },
+    });
     if (!university) throw new NotFoundException('University not found');
-    return university;
+    return { ...university, _id: university.id };
   }
 
   async registerUniversity(userId: string, data: any) {
     const { name, username, domain, website } = data;
-    const existingUniversity = await this.universityModel.findOne({
-      username: username.toLowerCase(),
+    const existingUniversity = await this.universityRepo.findOne({
+      where: { username: username.toLowerCase() },
     });
     if (existingUniversity) {
       throw new BadRequestException('University username already exists');
     }
 
-    const university = await this.universityModel.create({
+    const university = this.universityRepo.create({
       name,
-      username,
-      domain,
-      website,
-      createdBy: userId,
+      username: username.toLowerCase(),
+      domain: domain || '',
+      website: website || '',
+      createdBy: { id: userId } as any,
     });
+    await this.universityRepo.save(university);
 
-    await this.universityUserModel.create({
-      university: university._id,
-      user: userId,
+    const membership = this.universityUserRepo.create({
+      university: { id: university.id } as any,
+      user: { id: userId } as any,
       role: 'Admin',
+      isActive: true,
     });
+    await this.universityUserRepo.save(membership);
 
-    return { success: true, university };
+    return { success: true, university: { ...university, _id: university.id } };
   }
 
   async getMyUniversities(userId: string) {
-    const memberships = await this.universityUserModel
-      .find({ user: userId, isActive: true })
-      .populate('university')
-      .sort({ createdAt: -1 });
+    const memberships = await this.universityUserRepo.find({
+      where: { user: { id: userId }, isActive: true },
+      relations: { university: true },
+      order: { createdAt: 'DESC' },
+    });
 
-    return { success: true, universities: memberships };
+    return {
+      success: true,
+      universities: memberships.map((m) => ({
+        ...m,
+        _id: m.id,
+        university: m.university ? { ...m.university, _id: m.university.id } : null,
+      })),
+    };
   }
 
   async getUniversityById(universityId: string) {
-    const university = await this.universityModel.findById(universityId);
+    const university = await this.universityRepo.findOne({
+      where: [{ id: universityId }, { mongoId: universityId }],
+    });
     if (!university) {
       throw new NotFoundException('University not found');
     }
-    return { success: true, university };
+    return { success: true, university: { ...university, _id: university.id } };
   }
 
   async updateUniversity(universityId: string, updates: any) {
     delete updates.username;
     delete updates.createdBy;
 
-    const university = await this.universityModel.findByIdAndUpdate(
-      universityId,
-      { $set: updates },
-      { new: true, runValidators: true },
-    );
-    return { success: true, university };
+    const university = await this.universityRepo.findOne({
+      where: [{ id: universityId }, { mongoId: universityId }],
+    });
+    if (!university) throw new NotFoundException('University not found');
+
+    Object.assign(university, updates);
+    await this.universityRepo.save(university);
+    return { success: true, university: { ...university, _id: university.id } };
   }
 }

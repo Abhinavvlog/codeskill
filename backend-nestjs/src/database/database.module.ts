@@ -1,84 +1,67 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import { User, UserSchema } from './schemas/user.schema';
-import { User as UserEntity } from './entities/user.entity';
-import { Problem, ProblemSchema } from './schemas/problem.schema';
-import { Problem as ProblemEntity } from './entities/problem.entity';
-import { Question as QuestionEntity } from './entities/question.entity';
-import { Assessment as AssessmentEntity } from './entities/assessment.entity';
-import { Submission as SubmissionEntity } from './entities/submission.entity';
-import { QuestionBank as QuestionBankEntity } from './entities/question-bank.entity';
-import { AuditLog as AuditLogEntity } from './entities/audit-log.entity';
-import { AssessmentAttempt as AssessmentAttemptEntity } from './entities/assessment-attempt.entity';
-import {
+
+import { User } from './entities/user.entity';
+import { Problem } from './entities/problem.entity';
+import { ProblemMetadata } from './entities/problem-metadata.entity';
+import { ProblemStatement } from './entities/problem-statement.entity';
+import { ProblemConfig } from './entities/problem-config.entity';
+import { ProblemTestCase } from './entities/problem-testcase.entity';
+import { Question } from './entities/question.entity';
+import { QuestionBank } from './entities/question-bank.entity';
+import { Assessment } from './entities/assessment.entity';
+import { AssessmentAttempt } from './entities/assessment-attempt.entity';
+import { Submission } from './entities/submission.entity';
+import { Contest } from './entities/contest.entity';
+import { ContestAttempt } from './entities/contest-attempt.entity';
+import { Company } from './entities/company.entity';
+import { CompanyUser } from './entities/company-user.entity';
+import { Job } from './entities/job.entity';
+import { Application } from './entities/application.entity';
+import { University } from './entities/university.entity';
+import { UniversityUser } from './entities/university-user.entity';
+import { Batch } from './entities/batch.entity';
+import { StudentEnrollment } from './entities/student-enrollment.entity';
+import { Discussion } from './entities/discussion.entity';
+import { DiscussionReply } from './entities/discussion-reply.entity';
+import { AuditLog } from './entities/audit-log.entity';
+import { EmailJob } from './entities/email-job.entity';
+import { ExamSession } from './entities/exam-session.entity';
+import { ExamSecurityEvent } from './entities/exam-security-event.entity';
+
+const entities = [
+  User,
+  Problem,
   ProblemMetadata,
-  ProblemMetadataSchema,
-} from './schemas/problem-metadata.schema';
-import {
   ProblemStatement,
-  ProblemStatementSchema,
-} from './schemas/problem-statement.schema';
-import {
   ProblemConfig,
-  ProblemConfigSchema,
-} from './schemas/problem-config.schema';
-import {
   ProblemTestCase,
-  ProblemTestCaseSchema,
-} from './schemas/problem-testcase.schema';
-import { Submission, SubmissionSchema } from './schemas/submission.schema';
-import { Contest, ContestSchema } from './schemas/contest.schema';
-import {
-  ContestAttempt,
-  ContestAttemptSchema,
-} from './schemas/contest-attempt.schema';
-import { Company, CompanySchema } from './schemas/company.schema';
-import { CompanyUser, CompanyUserSchema } from './schemas/company-user.schema';
-import { Job, JobSchema } from './schemas/job.schema';
-import { Application, ApplicationSchema } from './schemas/application.schema';
-import { University, UniversitySchema } from './schemas/university.schema';
-import {
-  UniversityUser,
-  UniversityUserSchema,
-} from './schemas/university-user.schema';
-import { Batch, BatchSchema } from './schemas/batch.schema';
-import {
-  StudentEnrollment,
-  StudentEnrollmentSchema,
-} from './schemas/student-enrollment.schema';
-import { Discussion, DiscussionSchema } from './schemas/discussion.schema';
-import {
-  DiscussionReply,
-  DiscussionReplySchema,
-} from './schemas/discussion-reply.schema';
-import { AuditLog, AuditLogSchema } from './schemas/audit-log.schema';
-import { EmailJob, EmailJobSchema } from './schemas/email-job.schema';
-import { Question, QuestionSchema } from './schemas/question.schema';
-import {
+  Question,
   QuestionBank,
-  QuestionBankSchema,
-} from './schemas/question-bank.schema';
-import { Assessment, AssessmentSchema } from './schemas/assessment.schema';
-import {
+  Assessment,
   AssessmentAttempt,
-  AssessmentAttemptSchema,
-} from './schemas/assessment-attempt.schema';
-import { ExamSession, ExamSessionSchema } from './schemas/exam-session.schema';
-import {
+  Submission,
+  Contest,
+  ContestAttempt,
+  Company,
+  CompanyUser,
+  Job,
+  Application,
+  University,
+  UniversityUser,
+  Batch,
+  StudentEnrollment,
+  Discussion,
+  DiscussionReply,
+  AuditLog,
+  EmailJob,
+  ExamSession,
   ExamSecurityEvent,
-  ExamSecurityEventSchema,
-} from './schemas/exam-security-event.schema';
+];
 
 @Module({
   imports: [
-    MongooseModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => ({
-        uri: configService.get<string>('database.uri'),
-      }),
-    }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => {
@@ -88,8 +71,11 @@ import {
             type: 'postgres',
             url,
             autoLoadEntities: true,
-            synchronize: process.env.NODE_ENV !== 'production', // Use migrations in production
-          };
+            synchronize: process.env.NODE_ENV !== 'production',
+            invalidWhereValuesBehavior: {
+              null: 'ignore',
+            },
+          } as any;
         }
         return {
           type: 'postgres',
@@ -102,50 +88,15 @@ import {
             ? { rejectUnauthorized: false }
             : false,
           autoLoadEntities: true,
-          synchronize: process.env.NODE_ENV !== 'production', // Use migrations in production
-        };
+          synchronize: process.env.NODE_ENV !== 'production',
+          invalidWhereValuesBehavior: {
+            null: 'ignore',
+          },
+        } as any;
       },
     }),
-    MongooseModule.forFeature([
-      { name: User.name, schema: UserSchema },
-      { name: Problem.name, schema: ProblemSchema },
-      { name: ProblemMetadata.name, schema: ProblemMetadataSchema },
-      { name: ProblemStatement.name, schema: ProblemStatementSchema },
-      { name: ProblemConfig.name, schema: ProblemConfigSchema },
-      { name: ProblemTestCase.name, schema: ProblemTestCaseSchema },
-      { name: Submission.name, schema: SubmissionSchema },
-      { name: Contest.name, schema: ContestSchema },
-      { name: ContestAttempt.name, schema: ContestAttemptSchema },
-      { name: Company.name, schema: CompanySchema },
-      { name: CompanyUser.name, schema: CompanyUserSchema },
-      { name: Job.name, schema: JobSchema },
-      { name: Application.name, schema: ApplicationSchema },
-      { name: University.name, schema: UniversitySchema },
-      { name: UniversityUser.name, schema: UniversityUserSchema },
-      { name: Batch.name, schema: BatchSchema },
-      { name: StudentEnrollment.name, schema: StudentEnrollmentSchema },
-      { name: Discussion.name, schema: DiscussionSchema },
-      { name: DiscussionReply.name, schema: DiscussionReplySchema },
-      { name: AuditLog.name, schema: AuditLogSchema },
-      { name: EmailJob.name, schema: EmailJobSchema },
-      { name: Question.name, schema: QuestionSchema },
-      { name: QuestionBank.name, schema: QuestionBankSchema },
-      { name: Assessment.name, schema: AssessmentSchema },
-      { name: AssessmentAttempt.name, schema: AssessmentAttemptSchema },
-      { name: ExamSession.name, schema: ExamSessionSchema },
-      { name: ExamSecurityEvent.name, schema: ExamSecurityEventSchema },
-    ]),
-    TypeOrmModule.forFeature([
-      UserEntity,
-      ProblemEntity,
-      QuestionEntity,
-      AssessmentEntity,
-      SubmissionEntity,
-      QuestionBankEntity,
-      AuditLogEntity,
-      AssessmentAttemptEntity,
-    ]),
+    TypeOrmModule.forFeature(entities),
   ],
-  exports: [MongooseModule, TypeOrmModule],
+  exports: [TypeOrmModule],
 })
 export class DatabaseModule {}

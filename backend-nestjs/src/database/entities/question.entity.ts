@@ -19,6 +19,9 @@ export class Question {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  mongoId?: string;
+
   @Column({ type: 'text' })
   question: string;
 

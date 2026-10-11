@@ -6,10 +6,6 @@ export const appConfig = registerAs('app', () => ({
 }));
 
 export const databaseConfig = registerAs('database', () => ({
-  uri:
-    process.env.MONGODB_URI ||
-    process.env.MONGO_URI ||
-    'mongodb://localhost:27017/codeskill',
   postgres: {
     host: process.env.DATABASE_HOST || 'localhost',
     port: parseInt(process.env.DATABASE_PORT || '5432', 10),

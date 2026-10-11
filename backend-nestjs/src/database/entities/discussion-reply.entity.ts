@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index, ManyToMany, JoinTable } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { User } from './user.entity';
 import { Discussion } from './discussion.entity';
 
@@ -11,18 +11,18 @@ export class DiscussionReply {
   @Column({ nullable: true })
   mongoId: string;
 
-  @ManyToOne(() => Discussion, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Discussion, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'discussion_id' })
   discussion: Discussion;
 
   @Column()
   discussion_id: string;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'author_id' })
   author: User;
 
-  @Column()
+  @Column({ nullable: true })
   author_id: string;
 
   @Column({ length: 3000 })
@@ -34,21 +34,11 @@ export class DiscussionReply {
   @Column({ default: 0 })
   downvotes: number;
 
-  @ManyToMany(() => User)
-  @JoinTable({
-    name: 'discussion_reply_upvotes',
-    joinColumn: { name: 'reply_id', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'user_id', referencedColumnName: 'id' }
-  })
-  upvotedBy: User[];
+  @Column('text', { array: true, default: '{}' })
+  upvotedBy: string[];
 
-  @ManyToMany(() => User)
-  @JoinTable({
-    name: 'discussion_reply_downvotes',
-    joinColumn: { name: 'reply_id', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'user_id', referencedColumnName: 'id' }
-  })
-  downvotedBy: User[];
+  @Column('text', { array: true, default: '{}' })
+  downvotedBy: string[];
 
   @ManyToOne(() => DiscussionReply, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'parent_reply_id' })

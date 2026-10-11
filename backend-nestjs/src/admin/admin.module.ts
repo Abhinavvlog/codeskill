@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminDashboardController } from './controllers/dashboard.controller';
 import { AdminUsersController } from './controllers/users.controller';
 import { AdminProblemsController } from './controllers/problems.controller';
@@ -8,56 +8,34 @@ import { AdminCompaniesController } from './controllers/companies.controller';
 import { AdminUniversitiesController } from './controllers/universities.controller';
 import { AdminService } from './admin.service';
 
-import { User, UserSchema } from '../database/schemas/user.schema';
-import {
-  ProblemMetadata,
-  ProblemMetadataSchema,
-} from '../database/schemas/problem-metadata.schema';
-import {
-  ProblemStatement,
-  ProblemStatementSchema,
-} from '../database/schemas/problem-statement.schema';
-import {
-  ProblemConfig,
-  ProblemConfigSchema,
-} from '../database/schemas/problem-config.schema';
-import {
-  ProblemTestCase,
-  ProblemTestCaseSchema,
-} from '../database/schemas/problem-testcase.schema';
-import { Contest, ContestSchema } from '../database/schemas/contest.schema';
-import { Company, CompanySchema } from '../database/schemas/company.schema';
-import {
-  University,
-  UniversitySchema,
-} from '../database/schemas/university.schema';
-import {
-  Submission,
-  SubmissionSchema,
-} from '../database/schemas/submission.schema';
-import {
-  Assessment,
-  AssessmentSchema,
-} from '../database/schemas/assessment.schema';
-import {
-  Question,
-  QuestionSchema,
-} from '../database/schemas/question.schema';
+import { User } from '../database/entities/user.entity';
+import { Problem } from '../database/entities/problem.entity';
+import { ProblemMetadata } from '../database/entities/problem-metadata.entity';
+import { ProblemStatement } from '../database/entities/problem-statement.entity';
+import { ProblemConfig } from '../database/entities/problem-config.entity';
+import { ProblemTestCase } from '../database/entities/problem-testcase.entity';
+import { Contest } from '../database/entities/contest.entity';
+import { Company } from '../database/entities/company.entity';
+import { University } from '../database/entities/university.entity';
+import { Submission } from '../database/entities/submission.entity';
+import { Assessment } from '../database/entities/assessment.entity';
+import { Question } from '../database/entities/question.entity';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: User.name, schema: UserSchema },
-      { name: ProblemMetadata.name, schema: ProblemMetadataSchema },
-      { name: ProblemStatement.name, schema: ProblemStatementSchema },
-      { name: ProblemConfig.name, schema: ProblemConfigSchema },
-      { name: ProblemTestCase.name, schema: ProblemTestCaseSchema },
-      { name: Contest.name, schema: ContestSchema },
-      { name: Company.name, schema: CompanySchema },
-      { name: University.name, schema: UniversitySchema },
-      { name: Submission.name, schema: SubmissionSchema },
-      { name: Assessment.name, schema: AssessmentSchema },
-      { name: Question.name, schema: QuestionSchema },
+    TypeOrmModule.forFeature([
+      User,
+      Problem,
+      ProblemMetadata,
+      ProblemStatement,
+      ProblemConfig,
+      ProblemTestCase,
+      Contest,
+      Company,
+      University,
+      Submission,
+      Assessment,
+      Question,
     ]),
   ],
   controllers: [
@@ -69,5 +47,6 @@ import {
     AdminUniversitiesController,
   ],
   providers: [AdminService],
+  exports: [AdminService],
 })
 export class AdminModule {}

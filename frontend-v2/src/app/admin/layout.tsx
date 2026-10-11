@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 
 import { authAPI } from "@/config/api";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { BrandLogo } from "@/components/BrandLogo";
+import { AdminLogo } from "@/components/admin/AdminLogo";
 import { Spinner } from "@/components/ui/spinner";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -103,16 +103,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <AdminSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Standardized Admin Header with CodeSkill Branding & Theme Toggle */}
-        <header className="bg-card border-b border-border h-16 flex items-center justify-between px-6 sticky top-0 z-10 shrink-0 shadow-xs">
-          <div className="flex items-center gap-3">
-            <BrandLogo className="w-12 h-12 md:w-16 md:h-16" src="/logo-dark.svg" alt="CodeSkill" />
+        <header className="bg-card/90 backdrop-blur-md border-b border-border h-20 flex items-center justify-between px-6 sticky top-0 z-10 shrink-0 shadow-xs">
+          <div className="flex items-center gap-4">
+            <AdminLogo variant="icon" size="md" />
             <div>
-              <p className="text-sm font-bold text-foreground leading-tight">CodeSkill Admin</p>
-              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Chandigarh University</p>
+              <div className="flex items-center gap-2">
+                <span className="text-xl md:text-2xl font-black tracking-tight text-foreground leading-none">
+                  Code<span className="text-rose-600 dark:text-rose-500">Skill</span>
+                </span>
+                <span className="px-2 py-0.5 text-xs font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/25 rounded-md leading-none shadow-xs">
+                  Admin Console
+                </span>
+              </div>
+              <p className="text-xs font-semibold text-muted-foreground tracking-wide mt-1">
+                Chandigarh University <span className="hidden lg:inline">• Department of Skill Development & Lab</span>
+              </p>
             </div>
-            <div className="hidden md:flex items-center gap-1.5 ml-3 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">System Live</span>
+            <div className="hidden xl:flex items-center gap-1.5 ml-4 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-md">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">System Live</span>
             </div>
           </div>
           <div className="flex items-center gap-4">

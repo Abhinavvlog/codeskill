@@ -1,23 +1,14 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
 import { ExecutionController } from './execution.controller';
 import { ExecutionService } from './execution.service';
 import { AzureExecutionService } from './azure-execution.service';
 import { JudgeProcessor } from './judge.processor';
-import {
-  Submission,
-  SubmissionSchema,
-} from '../database/schemas/submission.schema';
-import {
-  ProblemMetadata,
-  ProblemMetadataSchema,
-} from '../database/schemas/problem-metadata.schema';
-import {
-  ProblemTestCase,
-  ProblemTestCaseSchema,
-} from '../database/schemas/problem-testcase.schema';
-import { User, UserSchema } from '../database/schemas/user.schema';
+import { Submission } from '../database/entities/submission.entity';
+import { ProblemMetadata } from '../database/entities/problem-metadata.entity';
+import { ProblemTestCase } from '../database/entities/problem-testcase.entity';
+import { User } from '../database/entities/user.entity';
 import { GatewayModule } from '../gateway/gateway.module';
 import { RedisModule } from '../redis/redis.module';
 
@@ -26,11 +17,11 @@ const judgeProviders =
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: Submission.name, schema: SubmissionSchema },
-      { name: ProblemMetadata.name, schema: ProblemMetadataSchema },
-      { name: ProblemTestCase.name, schema: ProblemTestCaseSchema },
-      { name: User.name, schema: UserSchema },
+    TypeOrmModule.forFeature([
+      Submission,
+      ProblemMetadata,
+      ProblemTestCase,
+      User,
     ]),
     BullModule.registerQueue({
       name: 'submissions',

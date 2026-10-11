@@ -4,30 +4,21 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import {
-  Assessment,
-  AssessmentDocument,
-} from '../database/schemas/assessment.schema';
-import {
-  ExamSession,
-  ExamSessionDocument,
-} from '../database/schemas/exam-session.schema';
-import {
-  ExamSecurityEvent,
-  ExamSecurityEventDocument,
-} from '../database/schemas/exam-security-event.schema';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Assessment } from '../database/entities/assessment.entity';
+import { ExamSession } from '../database/entities/exam-session.entity';
+import { ExamSecurityEvent } from '../database/entities/exam-security-event.entity';
 
 @Injectable()
 export class ExamSecurityService {
   constructor(
-    @InjectModel(Assessment.name)
-    private assessmentModel: Model<AssessmentDocument>,
-    @InjectModel(ExamSession.name)
-    private sessionModel: Model<ExamSessionDocument>,
-    @InjectModel(ExamSecurityEvent.name)
-    private eventModel: Model<ExamSecurityEventDocument>,
+    @InjectRepository(Assessment)
+    private readonly assessmentRepo: Repository<Assessment>,
+    @InjectRepository(ExamSession)
+    private readonly sessionRepo: Repository<ExamSession>,
+    @InjectRepository(ExamSecurityEvent)
+    private readonly eventRepo: Repository<ExamSecurityEvent>,
   ) {}
 
   async initSecureSession(
@@ -36,14 +27,14 @@ export class ExamSecurityService {
     headers: any,
     clientBody: any,
   ) {
-    if (!Types.ObjectId.isValid(assessmentId))
-      throw new BadRequestException('Invalid assessment ID');
+    if (!assessmentId) throw new BadRequestException('Invalid assessment ID');
 
-    const assessment = await this.assessmentModel.findById(assessmentId);
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id: assessmentId }, { mongoId: assessmentId }],
+    });
     if (!assessment) throw new NotFoundException('Assessment not found');
 
-    // Check if security is enabled
-    const security = assessment.securityPolicy;
+    const security = (assessment as any).securityPolicy;
     const isSecureMode = security && security.secureExamMode !== 'DISABLED';
 
     const clientType = clientBody.isSEB ? 'SEB' : 'BROWSER';
@@ -64,21 +55,25 @@ export class ExamSecurityService {
       }
     }
 
-    // Check if session exists
-    let session = await this.sessionModel.findOne({
-      assessmentId,
-      candidateId,
+    let session = await this.sessionRepo.findOne({
+      where: [
+        { assessment: { id: assessment.id } as any, candidate: { id: candidateId } as any },
+        { assessmentId: assessment.id, candidateId },
+      ],
     });
+
     if (!session) {
       const expiresAt = new Date(
         Date.now() +
-          assessment.durationMinutes * 60 * 1000 +
+          (assessment.durationMinutes || 60) * 60 * 1000 +
           (security?.heartbeatGracePeriod || 60) * 1000,
       );
-      session = new this.sessionModel({
-        assessmentId,
+      session = this.sessionRepo.create({
+        assessment: { id: assessment.id } as any,
+        candidate: { id: candidateId } as any,
+        assessmentId: assessment.id,
         candidateId,
-        status: 'VERIFIED', // SEB config check simulated
+        status: 'VERIFIED',
         secureMode: security?.secureExamMode || 'DISABLED',
         clientType,
         clientVersion,
@@ -86,30 +81,32 @@ export class ExamSecurityService {
         expiresAt,
         startedAt: new Date(),
         lastHeartbeatAt: new Date(),
+        violationCount: 0,
       });
-      await session.save();
+      await this.sessionRepo.save(session);
     } else {
       if (['SUBMITTED', 'EXPIRED', 'TERMINATED'].includes(session.status)) {
         throw new ForbiddenException('Exam session has already ended.');
       }
-      // Re-verify
       session.lastHeartbeatAt = new Date();
-      await session.save();
+      await this.sessionRepo.save(session);
     }
 
     return {
       success: true,
-      sessionId: session._id,
+      sessionId: session.id,
       expiresAt: session.expiresAt,
       status: session.status,
       secureMode: session.secureMode,
-      token: 'simulate-secure-token', // In a real scenario, sign a JWT for the session
+      token: 'simulate-secure-token',
     };
   }
 
   async processHeartbeat(sessionId: string, candidateId: string) {
-    const session = await this.sessionModel.findById(sessionId);
-    if (!session || session.candidateId.toString() !== candidateId) {
+    const session = await this.sessionRepo.findOne({
+      where: [{ id: sessionId }, { mongoId: sessionId }],
+    });
+    if (!session || (session.candidateId !== candidateId && (session as any).candidate?.id !== candidateId)) {
       throw new ForbiddenException('Invalid session');
     }
 
@@ -122,7 +119,7 @@ export class ExamSecurityService {
       session.status = 'ACTIVE';
     }
 
-    await session.save();
+    await this.sessionRepo.save(session);
     return { success: true, status: session.status };
   }
 
@@ -132,14 +129,16 @@ export class ExamSecurityService {
     eventType: string,
     metadata: any,
   ) {
-    const session = await this.sessionModel.findById(sessionId);
-    if (!session || session.candidateId.toString() !== candidateId) {
+    const session = await this.sessionRepo.findOne({
+      where: [{ id: sessionId }, { mongoId: sessionId }],
+    });
+    if (!session || (session.candidateId !== candidateId && (session as any).candidate?.id !== candidateId)) {
       throw new ForbiddenException('Invalid session');
     }
 
-    const assessment = await this.assessmentModel.findById(
-      session.assessmentId,
-    );
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id: session.assessmentId }, { mongoId: session.assessmentId }],
+    });
 
     const severity = ['TAB_HIDDEN', 'FULLSCREEN_EXIT', 'COPY_ATTEMPT'].includes(
       eventType,
@@ -147,24 +146,28 @@ export class ExamSecurityService {
       ? 'WARNING'
       : 'CRITICAL';
 
-    await this.eventModel.create({
-      sessionId,
+    const event = this.eventRepo.create({
+      session: { id: session.id } as any,
+      candidate: { id: candidateId } as any,
+      assessment: { id: session.assessmentId } as any,
+      sessionId: session.id,
       candidateId,
       assessmentId: session.assessmentId,
       eventType,
       severity,
       metadata,
     });
+    await this.eventRepo.save(event);
 
-    session.violationCount += 1;
-    const threshold = assessment?.securityPolicy?.violationThreshold || 3;
+    session.violationCount = (session.violationCount || 0) + 1;
+    const threshold = (assessment as any)?.securityPolicy?.violationThreshold || 3;
 
     if (session.violationCount >= threshold) {
       session.status = 'SUSPENDED';
       session.securityState = 'VIOLATED';
     }
 
-    await session.save();
+    await this.sessionRepo.save(session);
 
     return {
       success: true,

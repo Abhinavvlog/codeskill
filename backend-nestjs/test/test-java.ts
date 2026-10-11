@@ -1,4 +1,4 @@
-import { ExecutionService } from './src/execution/execution.service';
+import { ExecutionService } from '../src/execution/execution.service';
 
 async function run() {
   const service = new ExecutionService();

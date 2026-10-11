@@ -1,22 +1,13 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { DiscussionsController } from './discussions.controller';
 import { DiscussionsService } from './discussions.service';
-import {
-  Discussion,
-  DiscussionSchema,
-} from '../database/schemas/discussion.schema';
-import {
-  DiscussionReply,
-  DiscussionReplySchema,
-} from '../database/schemas/discussion-reply.schema';
+import { Discussion } from '../database/entities/discussion.entity';
+import { DiscussionReply } from '../database/entities/discussion-reply.entity';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: Discussion.name, schema: DiscussionSchema },
-      { name: DiscussionReply.name, schema: DiscussionReplySchema },
-    ]),
+    TypeOrmModule.forFeature([Discussion, DiscussionReply]),
   ],
   controllers: [DiscussionsController],
   providers: [DiscussionsService],

@@ -1,24 +1,19 @@
 #!/bin/bash
-# CodeSkill Database Backup Script
+# CodeSkill PostgreSQL / AWS RDS Database Backup Script
 # Run via cron daily: 0 2 * * * /var/www/codeskill/scripts/backup.sh
 
 set -e
 
 BACKUP_DIR="../backups/daily"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-DB_URI=$(grep MONGODB_URI ../backend/.env | cut -d '=' -f2)
+DATABASE_URL=$(grep DATABASE_URL ../backend-nestjs/.env | cut -d '=' -f2-)
 
 mkdir -p $BACKUP_DIR
 
-echo "Starting MongoDB backup..."
-# Assuming mongodump is installed on the server
-mongodump --uri="$DB_URI" --out="$BACKUP_DIR/db_backup_$TIMESTAMP"
-# Compress the backup
-tar -czvf $BACKUP_DIR/db_backup_$TIMESTAMP.tar.gz -C $BACKUP_DIR db_backup_$TIMESTAMP
-# Remove uncompressed folder
-rm -rf $BACKUP_DIR/db_backup_$TIMESTAMP
+echo "Starting PostgreSQL backup..."
+pg_dump "$DATABASE_URL" -Fc -f "$BACKUP_DIR/db_backup_$TIMESTAMP.dump"
 
 # Delete backups older than 7 days
-find $BACKUP_DIR -type f -name "*.tar.gz" -mtime +7 -delete
+find $BACKUP_DIR -type f -name "*.dump" -mtime +7 -delete
 
-echo "Backup successful: $BACKUP_DIR/db_backup_$TIMESTAMP.tar.gz"
+echo "Backup successful: $BACKUP_DIR/db_backup_$TIMESTAMP.dump"

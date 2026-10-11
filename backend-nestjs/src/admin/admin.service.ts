@@ -4,69 +4,48 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, MoreThanOrEqual } from 'typeorm';
 
-import { UserDocument, User } from '../database/schemas/user.schema';
-import {
-  ProblemMetadataDocument,
-  ProblemMetadata,
-} from '../database/schemas/problem-metadata.schema';
-import {
-  ProblemStatementDocument,
-  ProblemStatement,
-} from '../database/schemas/problem-statement.schema';
-import {
-  ProblemConfigDocument,
-  ProblemConfig,
-} from '../database/schemas/problem-config.schema';
-import {
-  ProblemTestCaseDocument,
-  ProblemTestCase,
-} from '../database/schemas/problem-testcase.schema';
-import { ContestDocument, Contest } from '../database/schemas/contest.schema';
-import { CompanyDocument, Company } from '../database/schemas/company.schema';
-import {
-  UniversityDocument,
-  University,
-} from '../database/schemas/university.schema';
-import {
-  SubmissionDocument,
-  Submission,
-} from '../database/schemas/submission.schema';
-import {
-  AssessmentDocument,
-  Assessment,
-} from '../database/schemas/assessment.schema';
-import {
-  QuestionDocument,
-  Question,
-} from '../database/schemas/question.schema';
+import { User } from '../database/entities/user.entity';
+import { ProblemMetadata } from '../database/entities/problem-metadata.entity';
+import { ProblemStatement } from '../database/entities/problem-statement.entity';
+import { ProblemConfig } from '../database/entities/problem-config.entity';
+import { ProblemTestCase } from '../database/entities/problem-testcase.entity';
+import { Contest } from '../database/entities/contest.entity';
+import { Company } from '../database/entities/company.entity';
+import { University } from '../database/entities/university.entity';
+import { Submission } from '../database/entities/submission.entity';
+import { Assessment } from '../database/entities/assessment.entity';
+import { Question } from '../database/entities/question.entity';
 import { CacheService } from '../redis/cache.service';
 
 @Injectable()
 export class AdminService {
   constructor(
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
-    @InjectModel(ProblemMetadata.name)
-    private problemModel: Model<ProblemMetadataDocument>,
-    @InjectModel(ProblemStatement.name)
-    private statementModel: Model<ProblemStatementDocument>,
-    @InjectModel(ProblemConfig.name)
-    private configModel: Model<ProblemConfigDocument>,
-    @InjectModel(ProblemTestCase.name)
-    private testCaseModel: Model<ProblemTestCaseDocument>,
-    @InjectModel(Contest.name) private contestModel: Model<ContestDocument>,
-    @InjectModel(Company.name) private companyModel: Model<CompanyDocument>,
-    @InjectModel(University.name)
-    private universityModel: Model<UniversityDocument>,
-    @InjectModel(Submission.name)
-    private submissionModel: Model<SubmissionDocument>,
-    @InjectModel(Assessment.name)
-    private assessmentModel: Model<AssessmentDocument>,
-    @InjectModel(Question.name)
-    private questionModel: Model<QuestionDocument>,
-    private cacheService: CacheService,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
+    @InjectRepository(ProblemMetadata)
+    private readonly problemModel: Repository<ProblemMetadata>,
+    @InjectRepository(ProblemStatement)
+    private readonly statementModel: Repository<ProblemStatement>,
+    @InjectRepository(ProblemConfig)
+    private readonly configModel: Repository<ProblemConfig>,
+    @InjectRepository(ProblemTestCase)
+    private readonly testCaseModel: Repository<ProblemTestCase>,
+    @InjectRepository(Contest)
+    private readonly contestModel: Repository<Contest>,
+    @InjectRepository(Company)
+    private readonly companyModel: Repository<Company>,
+    @InjectRepository(University)
+    private readonly universityModel: Repository<University>,
+    @InjectRepository(Submission)
+    private readonly submissionModel: Repository<Submission>,
+    @InjectRepository(Assessment)
+    private readonly assessmentModel: Repository<Assessment>,
+    @InjectRepository(Question)
+    private readonly questionModel: Repository<Question>,
+    private readonly cacheService: CacheService,
   ) {}
 
   async getDashboardStats() {
@@ -85,31 +64,45 @@ export class AdminService {
       recentSubmissions,
       recentAssessments,
     ] = await Promise.all([
-      this.userModel.countDocuments(),
-      this.problemModel.countDocuments(),
-      this.contestModel.countDocuments(),
-      this.submissionModel.countDocuments(),
-      this.assessmentModel.countDocuments().catch(() => 0),
-      this.questionModel.countDocuments().catch(() => 0),
-      this.userModel.countDocuments({ updatedAt: { $gte: today } }).catch(() => 0),
-      this.userModel
-        .find()
-        .sort({ createdAt: -1 })
-        .limit(6)
-        .select('name email role createdAt authProvider')
-        .lean(),
-      this.submissionModel
-        .find()
-        .sort({ createdAt: -1 })
-        .limit(6)
-        .populate('user', 'name email')
-        .lean(),
+      this.userRepo.count(),
+      this.problemModel.count(),
+      this.contestModel.count(),
+      this.submissionModel.count(),
+      this.assessmentModel.count().catch(() => 0),
+      this.questionModel.count().catch(() => 0),
+      this.userRepo
+        .count({ where: { updatedAt: MoreThanOrEqual(today) } })
+        .catch(() => 0),
+      this.userRepo.find({
+        order: { createdAt: 'DESC' },
+        take: 6,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          createdAt: true,
+          authProvider: true,
+        },
+      }),
+      this.submissionModel.find({
+        order: { createdAt: 'DESC' },
+        take: 6,
+        relations: { user: true },
+      }),
       this.assessmentModel
-        .find()
-        .sort({ createdAt: -1 })
-        .limit(6)
-        .select('title status durationMinutes allowedAttempts createdAt')
-        .lean()
+        .find({
+          order: { createdAt: 'DESC' },
+          take: 6,
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            durationMinutes: true,
+            allowedAttempts: true,
+            createdAt: true,
+          },
+        })
         .catch(() => []),
     ]);
 
@@ -124,39 +117,40 @@ export class AdminService {
         activeToday: Math.max(activeToday, 1),
       },
       recentActivity: {
-        users: recentUsers,
-        submissions: recentSubmissions,
-        assessments: recentAssessments,
+        users: recentUsers.map((u) => ({ ...u, _id: u.id })),
+        submissions: recentSubmissions.map((s) => ({
+          ...s,
+          _id: s.id,
+          user: s.user ? { ...s.user, _id: s.user.id } : null,
+        })),
+        assessments: recentAssessments.map((a) => ({ ...a, _id: a.id })),
       },
     };
   }
 
   // Common user management for admin
   async getUsers(page = 1, limit = 50, search = '', adminsOnly = false) {
-    const filter: any = {};
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-      ];
+    const skip = (page - 1) * limit;
+    const qb = this.userRepo.createQueryBuilder('user');
+
+    if (search && search.trim()) {
+      const s = `%${search.trim()}%`;
+      qb.where('(user.name ILIKE :s OR user.email ILIKE :s)', { s });
     }
 
     if (adminsOnly) {
-      filter.isAdmin = true;
+      qb.andWhere('(user.isAdmin = true OR user.role = :adminRole)', {
+        adminRole: 'ADMIN',
+      });
     }
 
-    const skip = (page - 1) * limit;
+    qb.orderBy('user.createdAt', 'DESC').skip(skip).take(limit);
 
-    const [users, total] = await Promise.all([
-      this.userModel
-        .find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .select('-password')
-        .lean(),
-      this.userModel.countDocuments(filter),
-    ]);
+    const [rawUsers, total] = await qb.getManyAndCount();
+    const users = rawUsers.map((u) => {
+      const { password, ...rest } = u;
+      return { ...rest, _id: u.id };
+    });
 
     return {
       success: true,
@@ -168,60 +162,80 @@ export class AdminService {
   }
 
   async updateUserRole(id: string, roleData: any) {
-    const user = await this.userModel
-      .findByIdAndUpdate(id, { $set: roleData }, { returnDocument: 'after' })
-      .select('-password');
+    const user = await this.userRepo.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!user) throw new NotFoundException('User not found');
-    return user;
+    Object.assign(user, roleData);
+    await this.userRepo.save(user);
+    const { password, ...rest } = user;
+    return { ...rest, _id: user.id };
   }
 
   async getReport(userId: string) {
-    const user = await this.userModel
-      .findById(userId)
-      .select('-password')
-      .lean();
+    const user = await this.userRepo.findOne({
+      where: [{ id: userId }, { mongoId: userId }],
+    });
     if (!user) throw new NotFoundException('User not found');
 
-    const submissions = await this.submissionModel
-      .find({ user: userId })
-      .sort({ createdAt: -1 })
-      .lean();
+    const submissions = await this.submissionModel.find({
+      where: [{ userId: user.id }, { userId: userId }],
+      order: { createdAt: 'DESC' },
+    });
 
     const stats = {
       totalSubmissions: submissions.length,
       accepted: submissions.filter((s) => s.status === 'Accepted').length,
     };
 
+    const { password, ...userWithoutPassword } = user;
+
     return {
       report: {
-        user,
+        user: { ...userWithoutPassword, _id: user.id },
         stats,
-        recentSubmissions: submissions.slice(0, 10),
+        recentSubmissions: submissions.slice(0, 10).map((s) => ({
+          ...s,
+          _id: s.id,
+        })),
       },
     };
   }
 
   // --- Contests ---
   async getContests(page = 1, limit = 20, search = '') {
-    const filter = search ? { title: { $regex: search, $options: 'i' } } : {};
     const skip = (page - 1) * limit;
+    const qb = this.contestModel.createQueryBuilder('contest');
 
-    const [contests, total] = await Promise.all([
-      this.contestModel.find(filter).skip(skip).limit(limit).lean(),
-      this.contestModel.countDocuments(filter),
-    ]);
-    return { contests, total, page, pages: Math.ceil(total / limit) };
+    if (search && search.trim()) {
+      qb.where('contest.title ILIKE :s', { s: `%${search.trim()}%` });
+    }
+
+    qb.orderBy('contest.createdAt', 'DESC').skip(skip).take(limit);
+
+    const [contests, total] = await qb.getManyAndCount();
+    return {
+      contests: contests.map((c) => ({ ...c, _id: c.id })),
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+    };
   }
 
   async getContestById(id: string) {
-    const contest = await this.contestModel.findById(id).lean();
+    const contest = await this.contestModel.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!contest) throw new NotFoundException('Contest not found');
-    return contest;
+    return { ...contest, _id: contest.id };
   }
 
   async deleteContest(id: string) {
-    const contest = await this.contestModel.findByIdAndDelete(id);
+    const contest = await this.contestModel.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!contest) throw new NotFoundException('Contest not found');
+    await this.contestModel.remove(contest);
     return { success: true, message: 'Contest deleted' };
   }
 
@@ -270,65 +284,80 @@ export class AdminService {
 
   async createContest(body: any) {
     const data = this.validateContestPayload(body);
-    if (await this.contestModel.exists({ slug: data.slug })) {
+    const existing = await this.contestModel.findOne({
+      where: { slug: data.slug },
+    });
+    if (existing) {
       throw new ConflictException(`Slug '${data.slug}' is already in use`);
     }
-    const contest = await this.contestModel.create(data);
+    const contest = this.contestModel.create(data);
+    await this.contestModel.save(contest);
     return {
       success: true,
       message: 'Contest created',
-      contest,
+      contest: { ...contest, _id: contest.id },
       shareUrl: `/contests/${contest.slug}`,
     };
   }
 
   async updateContest(id: string, body: any) {
     const data = this.validateContestPayload(body);
-    const clash = await this.contestModel.exists({
-      slug: data.slug,
-      _id: { $ne: id },
-    });
-    if (clash) {
-      throw new ConflictException(`Slug '${data.slug}' is already in use`);
-    }
-    const contest = await this.contestModel.findByIdAndUpdate(id, data, {
-      new: true,
+    const contest = await this.contestModel.findOne({
+      where: [{ id }, { mongoId: id }],
     });
     if (!contest) throw new NotFoundException('Contest not found');
-    return { success: true, message: 'Contest updated', contest };
+
+    const clash = await this.contestModel.findOne({
+      where: { slug: data.slug },
+    });
+    if (clash && clash.id !== contest.id) {
+      throw new ConflictException(`Slug '${data.slug}' is already in use`);
+    }
+
+    Object.assign(contest, data);
+    await this.contestModel.save(contest);
+    return {
+      success: true,
+      message: 'Contest updated',
+      contest: { ...contest, _id: contest.id },
+    };
   }
 
   // --- Problems ---
   async getProblems(page = 1, limit = 20, search = '') {
-    const filter = search ? { title: { $regex: search, $options: 'i' } } : {};
     const skip = (page - 1) * limit;
+    const qb = this.problemModel.createQueryBuilder('p');
 
-    const [problems, total] = await Promise.all([
-      this.problemModel
-        .find(filter)
-        .sort({ createdAt: -1, _id: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      this.problemModel.countDocuments(filter),
-    ]);
-    return { problems, total, page, pages: Math.ceil(total / limit) };
+    if (search && search.trim()) {
+      qb.where('p.title ILIKE :s', { s: `%${search.trim()}%` });
+    }
+
+    qb.orderBy('p.createdAt', 'DESC').skip(skip).take(limit);
+
+    const [problems, total] = await qb.getManyAndCount();
+    return {
+      problems: problems.map((p) => ({ ...p, _id: p.id })),
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+    };
   }
 
   async getProblemById(id: string) {
-    const problem = await this.problemModel
-      .findById(id)
-      .populate('statement')
-      .populate('config')
-      .populate('testCases')
-      .lean();
+    const problem = await this.problemModel.findOne({
+      where: [{ id }, { mongoId: id }],
+      relations: { statement: true, config: true, testCases: true },
+    });
     if (!problem) throw new NotFoundException('Problem not found');
-    return problem;
+    return { ...problem, _id: problem.id };
   }
 
   async deleteProblem(id: string) {
-    const problem = await this.problemModel.findByIdAndDelete(id);
+    const problem = await this.problemModel.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!problem) throw new NotFoundException('Problem not found');
+    await this.problemModel.remove(problem);
     await this.cacheService.invalidatePrefix('problems:');
     if (problem.slug) {
       await this.cacheService.invalidatePrefix(`problem:${problem.slug}`);
@@ -359,20 +388,21 @@ export class AdminService {
           ? 'Draft'
           : 'Draft');
 
-    const newProblem = new this.problemModel({
+    const newProblem = this.problemModel.create({
       ...metadata,
       visibility,
-      author: userId || null,
-    });
+      author_id: userId || null,
+    } as any) as unknown as ProblemMetadata;
+    await this.problemModel.save(newProblem);
 
-    const newStatement = new this.statementModel({
-      metadataId: newProblem._id,
+    const newStatement = this.statementModel.create({
+      metadata_id: newProblem.id,
       ...statement,
       samples: sampleExamples || [],
-    });
+    } as any) as unknown as ProblemStatement;
 
-    const newConfig = new this.configModel({
-      metadataId: newProblem._id,
+    const newConfig = this.configModel.create({
+      metadata_id: newProblem.id,
       supportedLanguages: languages || [],
       timeLimit: execution?.timeLimit || 2000,
       memoryLimit: execution?.memoryLimit || 256,
@@ -384,27 +414,31 @@ export class AdminService {
       referenceSolution: referenceSolution || {},
       hasCustomChecker: customChecker?.hasCustomChecker || false,
       customCheckerCode: customChecker?.customCheckerCode || {},
-    });
+    } as any) as unknown as ProblemConfig;
 
-    const newTestCase = new this.testCaseModel({
-      metadataId: newProblem._id,
+    const newTestCase = this.testCaseModel.create({
+      metadata_id: newProblem.id,
       cases: testCases?.cases || [],
-    });
-
-    newProblem.statement = newStatement._id;
-    newProblem.config = newConfig._id;
-    newProblem.testCases = newTestCase._id;
+    } as any) as unknown as ProblemTestCase;
 
     await Promise.all([
-      newProblem.save(),
-      newStatement.save(),
-      newConfig.save(),
-      newTestCase.save(),
+      this.statementModel.save(newStatement),
+      this.configModel.save(newConfig),
+      this.testCaseModel.save(newTestCase),
     ]);
 
     await this.cacheService.invalidatePrefix('problems:');
 
-    return { success: true, problem: newProblem };
+    return {
+      success: true,
+      problem: {
+        ...newProblem,
+        _id: newProblem.id,
+        statement: newStatement,
+        config: newConfig,
+        testCases: newTestCase,
+      },
+    };
   }
 
   async updateProblem(id: string, payload: any) {
@@ -421,7 +455,9 @@ export class AdminService {
       publishing,
     } = payload;
 
-    const problem = await this.problemModel.findById(id);
+    const problem = await this.problemModel.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!problem) throw new NotFoundException('Problem not found');
 
     const visibility =
@@ -439,113 +475,131 @@ export class AdminService {
     if (visibility) {
       problem.visibility = visibility;
     }
-    await problem.save();
+    await this.problemModel.save(problem);
 
     if (statement || sampleExamples) {
-      const stmt = await this.statementModel.findOneAndUpdate(
-        { metadataId: id },
-        { $set: { ...statement, samples: sampleExamples || [] } },
-        { upsert: true, returnDocument: 'after' },
-      );
-      problem.statement = stmt._id;
+      let stmt = await this.statementModel.findOne({
+        where: [{ metadata_id: problem.id }, { metadata_id: id }],
+      });
+      if (!stmt) {
+        stmt = this.statementModel.create({ metadata_id: problem.id });
+      }
+      Object.assign(stmt, statement || {}, {
+        samples: sampleExamples || [],
+      });
+      await this.statementModel.save(stmt);
     }
 
-    const configUpdate: any = {};
-    if (languages) configUpdate.supportedLanguages = languages;
-    if (execution?.timeLimit) configUpdate.timeLimit = execution.timeLimit;
-    if (execution?.memoryLimit)
-      configUpdate.memoryLimit = execution.memoryLimit;
-    if (execution?.cpuLimit) configUpdate.cpuLimit = execution.cpuLimit;
-    if (execution?.executionMode)
-      configUpdate.executionMode = execution.executionMode;
-    if (execution?.functionSignature !== undefined)
-      configUpdate.functionSignature = execution.functionSignature;
-    if (execution?.exactOutput !== undefined)
-      configUpdate.exactOutput = execution.exactOutput;
-    if (starterCode) configUpdate.starterCode = starterCode;
-    if (referenceSolution) configUpdate.referenceSolution = referenceSolution;
-    if (customChecker?.hasCustomChecker !== undefined)
-      configUpdate.hasCustomChecker = customChecker.hasCustomChecker;
-    if (customChecker?.customCheckerCode)
-      configUpdate.customCheckerCode = customChecker.customCheckerCode;
-
-    const conf = await this.configModel.findOneAndUpdate(
-      { metadataId: id },
-      { $set: configUpdate },
-      { upsert: true, returnDocument: 'after' },
-    );
-    problem.config = conf._id;
+    if (
+      languages ||
+      execution ||
+      starterCode ||
+      referenceSolution ||
+      customChecker
+    ) {
+      let conf = await this.configModel.findOne({
+        where: [{ metadata_id: problem.id }, { metadata_id: id }],
+      });
+      if (!conf) {
+        conf = this.configModel.create({ metadata_id: problem.id });
+      }
+      if (languages) conf.supportedLanguages = languages;
+      if (execution?.timeLimit) conf.timeLimit = execution.timeLimit;
+      if (execution?.memoryLimit) conf.memoryLimit = execution.memoryLimit;
+      if (execution?.cpuLimit) conf.cpuLimit = execution.cpuLimit;
+      if (execution?.executionMode) conf.executionMode = execution.executionMode;
+      if (execution?.functionSignature !== undefined)
+        conf.functionSignature = execution.functionSignature;
+      if (execution?.exactOutput !== undefined)
+        conf.exactOutput = execution.exactOutput;
+      if (starterCode) conf.starterCode = starterCode;
+      if (referenceSolution) conf.referenceSolution = referenceSolution;
+      if (customChecker?.hasCustomChecker !== undefined)
+        conf.hasCustomChecker = customChecker.hasCustomChecker;
+      if (customChecker?.customCheckerCode)
+        conf.customCheckerCode = customChecker.customCheckerCode;
+      await this.configModel.save(conf);
+    }
 
     if (testCases?.cases) {
-      const tc = await this.testCaseModel.findOneAndUpdate(
-        { metadataId: id },
-        { $set: { cases: testCases.cases } },
-        { upsert: true, returnDocument: 'after' },
-      );
-      problem.testCases = tc._id;
+      let tc = await this.testCaseModel.findOne({
+        where: [{ metadata_id: problem.id }, { metadata_id: id }],
+      });
+      if (!tc) {
+        tc = this.testCaseModel.create({ metadata_id: problem.id });
+      }
+      tc.cases = testCases.cases;
+      await this.testCaseModel.save(tc);
     }
-
-    await problem.save();
 
     await this.cacheService.invalidatePrefix('problems:');
     if (problem.slug) {
       await this.cacheService.invalidatePrefix(`problem:${problem.slug}`);
     }
 
-    return { success: true, problem };
+    return { success: true, problem: { ...problem, _id: problem.id } };
   }
 
   // --- Companies ---
   async getCompanies(page = 1, limit = 20, search = '') {
-    const filter = search
-      ? {
-          $or: [
-            { name: { $regex: search, $options: 'i' } },
-            { domain: { $regex: search, $options: 'i' } },
-          ],
-        }
-      : {};
     const skip = (page - 1) * limit;
+    const qb = this.companyModel.createQueryBuilder('c');
 
-    const [companies, total] = await Promise.all([
-      this.companyModel.find(filter).skip(skip).limit(limit).lean(),
-      this.companyModel.countDocuments(filter),
-    ]);
-    return { companies, total, page, pages: Math.ceil(total / limit) };
+    if (search && search.trim()) {
+      const s = `%${search.trim()}%`;
+      qb.where('(c.name ILIKE :s OR c.domain ILIKE :s)', { s });
+    }
+
+    qb.orderBy('c.createdAt', 'DESC').skip(skip).take(limit);
+
+    const [companies, total] = await qb.getManyAndCount();
+    return {
+      companies: companies.map((c) => ({ ...c, _id: c.id })),
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+    };
   }
 
   async toggleCompanyVerification(id: string) {
-    const company = await this.companyModel.findById(id);
+    const company = await this.companyModel.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!company) throw new NotFoundException('Company not found');
 
     company.isVerified = !company.isVerified;
-    await company.save();
+    await this.companyModel.save(company);
     return { success: true, isVerified: company.isVerified };
   }
 
   async deleteCompany(id: string) {
-    const company = await this.companyModel.findByIdAndDelete(id);
+    const company = await this.companyModel.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!company) throw new NotFoundException('Company not found');
+    await this.companyModel.remove(company);
     return { success: true, message: 'Company deleted' };
   }
 
   // --- Universities ---
   async getUniversities(page = 1, limit = 20, search = '') {
-    const filter = search
-      ? {
-          $or: [
-            { name: { $regex: search, $options: 'i' } },
-            { domain: { $regex: search, $options: 'i' } },
-          ],
-        }
-      : {};
     const skip = (page - 1) * limit;
+    const qb = this.universityModel.createQueryBuilder('u');
 
-    const [universities, total] = await Promise.all([
-      this.universityModel.find(filter).skip(skip).limit(limit).lean(),
-      this.universityModel.countDocuments(filter),
-    ]);
-    return { universities, total, page, pages: Math.ceil(total / limit) };
+    if (search && search.trim()) {
+      const s = `%${search.trim()}%`;
+      qb.where('(u.name ILIKE :s OR u.domain ILIKE :s)', { s });
+    }
+
+    qb.orderBy('u.createdAt', 'DESC').skip(skip).take(limit);
+
+    const [universities, total] = await qb.getManyAndCount();
+    return {
+      universities: universities.map((u) => ({ ...u, _id: u.id })),
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+    };
   }
 
   async createUniversity(data: {
@@ -555,16 +609,16 @@ export class AdminService {
     location?: string;
     contactEmail?: string;
   }) {
-    const existing = await this.universityModel
-      .findOne({ name: data.name })
-      .lean();
+    const existing = await this.universityModel.findOne({
+      where: { name: data.name },
+    });
     if (existing) {
       return {
         success: false,
         message: 'A university with this name already exists',
       };
     }
-    const university = await this.universityModel.create({
+    const university = this.universityModel.create({
       name: data.name,
       domain: data.domain || '',
       website: data.website || '',
@@ -572,21 +626,30 @@ export class AdminService {
       contactEmail: data.contactEmail || '',
       isVerified: true,
     });
-    return { success: true, university };
+    await this.universityModel.save(university);
+    return {
+      success: true,
+      university: { ...university, _id: university.id },
+    };
   }
 
   async toggleUniversityVerification(id: string) {
-    const university = await this.universityModel.findById(id);
+    const university = await this.universityModel.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!university) throw new NotFoundException('University not found');
 
     university.isVerified = !university.isVerified;
-    await university.save();
+    await this.universityModel.save(university);
     return { success: true, isVerified: university.isVerified };
   }
 
   async deleteUniversity(id: string) {
-    const university = await this.universityModel.findByIdAndDelete(id);
+    const university = await this.universityModel.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!university) throw new NotFoundException('University not found');
+    await this.universityModel.remove(university);
     return { success: true, message: 'University deleted' };
   }
 }

@@ -6,20 +6,11 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import {
-  AssessmentAttempt,
-  AssessmentAttemptDocument,
-} from '../database/schemas/assessment-attempt.schema';
-import {
-  Assessment,
-  AssessmentDocument,
-} from '../database/schemas/assessment.schema';
-import {
-  Question,
-  QuestionDocument,
-} from '../database/schemas/question.schema';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { AssessmentAttempt } from '../database/entities/assessment-attempt.entity';
+import { Assessment } from '../database/entities/assessment.entity';
+import { Question } from '../database/entities/question.entity';
 import type { Response } from 'express';
 import { renderToStream } from '@react-pdf/renderer';
 import { StudentResultReport, StudentResult } from './student-result.pdf';
@@ -28,11 +19,12 @@ import * as React from 'react';
 @Controller('reports')
 export class ReportsController {
   constructor(
-    @InjectModel(AssessmentAttempt.name)
-    private attemptModel: Model<AssessmentAttemptDocument>,
-    @InjectModel(Assessment.name)
-    private assessmentModel: Model<AssessmentDocument>,
-    @InjectModel(Question.name) private questionModel: Model<QuestionDocument>,
+    @InjectRepository(AssessmentAttempt)
+    private readonly attemptRepo: Repository<AssessmentAttempt>,
+    @InjectRepository(Assessment)
+    private readonly assessmentRepo: Repository<Assessment>,
+    @InjectRepository(Question)
+    private readonly questionRepo: Repository<Question>,
   ) {}
 
   @Get('assessment-attempt/:attemptId')
@@ -40,32 +32,46 @@ export class ReportsController {
     @Param('attemptId') attemptId: string,
     @Res() res: Response,
   ) {
-    if (!Types.ObjectId.isValid(attemptId)) {
+    if (!attemptId) {
       throw new BadRequestException('Invalid attempt ID');
     }
 
-    const attempt = await this.attemptModel.findById(attemptId).lean();
+    const attempt = await this.attemptRepo.findOne({
+      where: [{ id: attemptId }, { mongoId: attemptId }],
+    });
     if (!attempt) {
       throw new NotFoundException('Attempt not found');
     }
 
-    const assessment = await this.assessmentModel
-      .findById(attempt.assessmentId)
-      .lean();
+    const assessmentId = attempt.assessmentId;
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id: assessmentId }, { mongoId: assessmentId }],
+    });
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
 
     // Populate question details for responses
+    const responses = Array.isArray(attempt.responses) ? attempt.responses : [];
     const questions = await Promise.all(
-      (attempt.responses || []).map(async (resp) => {
-        const q = await this.questionModel.findById(resp.questionId).lean();
-        const item: { id: string; title: string; difficulty: string; status: 'Passed' | 'Failed' | 'Partial'; points: number } = {
-          id: resp.questionId.toString(),
-          title: q && q.title ? q.title : 'Unknown Question',
-          difficulty: q && q.difficulty ? q.difficulty : 'Medium',
-          status: resp.isCorrect ? 'Passed' : (resp.marksAwarded > 0 ? 'Partial' : 'Failed'),
-          points: resp.marksAwarded || 0,
+      responses.map(async (resp: any) => {
+        const q = resp.questionId
+          ? await this.questionRepo.findOne({
+              where: [{ id: resp.questionId }, { mongoId: resp.questionId }],
+            })
+          : null;
+        const item: {
+          id: string;
+          title: string;
+          difficulty: string;
+          status: 'Passed' | 'Failed' | 'Partial';
+          points: number;
+        } = {
+          id: String(resp.questionId || 'unknown'),
+          title: q?.title ? q.title : 'Assessment Question',
+          difficulty: q?.difficulty ? q.difficulty : 'Medium',
+          status: resp.isCorrect ? 'Passed' : resp.marksAwarded > 0 ? 'Partial' : 'Failed',
+          points: Number(resp.marksAwarded || 0),
         };
         return item;
       }),
@@ -90,7 +96,7 @@ export class ReportsController {
 
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="result-${attempt.studentUid}.pdf"`,
+      'Content-Disposition': `inline; filename="result-${attempt.studentUid || attempt.id}.pdf"`,
     });
 
     try {

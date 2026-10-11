@@ -6,13 +6,15 @@ import { StudentsController } from './students.controller';
 import { StudentsService } from './students.service';
 import { CredentialEmailProcessor } from './credential-email.processor';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { User as UserEntity } from '../database/entities/user.entity';
+import { User } from '../database/entities/user.entity';
+import { AuditLog } from '../database/entities/audit-log.entity';
+import { EmailJob } from '../database/entities/email-job.entity';
 
 @Module({
   imports: [
     DatabaseModule,
     EmailModule,
-    TypeOrmModule.forFeature([UserEntity]),
+    TypeOrmModule.forFeature([User, AuditLog, EmailJob]),
     BullModule.registerQueue({
       name: 'credential-email',
     }),

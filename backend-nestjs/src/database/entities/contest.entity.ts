@@ -1,6 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToMany, JoinTable } from 'typeorm';
-import { User } from './user.entity';
-import { ProblemMetadata } from './problem-metadata.entity';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity('contests')
 export class Contest {
@@ -25,13 +29,8 @@ export class Contest {
   @Column({ type: 'timestamp' })
   endTime: Date;
 
-  @ManyToMany(() => ProblemMetadata)
-  @JoinTable({
-    name: 'contest_problems',
-    joinColumn: { name: 'contest_id', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'problem_id', referencedColumnName: 'id' }
-  })
-  problems: ProblemMetadata[];
+  @Column('text', { array: true, default: '{}' })
+  problems: string[];
 
   @Column({ default: false })
   isPrivate: boolean;
@@ -39,29 +38,27 @@ export class Contest {
   @Column({ nullable: true })
   password?: string;
 
-  @Column({ type: 'jsonb', default: {
-    enableFullscreen: true,
-    enableCopyProtect: true,
-    enablePasteProtect: true,
-    enableDevToolsDetect: true,
-    enableTabSwitchDetect: true,
-    enableMultipleDeviceProtect: true,
-    enableWatermark: true,
-    warningLimit: 5,
-    autoSubmitOnViolation: true
-  } })
+  @Column({
+    type: 'jsonb',
+    default: {
+      enableFullscreen: true,
+      enableCopyProtect: true,
+      enablePasteProtect: true,
+      enableDevToolsDetect: true,
+      enableTabSwitchDetect: true,
+      enableMultipleDeviceProtect: true,
+      enableWatermark: true,
+      warningLimit: 5,
+      autoSubmitOnViolation: true,
+    },
+  })
   antiCheatConfig: any;
 
   @Column({ default: false })
   isPublished: boolean;
 
-  @ManyToMany(() => User)
-  @JoinTable({
-    name: 'contest_participants',
-    joinColumn: { name: 'contest_id', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'user_id', referencedColumnName: 'id' }
-  })
-  participants: User[];
+  @Column('text', { array: true, default: '{}' })
+  participants: string[];
 
   @CreateDateColumn()
   createdAt: Date;

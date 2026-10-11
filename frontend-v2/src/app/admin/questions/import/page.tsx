@@ -296,7 +296,7 @@ export default function ImportQuestionsPage() {
             </p>
             <p className="text-xs text-muted-foreground">
               {instantPush
-                ? "Automatic Mode: Selecting a CSV will immediately parse, convert, and push all questions into MongoDB in 1 attempt."
+                ? "Automatic Mode: Selecting a CSV will immediately parse, convert, and push all questions into database in 1 attempt."
                 : "Preview Mode: Shows detailed row preview before confirming."}
             </p>
           </div>

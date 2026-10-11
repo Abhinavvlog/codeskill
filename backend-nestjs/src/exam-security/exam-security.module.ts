@@ -1,27 +1,14 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { ExamSecurityService } from './exam-security.service';
 import { ExamSecurityController } from './exam-security.controller';
-import {
-  Assessment,
-  AssessmentSchema,
-} from '../database/schemas/assessment.schema';
-import {
-  ExamSession,
-  ExamSessionSchema,
-} from '../database/schemas/exam-session.schema';
-import {
-  ExamSecurityEvent,
-  ExamSecurityEventSchema,
-} from '../database/schemas/exam-security-event.schema';
+import { Assessment } from '../database/entities/assessment.entity';
+import { ExamSession } from '../database/entities/exam-session.entity';
+import { ExamSecurityEvent } from '../database/entities/exam-security-event.entity';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: Assessment.name, schema: AssessmentSchema },
-      { name: ExamSession.name, schema: ExamSessionSchema },
-      { name: ExamSecurityEvent.name, schema: ExamSecurityEventSchema },
-    ]),
+    TypeOrmModule.forFeature([Assessment, ExamSession, ExamSecurityEvent]),
   ],
   controllers: [ExamSecurityController],
   providers: [ExamSecurityService],

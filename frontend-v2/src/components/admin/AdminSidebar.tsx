@@ -85,12 +85,23 @@ export function AdminSidebar() {
 
   return (
     <div className="w-64 bg-sidebar text-sidebar-foreground flex flex-col h-full border-r border-sidebar-border relative z-20">
-      <div className="h-16 flex items-center px-4 border-b border-border gap-3 bg-card">
-        <AdminLogo variant="sidebar" src="/logo-dark.svg" alt="CodeSkill" />
-        <div className="min-w-0">
-          <p className="text-sm font-bold text-foreground truncate leading-tight">CodeSkill Admin</p>
-          <p className="text-[10px] text-muted-foreground font-semibold tracking-wide uppercase">Chandigarh University</p>
-        </div>
+      <div className="h-20 flex items-center px-4 border-b border-border bg-card/60 shrink-0">
+        <Link href="/admin/dashboard" className="flex items-center gap-3 group select-none">
+          <AdminLogo variant="icon" size="md" />
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-lg font-black tracking-tight text-foreground leading-none">
+                Code<span className="text-rose-600 dark:text-rose-500">Skill</span>
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/25 px-1.5 py-0.5 rounded leading-none shadow-xs">
+                Admin
+              </span>
+            </div>
+            <p className="text-[11px] font-semibold text-muted-foreground tracking-wide mt-1.5 truncate">
+              Chandigarh University
+            </p>
+          </div>
+        </Link>
       </div>
 
       <div className="flex-1 overflow-y-auto py-4 px-3">
@@ -178,12 +189,12 @@ export function AdminSidebar() {
       </div>
 
       {/* Footer with university name */}
-      <div className="p-4 border-t border-border space-y-4">
-        <div className="flex items-center gap-3 bg-muted/40 p-2.5 rounded-lg border border-border">
-          <AdminLogo className="w-12 h-12 md:w-16 md:h-16" alt="Chandigarh University" />
-          <div>
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Developed for</p>
-            <p className="text-xs font-bold text-foreground leading-tight">Chandigarh University</p>
+      <div className="p-4 border-t border-border space-y-3">
+        <div className="flex items-center gap-3 bg-muted/40 p-2.5 rounded-xl border border-border">
+          <AdminLogo variant="cu" size="sm" src="/cu-logo.png" alt="Chandigarh University" />
+          <div className="min-w-0">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Official Platform</p>
+            <p className="text-xs font-bold text-foreground leading-tight truncate">Chandigarh University</p>
           </div>
         </div>
         <button 

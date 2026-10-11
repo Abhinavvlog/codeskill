@@ -17,6 +17,9 @@ export class AuditLog {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  mongoId?: string;
+
   @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'actorId' })
   actor?: User;

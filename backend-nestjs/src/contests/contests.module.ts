@@ -1,19 +1,13 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { ContestsController } from './contests.controller';
 import { ContestsService } from './contests.service';
-import { Contest, ContestSchema } from '../database/schemas/contest.schema';
-import {
-  ContestAttempt,
-  ContestAttemptSchema,
-} from '../database/schemas/contest-attempt.schema';
+import { Contest } from '../database/entities/contest.entity';
+import { ContestAttempt } from '../database/entities/contest-attempt.entity';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: Contest.name, schema: ContestSchema },
-      { name: ContestAttempt.name, schema: ContestAttemptSchema },
-    ]),
+    TypeOrmModule.forFeature([Contest, ContestAttempt]),
   ],
   controllers: [ContestsController],
   providers: [ContestsService],

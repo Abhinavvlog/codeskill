@@ -19,6 +19,7 @@ import { Spinner } from "@/components/ui/spinner";
 import Link from "next/link";
 import { AuthUI } from "@/components/ui/auth-ui";
 import { OtpInput, type OtpInputHandle, type OtpStatus } from "@/components/ui/otp-input";
+import { AdminLogo } from "@/components/admin/AdminLogo";
 
 const adminLoginSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address." }),
@@ -102,19 +103,37 @@ export default function AdminLoginPage() {
           }
         }}
       >
-        <div className="w-full max-w-[400px] flex flex-col gap-8 mx-auto">
+        <div className="w-full max-w-[400px] flex flex-col gap-6 mx-auto">
           <div className="flex flex-col">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-50 border border-zinc-200 text-zinc-600 text-[10px] font-bold tracking-widest uppercase mb-6 w-fit">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#F5B800]" />
-              {showOTP ? "Two-Factor Verification" : "Admin Portal"}
+            {/* Prominent CodeSkill Admin Branding */}
+            <div className="flex items-center gap-3.5 mb-6">
+              <AdminLogo variant="icon" size="lg" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl font-black tracking-tight text-foreground leading-none">
+                    Code<span className="text-rose-600 dark:text-rose-500">Skill</span>
+                  </span>
+                  <span className="px-2 py-0.5 text-xs font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/25 rounded-md leading-none shadow-xs">
+                    Admin
+                  </span>
+                </div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-1.5">
+                  Chandigarh University
+                </p>
+              </div>
             </div>
-            <h2 className="text-[28px] font-bold tracking-tight text-foreground mb-2">
-              {showOTP ? "Verify Your Identity" : "CodeSkill Admin"}
+
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 text-[10px] font-bold tracking-widest uppercase mb-3 w-fit">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#F5B800]" />
+              {showOTP ? "Two-Factor Verification" : "Secure Examination Console"}
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground mb-1.5">
+              {showOTP ? "Verify Your Identity" : "Administrator Sign In"}
             </h2>
             <p className="text-sm text-muted-foreground">
               {showOTP
                 ? `Enter the 6-digit security code sent to ${form.getValues("email") || "your administrator email"}.`
-                : "Sign in to access the assessment administration console."}
+                : "Sign in to access the examination and assessment administration console."}
             </p>
           </div>
 

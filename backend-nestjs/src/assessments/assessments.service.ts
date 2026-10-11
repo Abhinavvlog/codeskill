@@ -4,24 +4,12 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import {
-  Assessment,
-  AssessmentDocument,
-} from '../database/schemas/assessment.schema';
-import {
-  AssessmentAttempt,
-  AssessmentAttemptDocument,
-} from '../database/schemas/assessment-attempt.schema';
-import {
-  Question,
-  QuestionDocument,
-} from '../database/schemas/question.schema';
-import {
-  AuditLog,
-  AuditLogDocument,
-} from '../database/schemas/audit-log.schema';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, In, Not } from 'typeorm';
+import { Assessment } from '../database/entities/assessment.entity';
+import { AssessmentAttempt } from '../database/entities/assessment-attempt.entity';
+import { Question } from '../database/entities/question.entity';
+import { AuditLog } from '../database/entities/audit-log.entity';
 import { CreateAssessmentDto } from './dto/create-assessment.dto';
 import { UpdateAssessmentDto } from './dto/update-assessment.dto';
 import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
@@ -29,14 +17,14 @@ import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
 @Injectable()
 export class AssessmentsService {
   constructor(
-    @InjectModel(Assessment.name)
-    private readonly assessmentModel: Model<AssessmentDocument>,
-    @InjectModel(AssessmentAttempt.name)
-    private readonly attemptModel: Model<AssessmentAttemptDocument>,
-    @InjectModel(Question.name)
-    private readonly questionModel: Model<QuestionDocument>,
-    @InjectModel(AuditLog.name)
-    private readonly auditLogModel: Model<AuditLogDocument>,
+    @InjectRepository(Assessment)
+    private readonly assessmentRepo: Repository<Assessment>,
+    @InjectRepository(AssessmentAttempt)
+    private readonly attemptRepo: Repository<AssessmentAttempt>,
+    @InjectRepository(Question)
+    private readonly questionRepo: Repository<Question>,
+    @InjectRepository(AuditLog)
+    private readonly auditLogRepo: Repository<AuditLog>,
   ) {}
 
   // -------------------------------------------------------------
@@ -49,15 +37,14 @@ export class AssessmentsService {
     ip = '',
     userAgent = '',
   ) {
-    // 1. Process sections or questionIds
-    let questionObjIds: Types.ObjectId[] = [];
+    let questionObjIds: string[] = [];
     let totalMarks = 0;
     const sectionsToSave: any[] = [];
 
     if (dto.sections && dto.sections.length > 0) {
       dto.sections.forEach((sec) => {
         sec.questions.forEach((q) => {
-          questionObjIds.push(new Types.ObjectId(q.questionId));
+          questionObjIds.push(String(q.questionId));
           totalMarks += q.marks || 1;
         });
         sectionsToSave.push({
@@ -66,7 +53,7 @@ export class AssessmentsService {
           order: sec.order || 0,
           timeLimit: sec.timeLimit || 0,
           questions: sec.questions.map((q) => ({
-            questionId: new Types.ObjectId(q.questionId),
+            questionId: String(q.questionId),
             marks: q.marks || 1,
             negativeMarks: q.negativeMarks || 0,
             order: q.order || 0,
@@ -74,9 +61,9 @@ export class AssessmentsService {
         });
       });
     } else if (dto.questionIds && dto.questionIds.length > 0) {
-      questionObjIds = dto.questionIds.map((id) => new Types.ObjectId(id));
-      const questions = await this.questionModel.find({
-        _id: { $in: questionObjIds },
+      questionObjIds = dto.questionIds.map((id) => String(id));
+      const questions = await this.questionRepo.find({
+        where: [{ id: In(questionObjIds) }, { mongoId: In(questionObjIds) }],
       });
       totalMarks = questions.reduce((sum, q) => sum + (q.marks || 1), 0);
     } else {
@@ -86,8 +73,8 @@ export class AssessmentsService {
     }
 
     if (questionObjIds.length > 0) {
-      const qCount = await this.questionModel.countDocuments({
-        _id: { $in: questionObjIds },
+      const qCount = await this.questionRepo.count({
+        where: [{ id: In(questionObjIds) }, { mongoId: In(questionObjIds) }],
       });
       if (qCount !== questionObjIds.length) {
         throw new BadRequestException(
@@ -96,20 +83,20 @@ export class AssessmentsService {
       }
     }
 
-    const passingMarks = dto.passingMarks ?? Math.ceil(totalMarks * 0.4); // 40% default passing
+    const passingMarks = dto.passingMarks ?? Math.ceil(totalMarks * 0.4);
 
     const code = (dto.code || `TEST-${Date.now().toString().slice(-6)}`)
       .toUpperCase()
       .trim();
 
-    const existingCode = await this.assessmentModel.findOne({ code });
+    const existingCode = await this.assessmentRepo.findOne({ where: { code } });
     if (existingCode) {
       throw new BadRequestException(
         `Assessment code '${code}' is already in use.`,
       );
     }
 
-    const assessment = new this.assessmentModel({
+    const assessment = this.assessmentRepo.create({
       title: dto.title.trim(),
       code,
       description: dto.description || '',
@@ -146,91 +133,122 @@ export class AssessmentsService {
       ],
       sections: sectionsToSave,
       status: dto.status || 'draft',
-      createdBy: adminUser._id,
+      created_by_id: adminUser?.id || adminUser?._id,
     });
 
-    await assessment.save();
+    await this.assessmentRepo.save(assessment);
 
-    await this.auditLogModel.create({
-      actorId: adminUser._id,
-      actorEmail: adminUser.email,
-      action: 'CREATE_ASSESSMENT',
-      target: assessment._id.toString(),
-      targetType: 'Assessment',
-      ipAddress: ip,
-      userAgent: userAgent,
-      metadata: {
-        title: assessment.title,
-        code: assessment.code,
-        questionCount: questionObjIds.length,
-        totalMarks,
-      },
-    });
+    await this.auditLogRepo.save(
+      this.auditLogRepo.create({
+        actorId: adminUser?.id || adminUser?._id,
+        actorEmail: adminUser?.email || '',
+        action: 'CREATE_ASSESSMENT',
+        target: assessment.id,
+        targetType: 'Assessment',
+        ipAddress: ip,
+        userAgent: userAgent,
+        metadata: {
+          title: assessment.title,
+          code: assessment.code,
+          questionCount: questionObjIds.length,
+          totalMarks,
+        },
+      }),
+    );
 
-    return assessment;
+    return { ...assessment, _id: assessment.id };
   }
 
   async findAll(query: any = {}) {
-    const filter: any = {};
+    const qb = this.assessmentRepo
+      .createQueryBuilder('assessment')
+      .leftJoinAndSelect('assessment.createdBy', 'createdBy')
+      .orderBy('assessment.createdAt', 'DESC');
+
     if (query.status && query.status !== 'all') {
-      filter.status = query.status;
+      qb.andWhere('assessment.status = :status', { status: query.status });
     } else {
-      filter.status = { $ne: 'archived' };
-    }
-    if (query.search && query.search.trim()) {
-      filter.$or = [
-        { title: new RegExp(query.search.trim(), 'i') },
-        { code: new RegExp(query.search.trim(), 'i') },
-      ];
+      qb.andWhere('assessment.status != :archived', { archived: 'archived' });
     }
 
-    const assessments = await this.assessmentModel
-      .find(filter)
-      .populate('createdBy', 'name email')
-      .sort({ createdAt: -1 })
-      .lean();
+    if (query.search && query.search.trim()) {
+      const search = `%${query.search.trim()}%`;
+      qb.andWhere(
+        '(assessment.title ILIKE :search OR assessment.code ILIKE :search)',
+        { search },
+      );
+    }
+
+    const rawAssessments = await qb.getMany();
+    const assessments = rawAssessments.map((a) => ({
+      ...a,
+      _id: a.id,
+    }));
 
     return { success: true, assessments, count: assessments.length };
   }
 
   async findById(id: string) {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid assessment ID');
-    }
-    const assessment = await this.assessmentModel
-      .findById(id)
-      .populate('questions')
-      .populate('sections.questions.questionId')
-      .populate('createdBy', 'name email')
-      .lean();
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id }, { mongoId: id }],
+      relations: { createdBy: true },
+    });
 
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
-    return { success: true, assessment };
+
+    // Populate question details
+    let questionsList: Question[] = [];
+    if (assessment.questions && assessment.questions.length > 0) {
+      questionsList = await this.questionRepo.find({
+        where: [
+          { id: In(assessment.questions) },
+          { mongoId: In(assessment.questions) },
+        ],
+      });
+    }
+
+    const qMap = new Map(
+      questionsList.map((q) => [q.id, { ...q, _id: q.id }]),
+    );
+
+    // Populate questions in sections if present
+    const sections = (assessment.sections || []).map((sec) => ({
+      ...sec,
+      questions: sec.questions.map((q) => ({
+        ...q,
+        questionId: qMap.get(String(q.questionId)) || q.questionId,
+      })),
+    }));
+
+    return {
+      success: true,
+      assessment: {
+        ...assessment,
+        _id: assessment.id,
+        questions: questionsList.map((q) => ({ ...q, _id: q.id })),
+        sections,
+      },
+    };
   }
 
   async delete(id: string, adminUser: any) {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid assessment ID');
-    }
-    const assessment = await this.assessmentModel.findByIdAndUpdate(
-      id,
-      { status: 'archived' },
-      { new: true },
-    );
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
+    assessment.status = 'archived';
+    await this.assessmentRepo.save(assessment);
     return { success: true, message: 'Assessment archived successfully' };
   }
 
   async update(id: string, dto: UpdateAssessmentDto, adminUser: any) {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid assessment ID');
-    }
-
-    const assessment = await this.assessmentModel.findById(id);
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
@@ -245,9 +263,7 @@ export class AssessmentsService {
     if (dto.negativeMarking !== undefined)
       assessment.negativeMarking = dto.negativeMarking;
     if (dto.startTime !== undefined)
-      assessment.startTime = dto.startTime
-        ? new Date(dto.startTime)
-        : undefined;
+      assessment.startTime = dto.startTime ? new Date(dto.startTime) : undefined;
     if (dto.endTime !== undefined)
       assessment.endTime = dto.endTime ? new Date(dto.endTime) : undefined;
     if (dto.status !== undefined) assessment.status = dto.status;
@@ -260,8 +276,8 @@ export class AssessmentsService {
     if (dto.allowReview !== undefined) assessment.allowReview = dto.allowReview;
     if (dto.allowedAttempts !== undefined)
       assessment.allowedAttempts = Number(dto.allowedAttempts);
-    if (!assessment.createdBy && adminUser?._id) {
-      assessment.createdBy = adminUser._id;
+    if (!assessment.created_by_id && (adminUser?.id || adminUser?._id)) {
+      assessment.created_by_id = adminUser.id || adminUser._id;
     }
 
     if (dto.proctoring) {
@@ -276,13 +292,13 @@ export class AssessmentsService {
       Array.isArray(dto.sections) &&
       dto.sections.length > 0
     ) {
-      const qIds: Types.ObjectId[] = [];
+      const qIds: string[] = [];
       let tMarks = 0;
       const sectionsToSave: any[] = [];
 
       dto.sections.forEach((sec) => {
         sec.questions.forEach((q) => {
-          qIds.push(new Types.ObjectId(q.questionId));
+          qIds.push(String(q.questionId));
           tMarks += q.marks || 1;
         });
         sectionsToSave.push({
@@ -291,7 +307,7 @@ export class AssessmentsService {
           order: sec.order || 0,
           timeLimit: sec.timeLimit || 0,
           questions: sec.questions.map((q) => ({
-            questionId: new Types.ObjectId(q.questionId),
+            questionId: String(q.questionId),
             marks: q.marks || 1,
             negativeMarks: q.negativeMarks || 0,
             order: q.order || 0,
@@ -302,81 +318,79 @@ export class AssessmentsService {
       assessment.questions = qIds;
       assessment.totalMarks = tMarks;
     } else if (dto.questionIds && Array.isArray(dto.questionIds)) {
-      const qIds = dto.questionIds
-        .filter((qId) => Types.ObjectId.isValid(qId))
-        .map((qId) => new Types.ObjectId(qId));
+      const qIds = dto.questionIds.map((qId) => String(qId));
       assessment.questions = qIds;
-      const questionsList = await this.questionModel
-        .find({ _id: { $in: qIds } })
-        .lean();
+      const questionsList = await this.questionRepo.find({
+        where: [{ id: In(qIds) }, { mongoId: In(qIds) }],
+      });
       assessment.totalMarks = questionsList.reduce(
         (sum, q) => sum + (q.marks || 1),
         0,
       );
     }
 
-    await assessment.save();
+    await this.assessmentRepo.save(assessment);
 
-    await this.auditLogModel.create({
-      action: 'UPDATE_ASSESSMENT',
-      actorId: adminUser._id,
-      actorEmail: adminUser.email || '',
-      targetType: 'Assessment',
-      assessmentId: assessment._id,
-      target: assessment.title,
-    });
+    await this.auditLogRepo.save(
+      this.auditLogRepo.create({
+        action: 'UPDATE_ASSESSMENT',
+        actorId: adminUser?.id || adminUser?._id,
+        actorEmail: adminUser?.email || '',
+        targetType: 'Assessment',
+        assessmentId: assessment.id,
+        target: assessment.title,
+      }),
+    );
 
     return {
       success: true,
       message: 'Assessment updated successfully',
-      assessment,
+      assessment: { ...assessment, _id: assessment.id },
     };
   }
 
   async updateStatus(id: string, status: string, adminUser: any) {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid assessment ID');
-    }
-
-    const assessment = await this.assessmentModel.findByIdAndUpdate(
-      id,
-      { status },
-      { new: true },
-    );
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
 
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
 
-    await this.auditLogModel.create({
-      action: 'TOGGLE_ASSESSMENT_STATUS',
-      actorId: adminUser._id,
-      actorEmail: adminUser.email || '',
-      targetType: 'Assessment',
-      assessmentId: assessment._id,
-      target: `Status -> ${status}`,
-    });
+    assessment.status = status;
+    await this.assessmentRepo.save(assessment);
+
+    await this.auditLogRepo.save(
+      this.auditLogRepo.create({
+        action: 'TOGGLE_ASSESSMENT_STATUS',
+        actorId: adminUser?.id || adminUser?._id,
+        actorEmail: adminUser?.email || '',
+        targetType: 'Assessment',
+        assessmentId: assessment.id,
+        target: `Status -> ${status}`,
+      }),
+    );
 
     return {
       success: true,
       message: `Assessment status updated to ${status}`,
-      assessment,
+      assessment: { ...assessment, _id: assessment.id },
     };
   }
 
   async getAssessmentResults(id: string) {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid assessment ID');
-    }
-    const assessment = await this.assessmentModel.findById(id).lean();
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
 
-    const attempts = await this.attemptModel
-      .find({ assessmentId: new Types.ObjectId(id) })
-      .sort({ score: -1, timeSpentSeconds: 1 })
-      .lean();
+    const attempts = await this.attemptRepo.find({
+      where: [{ assessmentId: assessment.id }, { assessmentId: id }],
+      order: { score: 'DESC', timeSpentSeconds: 'ASC' },
+    });
 
     // Deduplicate / Aggregate by student: group attempts per unique student
     const studentAttemptsMap = new Map<string, any[]>();
@@ -391,7 +405,6 @@ export class AssessmentsService {
 
     const uniqueCandidates = Array.from(studentAttemptsMap.entries()).map(
       ([key, studentAttempts]) => {
-        // Pick best submitted attempt, or latest attempt
         const submitted = studentAttempts.filter(
           (a) => a.status === 'submitted' || a.status === 'auto_submitted',
         );
@@ -416,6 +429,7 @@ export class AssessmentsService {
 
         return {
           ...best,
+          _id: best?.id,
           attemptNumber: studentAttempts.length,
           totalAttempts: studentAttempts.length,
           score: maxScore,
@@ -424,7 +438,7 @@ export class AssessmentsService {
           allAttempts: studentAttempts
             .sort((a, b) => (a.attemptNumber || 0) - (b.attemptNumber || 0))
             .map((a, idx) => ({
-              _id: a._id,
+              _id: a.id,
               attemptNumber: a.attemptNumber || idx + 1,
               score: a.score ?? 0,
               maxScore: a.maxScore || assessment.totalMarks || 100,
@@ -442,7 +456,6 @@ export class AssessmentsService {
       },
     );
 
-    // Summary Analytics on Unique Candidates
     const totalCandidates = uniqueCandidates.length;
     const submittedCandidates = uniqueCandidates.filter(
       (c) => c.status === 'submitted' || c.status === 'auto_submitted',
@@ -462,7 +475,8 @@ export class AssessmentsService {
     return {
       success: true,
       assessment: {
-        id: assessment._id,
+        id: assessment.id,
+        _id: assessment.id,
         title: assessment.title,
         code: assessment.code,
         totalMarks: assessment.totalMarks || 100,
@@ -487,7 +501,8 @@ export class AssessmentsService {
       },
       attempts: uniqueCandidates,
       rawAttempts: attempts.map((a, idx) => ({
-        _id: a._id,
+        _id: a.id,
+        id: a.id,
         studentId: a.studentId,
         studentUid: a.studentUid,
         studentName: a.studentName,
@@ -516,41 +531,40 @@ export class AssessmentsService {
     const batch = studentProfile.batch || '';
     const dept = studentProfile.department || '';
 
-    // Filter assessments targeted to this student's cohort or universally open (empty target arrays)
-    const filter: any = {
-      status: { $in: ['published', 'ongoing'] },
-      $and: [
-        {
-          $or: [{ targetBatches: { $size: 0 } }, { targetBatches: batch }],
-        },
-        {
-          $or: [
-            { targetDepartments: { $size: 0 } },
-            { targetDepartments: dept },
-          ],
-        },
-      ],
-    };
-
-    const assessments = await this.assessmentModel
-      .find(filter)
-      .select('-instructions')
-      .sort({ createdAt: -1 })
-      .lean();
-
-    // Check student's attempt status for each assessment
-    const assessmentIds = assessments.map((a) => a._id);
-    const existingAttempts = await this.attemptModel
-      .find({
-        assessmentId: { $in: assessmentIds },
-        studentId: studentUser._id,
+    const assessments = await this.assessmentRepo
+      .createQueryBuilder('a')
+      .where('a.status IN (:...statuses)', {
+        statuses: ['published', 'ongoing'],
       })
-      .sort({ score: -1, createdAt: -1 })
-      .lean();
+      .orderBy('a.createdAt', 'DESC')
+      .getMany();
 
-    const items = assessments.map((a) => {
+    // Cohort filtering: targetBatches empty or includes student's batch, same for department
+    const filteredAssessments = assessments.filter((a) => {
+      const matchBatch =
+        !a.targetBatches ||
+        a.targetBatches.length === 0 ||
+        (batch && a.targetBatches.includes(batch));
+      const matchDept =
+        !a.targetDepartments ||
+        a.targetDepartments.length === 0 ||
+        (dept && a.targetDepartments.includes(dept));
+      return matchBatch && matchDept;
+    });
+
+    const studentId = String(studentUser.id || studentUser._id);
+    const attemptWhere: any[] = [{ studentId }];
+    if (studentUser.uid) {
+      attemptWhere.push({ studentUid: studentUser.uid });
+    }
+    const existingAttempts = await this.attemptRepo.find({
+      where: attemptWhere,
+      order: { score: 'DESC', createdAt: 'DESC' },
+    });
+
+    const items = filteredAssessments.map((a) => {
       const allForAssessment = existingAttempts.filter(
-        (att) => att.assessmentId.toString() === a._id.toString(),
+        (att) => att.assessmentId === a.id || att.assessmentId === a.mongoId,
       );
       const submittedAttempts = allForAssessment.filter(
         (att) => att.status === 'submitted' || att.status === 'auto_submitted',
@@ -560,7 +574,6 @@ export class AssessmentsService {
         (att) => att.status === 'in_progress',
       );
 
-      // Highest score across all submitted attempts
       const maxScore = isCompleted
         ? Math.max(...submittedAttempts.map((s) => s.score || 0))
         : (inProgressAttempt?.score ?? null);
@@ -574,12 +587,12 @@ export class AssessmentsService {
           ? (a as any).allowedAttempts
           : 1;
       const completedCount = submittedAttempts.length;
-      // 0 = unlimited, 1 = 1 attempt allowed (cannot retake if completed), >1 = multiple attempts up to limit
       const canRetake =
         allowedAttempts === 0 ? true : completedCount < allowedAttempts;
 
       return {
         ...a,
+        _id: a.id,
         allowedAttempts,
         completedAttemptsCount: completedCount,
         questionCount: a.questions?.length || 0,
@@ -600,21 +613,27 @@ export class AssessmentsService {
   }
 
   async getStudentAssessmentOverview(id: string, studentUser: any) {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid assessment ID');
-    }
-    const assessment = await this.assessmentModel.findById(id).lean();
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
 
-    const allAttempts = await this.attemptModel
-      .find({
-        assessmentId: new Types.ObjectId(id),
-        studentId: studentUser._id,
-      })
-      .sort({ score: -1, startedAt: -1 })
-      .lean();
+    const studentId = String(studentUser.id || studentUser._id);
+    const whereConditions: any[] = [
+      { assessmentId: assessment.id, studentId },
+    ];
+    if (id && id !== assessment.id) {
+      whereConditions.push({ assessmentId: id, studentId });
+    }
+    if (studentUser.uid) {
+      whereConditions.push({ assessmentId: assessment.id, studentUid: studentUser.uid });
+    }
+    const allAttempts = await this.attemptRepo.find({
+      where: whereConditions,
+      order: { score: 'DESC', startedAt: 'DESC' },
+    });
 
     const submittedAttempts = allAttempts.filter(
       (a) => a.status === 'submitted' || a.status === 'auto_submitted',
@@ -626,7 +645,6 @@ export class AssessmentsService {
     const allowedAttempts =
       assessment.allowedAttempts !== undefined ? assessment.allowedAttempts : 1;
     const completedCount = submittedAttempts.length;
-    // 0 = unlimited attempts, otherwise check completedCount < allowedAttempts
     const canRetake =
       allowedAttempts === 0 ? true : completedCount < allowedAttempts;
     const highestScore =
@@ -663,7 +681,8 @@ export class AssessmentsService {
     return {
       success: true,
       assessment: {
-        _id: assessment._id,
+        _id: assessment.id,
+        id: assessment.id,
         title: assessment.title,
         code: assessment.code,
         description: assessment.description,
@@ -684,6 +703,7 @@ export class AssessmentsService {
       },
       attempt: latestAttempt
         ? {
+            _id: latestAttempt.id,
             status: latestAttempt.status,
             score: latestAttempt.score,
             percentage: latestAttempt.percentage,
@@ -700,15 +720,13 @@ export class AssessmentsService {
   }
 
   async startStudentAttempt(id: string, studentUser: any) {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid assessment ID');
-    }
-    const assessment = await this.assessmentModel.findById(id).lean();
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
 
-    // Scheduling and Admin Availability Check
     if (assessment.status === 'draft' || assessment.status === 'archived') {
       throw new BadRequestException(
         'This assessment is currently disabled by administrator.',
@@ -726,28 +744,38 @@ export class AssessmentsService {
       );
     }
 
-    const questionsList = await this.questionModel
-      .find({
-        _id: { $in: assessment.questions },
-      })
-      .lean();
+    const questionIds = assessment.questions || [];
+    const questionsList =
+      questionIds.length > 0
+        ? await this.questionRepo.find({
+            where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
+          })
+        : [];
 
-    let attempt = await this.attemptModel.findOne({
-      assessmentId: new Types.ObjectId(id),
-      studentId: studentUser._id,
-      status: 'in_progress',
+    const studentId = String(studentUser.id || studentUser._id);
+    let attempt = await this.attemptRepo.findOne({
+      where: [
+        { assessmentId: assessment.id, studentId, status: 'in_progress' },
+        { assessmentId: id, studentId, status: 'in_progress' },
+      ],
     });
 
     if (!attempt) {
-      // Check previous submissions to track attempt number and highest score
-      const previousSubmitted = await this.attemptModel
-        .find({
-          assessmentId: new Types.ObjectId(id),
-          studentId: studentUser._id,
-          status: { $in: ['submitted', 'auto_submitted'] },
-        })
-        .sort({ score: -1 })
-        .lean();
+      const previousSubmitted = await this.attemptRepo.find({
+        where: [
+          {
+            assessmentId: assessment.id,
+            studentId,
+            status: In(['submitted', 'auto_submitted']),
+          },
+          {
+            assessmentId: id,
+            studentId,
+            status: In(['submitted', 'auto_submitted']),
+          },
+        ],
+        order: { score: 'DESC' },
+      });
 
       const allowedAttempts =
         assessment.allowedAttempts !== undefined
@@ -765,15 +793,14 @@ export class AssessmentsService {
         previousSubmitted.length > 0 ? previousSubmitted[0].score || 0 : 0;
       const attemptNum = previousSubmitted.length + 1;
 
-      // Shuffle question order if enabled
-      let orderedIds = questionsList.map((q) => q._id);
+      let orderedIds = questionsList.map((q) => q.id);
       if (assessment.shuffleQuestions) {
         orderedIds = [...orderedIds].sort(() => Math.random() - 0.5);
       }
 
-      attempt = new this.attemptModel({
-        assessmentId: assessment._id,
-        studentId: studentUser._id,
+      attempt = this.attemptRepo.create({
+        assessmentId: assessment.id,
+        studentId,
         studentUid: studentUser.uid || 'UNKNOWN',
         studentName: studentUser.name || 'Student Candidate',
         studentEmail: studentUser.email || '',
@@ -793,17 +820,17 @@ export class AssessmentsService {
         })),
       });
 
-      await attempt.save();
+      await this.attemptRepo.save(attempt);
     }
 
-    // SANITIZATION: Strictly strip correctAnswer and explanation to prevent question leakage!
-    const qMap = new Map(questionsList.map((q) => [q._id.toString(), q]));
-    const sanitizedQuestions = attempt.questionOrder
+    const qMap = new Map(questionsList.map((q) => [q.id, q]));
+    const sanitizedQuestions = (attempt.questionOrder || [])
       .map((qId, index) => {
-        const q = qMap.get(qId.toString());
+        const q = qMap.get(String(qId));
         if (!q) return null;
         return {
-          _id: q._id,
+          _id: q.id,
+          id: q.id,
           questionIndex: index + 1,
           question: q.question,
           questionType: q.questionType,
@@ -840,7 +867,8 @@ export class AssessmentsService {
 
     return {
       success: true,
-      attemptId: attempt._id,
+      attemptId: attempt.id,
+      _id: attempt.id,
       startedAt: attempt.startedAt,
       durationMinutes: assessment.durationMinutes,
       proctoring: assessment.proctoring,
@@ -850,23 +878,33 @@ export class AssessmentsService {
   }
 
   async retakeStudentAttempt(id: string, studentUser: any) {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid assessment ID');
-    }
-    // Delete any unfinished in_progress attempts only, preserving submitted attempts
-    await this.attemptModel.deleteMany({
-      assessmentId: new Types.ObjectId(id),
-      studentId: studentUser._id,
+    const studentId = String(studentUser.id || studentUser._id);
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
+    const targetAssessmentId = assessment?.id || id;
+
+    await this.attemptRepo.delete({
+      assessmentId: targetAssessmentId,
+      studentId,
       status: 'in_progress',
     });
     return this.startStudentAttempt(id, studentUser);
   }
 
   async saveProgress(id: string, dto: SubmitAssessmentDto, studentUser: any) {
-    const attempt = await this.attemptModel.findOne({
-      assessmentId: new Types.ObjectId(id),
-      studentId: studentUser._id,
-      status: 'in_progress',
+    const studentId = String(studentUser.id || studentUser._id);
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
+    const targetAssessmentId = assessment?.id || id;
+
+    const attempt = await this.attemptRepo.findOne({
+      where: {
+        assessmentId: targetAssessmentId,
+        studentId,
+        status: 'in_progress',
+      },
     });
 
     if (!attempt) {
@@ -877,7 +915,7 @@ export class AssessmentsService {
 
     if (dto.responses && Array.isArray(dto.responses)) {
       attempt.responses = dto.responses.map((r) => ({
-        questionId: new Types.ObjectId(r.questionId),
+        questionId: String(r.questionId),
         selectedAnswer: r.selectedAnswer ?? -1,
         code: r.code || '',
         language: r.language || 'python',
@@ -910,35 +948,40 @@ export class AssessmentsService {
       ).length;
     }
 
-    await attempt.save();
+    await this.attemptRepo.save(attempt);
     return { success: true, message: 'Progress saved successfully.' };
   }
 
   async submitAttempt(id: string, dto: SubmitAssessmentDto, studentUser: any) {
-    const assessment = await this.assessmentModel.findById(id).lean();
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
 
-    const attempt = await this.attemptModel
-      .findOne({
-        assessmentId: new Types.ObjectId(id),
-        studentId: studentUser._id,
-        status: 'in_progress',
-      })
-      .sort({ startedAt: -1 });
+    const studentId = String(studentUser.id || studentUser._id);
+    const attempt = await this.attemptRepo.findOne({
+      where: [
+        { assessmentId: assessment.id, studentId, status: 'in_progress' },
+        { assessmentId: id, studentId, status: 'in_progress' },
+      ],
+      order: { startedAt: 'DESC' },
+    });
 
     if (!attempt) {
       return this.getStudentResult(id, studentUser);
     }
 
     // SERVER-SIDE EVALUATION
-    const questions = await this.questionModel
-      .find({
-        _id: { $in: assessment.questions },
-      })
-      .lean();
-    const questionMap = new Map(questions.map((q) => [q._id.toString(), q]));
+    const questionIds = assessment.questions || [];
+    const questions =
+      questionIds.length > 0
+        ? await this.questionRepo.find({
+            where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
+          })
+        : [];
+    const questionMap = new Map(questions.map((q) => [q.id, q]));
 
     let totalScore = 0;
     let totalAttempted = 0;
@@ -947,10 +990,10 @@ export class AssessmentsService {
     let totalSkipped = 0;
 
     const evaluatedResponses = (dto.responses || []).map((r) => {
-      const q = questionMap.get(r.questionId.toString());
+      const q = questionMap.get(String(r.questionId));
       if (!q) {
         return {
-          questionId: new Types.ObjectId(r.questionId),
+          questionId: String(r.questionId),
           selectedAnswer: r.selectedAnswer ?? -1,
           isCorrect: false,
           marksAwarded: 0,
@@ -1005,7 +1048,7 @@ export class AssessmentsService {
       totalScore += marksAwarded;
 
       return {
-        questionId: q._id,
+        questionId: q.id,
         selectedAnswer: r.selectedAnswer ?? -1,
         code: r.code || '',
         language: r.language || 'python',
@@ -1018,7 +1061,6 @@ export class AssessmentsService {
       };
     });
 
-    // Ensure non-negative overall floor if institutional rule applies
     const finalScore = Math.max(0, Math.round(totalScore * 100) / 100);
     const maxScore = assessment.totalMarks || 1;
     const percentage = Math.round((finalScore / maxScore) * 1000) / 10;
@@ -1028,7 +1070,6 @@ export class AssessmentsService {
         ? Math.round((totalCorrect / totalAttempted) * 100)
         : 0;
 
-    // Proctoring violations
     const violations = (dto.violations || []).map((v) => ({
       type: v.type,
       timestamp: v.timestamp ? new Date(v.timestamp) : new Date(),
@@ -1038,15 +1079,16 @@ export class AssessmentsService {
       (v) => v.type === 'tab_switch',
     ).length;
 
-    // Calculate highest score across all attempts
-    const prevAttempts = await this.attemptModel
-      .find({
-        assessmentId: new Types.ObjectId(id),
-        studentId: studentUser._id,
-        status: { $in: ['submitted', 'auto_submitted'] },
-        _id: { $ne: attempt._id },
-      })
-      .lean();
+    const prevAttempts = await this.attemptRepo.find({
+      where: [
+        {
+          assessmentId: assessment.id,
+          studentId,
+          status: In(['submitted', 'auto_submitted']),
+          id: Not(attempt.id),
+        },
+      ],
+    });
 
     const prevMax =
       prevAttempts.length > 0
@@ -1071,7 +1113,7 @@ export class AssessmentsService {
     attempt.tabSwitchCount = tabSwitches;
     attempt.violations = violations;
 
-    await attempt.save();
+    await this.attemptRepo.save(attempt);
 
     return {
       success: true,
@@ -1094,43 +1136,51 @@ export class AssessmentsService {
   }
 
   async getStudentResult(id: string, studentUser: any) {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid assessment ID');
-    }
-    const assessment = await this.assessmentModel.findById(id).lean();
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
 
-    const attempt = await this.attemptModel
-      .findOne({
-        assessmentId: new Types.ObjectId(id),
-        studentId: studentUser._id,
-        status: { $in: ['submitted', 'auto_submitted'] },
-      })
-      .sort({ score: -1, submittedAt: -1 })
-      .lean();
+    const studentId = String(studentUser.id || studentUser._id);
+    const attempt = await this.attemptRepo.findOne({
+      where: [
+        {
+          assessmentId: assessment.id,
+          studentId,
+          status: In(['submitted', 'auto_submitted']),
+        },
+        {
+          assessmentId: id,
+          studentId,
+          status: In(['submitted', 'auto_submitted']),
+        },
+      ],
+      order: { score: 'DESC', submittedAt: 'DESC' },
+    });
 
     if (!attempt) {
       throw new BadRequestException('No completed assessment attempt found.');
     }
 
-    const questions = await this.questionModel
-      .find({
-        _id: { $in: assessment.questions },
-      })
-      .lean();
-    const questionMap = new Map(questions.map((q) => [q._id.toString(), q]));
+    const questionIds = assessment.questions || [];
+    const questions =
+      questionIds.length > 0
+        ? await this.questionRepo.find({
+            where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
+          })
+        : [];
+    const questionMap = new Map(questions.map((q) => [q.id, q]));
 
-    // Topic-wise accuracy breakdown
     const topicStats: Record<
       string,
       { total: number; correct: number; marks: number }
     > = {};
 
-    const reviewQuestions = attempt.responses
+    const reviewQuestions = (attempt.responses || [])
       .map((resp) => {
-        const q = questionMap.get(resp.questionId.toString());
+        const q = questionMap.get(String(resp.questionId));
         if (!q) return null;
 
         const topic = q.topic || 'General';
@@ -1144,7 +1194,8 @@ export class AssessmentsService {
         topicStats[topic].marks += resp.marksAwarded;
 
         return {
-          questionId: q._id,
+          questionId: q.id,
+          _id: q.id,
           question: q.question,
           options: q.options,
           selectedAnswer: resp.selectedAnswer,
@@ -1166,19 +1217,22 @@ export class AssessmentsService {
       marksEarned: stat.marks,
     }));
 
+    const submittedCount = await this.attemptRepo.count({
+      where: [
+        {
+          assessmentId: assessment.id,
+          studentId,
+          status: In(['submitted', 'auto_submitted']),
+        },
+      ],
+    });
+
     return {
       success: true,
       canRetake:
         assessment.allowedAttempts === 0
           ? true
-          : (await this.attemptModel.countDocuments({
-              assessmentId: new Types.ObjectId(id),
-              studentId: studentUser._id,
-              status: { $in: ['submitted', 'auto_submitted'] },
-            })) <
-            (assessment.allowedAttempts !== undefined
-              ? assessment.allowedAttempts
-              : 1),
+          : submittedCount < (assessment.allowedAttempts !== undefined ? assessment.allowedAttempts : 1),
       assessment: {
         title: assessment.title,
         code: assessment.code,
@@ -1191,6 +1245,7 @@ export class AssessmentsService {
             : 1,
       },
       attempt: {
+        _id: attempt.id,
         score: attempt.score,
         maxScore: attempt.maxScore,
         percentage: attempt.percentage,

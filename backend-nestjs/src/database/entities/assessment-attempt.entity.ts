@@ -19,28 +19,45 @@ export type AttemptStatus =
   | 'disqualified';
 
 @Entity('assessment_attempts')
-@Index(['assessment_id', 'student_id'])
-@Index(['assessment_id', 'score'])
+@Index(['assessmentId', 'studentId'])
+@Index(['assessmentId', 'score'])
 @Index(['studentUid', 'status'])
 export class AssessmentAttempt {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Assessment)
+  @ManyToOne(() => Assessment, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'assessment_id' })
   assessment: Assessment;
 
   @Index()
-  @Column({ type: 'uuid' })
-  assessment_id: string;
+  @Column({ name: 'assessment_id', type: 'uuid', nullable: true })
+  assessmentId: string;
 
-  @ManyToOne(() => User)
+  get assessment_id(): string {
+    return this.assessmentId;
+  }
+  set assessment_id(val: string) {
+    this.assessmentId = val;
+  }
+
+  @ManyToOne(() => User, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'student_id' })
   student: User;
 
   @Index()
-  @Column({ type: 'uuid' })
-  student_id: string;
+  @Column({ name: 'student_id', type: 'uuid', nullable: true })
+  studentId: string;
+
+  get student_id(): string {
+    return this.studentId;
+  }
+  set student_id(val: string) {
+    this.studentId = val;
+  }
+
+  @Column({ type: 'varchar', nullable: true })
+  mongoId?: string;
 
   @Column({ type: 'varchar', length: 100 })
   studentUid: string;
@@ -70,8 +87,7 @@ export class AssessmentAttempt {
   @Column({ type: 'jsonb', default: [] })
   responses: any[];
 
-  // UUID string array
-  @Column('uuid', { array: true, default: '{}' })
+  @Column('text', { array: true, default: '{}' })
   questionOrder: string[];
 
   @Column({ type: 'float', default: 0 })

@@ -539,9 +539,9 @@ print(' '.join(nums), target)
     it('should not expose environment variables', async () => {
       const code = `
 import os
-mongo_uri = os.environ.get('MONGODB_URI', 'NOT_FOUND')
+db_url = os.environ.get('DATABASE_URL', 'NOT_FOUND')
 jwt_secret = os.environ.get('JWT_SECRET', 'NOT_FOUND')
-print(f"{mongo_uri}|{jwt_secret}")
+print(f"{db_url}|{jwt_secret}")
 `;
       const results = await singleTest(
         'python',
@@ -551,7 +551,7 @@ print(f"{mongo_uri}|{jwt_secret}")
       );
       expect(results[0].passed).toBe(true);
       // Make sure the actual values are not in the output
-      expect(results[0].output).not.toContain('mongodb');
+      expect(results[0].output).not.toContain('postgres');
       expect(results[0].output).not.toContain('supersecret');
     });
   });

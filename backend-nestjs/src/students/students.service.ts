@@ -4,38 +4,29 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, In, ILike } from 'typeorm';
+import { User } from '../database/entities/user.entity';
+import { AuditLog } from '../database/entities/audit-log.entity';
+import { EmailJob } from '../database/entities/email-job.entity';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import * as xlsx from 'xlsx';
-import * as bcrypt from 'bcryptjs';
-import { User, UserDocument } from '../database/schemas/user.schema';
-import {
-  AuditLog,
-  AuditLogDocument,
-} from '../database/schemas/audit-log.schema';
-import {
-  EmailJob,
-  EmailJobDocument,
-} from '../database/schemas/email-job.schema';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { QueryStudentsDto } from './dto/query-students.dto';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { User as UserEntity } from '../database/entities/user.entity';
 
 @Injectable()
 export class StudentsService {
   constructor(
-    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    @InjectRepository(UserEntity) private readonly userRepository: Repository<UserEntity>,
-    @InjectModel(AuditLog.name)
-    private readonly auditLogModel: Model<AuditLogDocument>,
-    @InjectModel(EmailJob.name)
-    private readonly emailJobModel: Model<EmailJobDocument>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    @InjectRepository(AuditLog)
+    private readonly auditLogRepo: Repository<AuditLog>,
+    @InjectRepository(EmailJob)
+    private readonly emailJobRepo: Repository<EmailJob>,
     @InjectQueue('credential-email')
     private readonly credentialEmailQueue: Queue,
   ) {}
@@ -48,7 +39,6 @@ export class StudentsService {
     for (let i = 0; i < length; i++) {
       pass += chars[bytes[i] % chars.length];
     }
-    // Ensure at least one uppercase, lowercase, digit, and special char
     return pass + 'A1!';
   }
 
@@ -57,66 +47,61 @@ export class StudentsService {
     const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
     const skip = (page - 1) * limit;
 
-    const filter: any = {
-      $or: [
-        { isAssessmentStudent: true },
-        { uid: { $exists: true, $ne: null } },
-      ],
-    };
+    const qb = this.userRepository.createQueryBuilder('student');
+    qb.where('(student.isAssessmentStudent = :isAss OR student.uid IS NOT NULL)', {
+      isAss: true,
+    });
 
     if (query.search && query.search.trim()) {
-      const searchRegex = new RegExp(query.search.trim(), 'i');
-      filter.$and = [
-        {
-          $or: [
-            { name: searchRegex },
-            { email: searchRegex },
-            { uid: searchRegex },
-            { 'studentProfile.department': searchRegex },
-            { 'studentProfile.batch': searchRegex },
-          ],
-        },
-      ];
+      const search = `%${query.search.trim()}%`;
+      qb.andWhere(
+        '(student.name ILIKE :search OR student.email ILIKE :search OR student.uid ILIKE :search)',
+        { search },
+      );
     }
 
     if (query.department && query.department.trim()) {
-      filter['studentProfile.department'] = query.department.trim();
+      qb.andWhere("student.studentProfile->>'department' = :dept", {
+        dept: query.department.trim(),
+      });
     }
 
     if (query.batch && query.batch.trim()) {
-      filter['studentProfile.batch'] = query.batch.trim();
+      qb.andWhere("student.studentProfile->>'batch' = :batch", {
+        batch: query.batch.trim(),
+      });
     }
 
     if (query.semester !== undefined && !isNaN(Number(query.semester))) {
-      filter['studentProfile.semester'] = Number(query.semester);
+      qb.andWhere("(student.studentProfile->>'semester')::int = :sem", {
+        sem: Number(query.semester),
+      });
     }
 
     if (query.isActive !== undefined && query.isActive !== '') {
-      filter.isActive = query.isActive === 'true';
+      qb.andWhere('student.isActive = :isActive', {
+        isActive: query.isActive === 'true',
+      });
     }
 
-    const [students, total, activeCount, pendingPasswordResetCount] =
-      await Promise.all([
-        this.userModel
-          .find(filter)
-          .select('-password -mfaSecret')
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(limit)
-          .lean(),
-        this.userModel.countDocuments(filter),
-        this.userModel.countDocuments({
-          ...filter,
-          isActive: true,
-        }),
-        this.userModel.countDocuments({
-          ...filter,
-          forcePasswordChange: true,
-        }),
-      ]);
+    qb.orderBy('student.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    const [students, total] = await qb.getManyAndCount();
+
+    const activeCount = await this.userRepository.count({
+      where: { isActive: true },
+    });
+    const pendingPasswordResetCount = await this.userRepository.count({
+      where: { forcePasswordChange: true },
+    });
 
     return {
-      students,
+      students: students.map((s) => {
+        const { password, ...rest } = s;
+        return { ...rest, _id: s.id };
+      }),
       pagination: {
         page,
         limit,
@@ -132,33 +117,31 @@ export class StudentsService {
   }
 
   async findById(id: string) {
-    if (!id || !Types.ObjectId.isValid(id)) {
+    const student = await this.userRepository.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
+    if (!student) {
       throw new NotFoundException(`Student '${id}' not found`);
     }
-    const student = await this.userModel
-      .findById(id)
-      .select('-password -mfaSecret');
-    if (!student) {
-      throw new NotFoundException('Student not found');
-    }
-    return student;
+    const { password, ...rest } = student;
+    return { ...rest, _id: student.id };
   }
 
   async create(dto: CreateStudentDto, adminUser: any, ip = '', userAgent = '') {
     const formattedUid = dto.uid.toUpperCase().trim();
     const formattedEmail = dto.email.toLowerCase().trim();
 
-    // Check duplicate UID
-    const existingUid = await this.userModel.findOne({ uid: formattedUid });
+    const existingUid = await this.userRepository.findOne({
+      where: { uid: formattedUid },
+    });
     if (existingUid) {
       throw new ConflictException(
         `Student with UID '${formattedUid}' already exists`,
       );
     }
 
-    // Check duplicate email
-    const existingEmail = await this.userModel.findOne({
-      email: formattedEmail,
+    const existingEmail = await this.userRepository.findOne({
+      where: { email: formattedEmail },
     });
     if (existingEmail) {
       throw new ConflictException(
@@ -167,12 +150,14 @@ export class StudentsService {
     }
 
     const rawPassword = dto.password || this.generateSecurePassword();
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(rawPassword, salt);
 
-    const student = new this.userModel({
+    const student = this.userRepository.create({
       name: dto.name.trim(),
       email: formattedEmail,
       uid: formattedUid,
-      password: rawPassword,
+      password: hashedPassword,
       role: 'student',
       isAssessmentStudent: true,
       forcePasswordChange:
@@ -181,33 +166,16 @@ export class StudentsService {
       studentProfile: dto.studentProfile || {},
       authProvider: 'local',
     });
-
-    await student.save();
-
-    // Dual-write to Postgres
-    const pgUser = this.userRepository.create({
-      mongoId: student._id.toString(),
-      name: student.name,
-      email: student.email,
-      uid: student.uid,
-      password: student.password,
-      role: student.role,
-      isAssessmentStudent: student.isAssessmentStudent,
-      forcePasswordChange: student.forcePasswordChange,
-      isActive: student.isActive,
-      studentProfile: student.studentProfile,
-      authProvider: student.authProvider,
-    });
-    await this.userRepository.save(pgUser);
+    await this.userRepository.save(student);
 
     // Audit log
-    await this.auditLogModel.create({
-      actorId: adminUser?._id,
+    const audit = this.auditLogRepo.create({
+      actorId: adminUser?.id || adminUser?._id,
       actorEmail: adminUser?.email || 'admin',
       action: 'CREATE_STUDENT',
-      target: student._id.toString(),
+      target: student.id,
       targetType: 'User',
-      studentId: student._id,
+      studentId: student.id,
       ipAddress: ip,
       userAgent: userAgent,
       metadata: {
@@ -216,12 +184,11 @@ export class StudentsService {
         name: student.name,
       },
     });
+    await this.auditLogRepo.save(audit);
 
-    const studentJson = student.toObject();
-    delete (studentJson as any).password;
-
+    const { password, ...studentJson } = student;
     return {
-      student: studentJson,
+      student: { ...studentJson, _id: student.id },
       generatedPassword: !dto.password ? rawPassword : null,
     };
   }
@@ -233,7 +200,9 @@ export class StudentsService {
     ip = '',
     userAgent = '',
   ) {
-    const student = await this.userModel.findById(id);
+    const student = await this.userRepository.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!student) {
       throw new NotFoundException('Student not found');
     }
@@ -241,11 +210,10 @@ export class StudentsService {
     if (dto.uid) {
       const formattedUid = dto.uid.toUpperCase().trim();
       if (formattedUid !== student.uid) {
-        const existing = await this.userModel.findOne({
-          uid: formattedUid,
-          _id: { $ne: student._id },
+        const existing = await this.userRepository.findOne({
+          where: { uid: formattedUid },
         });
-        if (existing) {
+        if (existing && existing.id !== student.id) {
           throw new ConflictException(
             `UID '${formattedUid}' is already in use by another user`,
           );
@@ -257,11 +225,10 @@ export class StudentsService {
     if (dto.email) {
       const formattedEmail = dto.email.toLowerCase().trim();
       if (formattedEmail !== student.email) {
-        const existing = await this.userModel.findOne({
-          email: formattedEmail,
-          _id: { $ne: student._id },
+        const existing = await this.userRepository.findOne({
+          where: { email: formattedEmail },
         });
-        if (existing) {
+        if (existing && existing.id !== student.id) {
           throw new ConflictException(
             `Email '${formattedEmail}' is already in use by another user`,
           );
@@ -277,23 +244,20 @@ export class StudentsService {
 
     if (dto.studentProfile) {
       student.studentProfile = {
-        ...((student.studentProfile as any)?.toObject?.() ||
-          student.studentProfile ||
-          {}),
+        ...(student.studentProfile || {}),
         ...dto.studentProfile,
       };
     }
 
-    await student.save();
+    await this.userRepository.save(student);
 
-    // Audit log
-    await this.auditLogModel.create({
-      actorId: adminUser?._id,
+    const audit = this.auditLogRepo.create({
+      actorId: adminUser?.id || adminUser?._id,
       actorEmail: adminUser?.email || 'admin',
       action: 'UPDATE_STUDENT',
-      target: student._id.toString(),
+      target: student.id,
       targetType: 'User',
-      studentId: student._id,
+      studentId: student.id,
       ipAddress: ip,
       userAgent: userAgent,
       metadata: {
@@ -302,10 +266,10 @@ export class StudentsService {
         updates: dto,
       },
     });
+    await this.auditLogRepo.save(audit);
 
-    const studentJson = student.toObject();
-    delete (studentJson as any).password;
-    return studentJson;
+    const { password, ...studentJson } = student;
+    return { ...studentJson, _id: student.id };
   }
 
   async setActiveStatus(
@@ -315,21 +279,23 @@ export class StudentsService {
     ip = '',
     userAgent = '',
   ) {
-    const student = await this.userModel.findById(id);
+    const student = await this.userRepository.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!student) {
       throw new NotFoundException('Student not found');
     }
 
     student.isActive = isActive;
-    await student.save();
+    await this.userRepository.save(student);
 
-    await this.auditLogModel.create({
-      actorId: adminUser?._id,
+    const audit = this.auditLogRepo.create({
+      actorId: adminUser?.id || adminUser?._id,
       actorEmail: adminUser?.email || 'admin',
       action: isActive ? 'ACTIVATE_STUDENT' : 'DEACTIVATE_STUDENT',
-      target: student._id.toString(),
+      target: student.id,
       targetType: 'User',
-      studentId: student._id,
+      studentId: student.id,
       ipAddress: ip,
       userAgent: userAgent,
       metadata: {
@@ -338,33 +304,36 @@ export class StudentsService {
         isActive,
       },
     });
+    await this.auditLogRepo.save(audit);
 
     return {
       message: `Student successfully ${isActive ? 'activated' : 'deactivated'}`,
-      studentId: student._id,
+      studentId: student.id,
       isActive: student.isActive,
     };
   }
 
   async resetPassword(id: string, adminUser: any, ip = '', userAgent = '') {
-    const student = await this.userModel.findById(id);
+    const student = await this.userRepository.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
     if (!student) {
       throw new NotFoundException('Student not found');
     }
 
     const tempPassword = this.generateSecurePassword(10);
-    student.password = tempPassword;
+    const salt = await bcrypt.genSalt(10);
+    student.password = await bcrypt.hash(tempPassword, salt);
     student.forcePasswordChange = true;
-    await student.save();
+    await this.userRepository.save(student);
 
-    // Audit log entry for password reset
-    await this.auditLogModel.create({
-      actorId: adminUser?._id,
+    const audit = this.auditLogRepo.create({
+      actorId: adminUser?.id || adminUser?._id,
       actorEmail: adminUser?.email || 'admin',
       action: 'RESET_PASSWORD',
-      target: student._id.toString(),
+      target: student.id,
       targetType: 'User',
-      studentId: student._id,
+      studentId: student.id,
       ipAddress: ip,
       userAgent: userAgent,
       metadata: {
@@ -373,6 +342,7 @@ export class StudentsService {
         forcePasswordChange: true,
       },
     });
+    await this.auditLogRepo.save(audit);
 
     return {
       message: 'Student password successfully reset',
@@ -409,7 +379,6 @@ export class StudentsService {
       throw new BadRequestException('Uploaded sheet is empty');
     }
 
-    // Helper to find column case-insensitively
     const findField = (row: Record<string, any>, aliases: string[]): string => {
       const rowKeys = Object.keys(row);
       for (const alias of aliases) {
@@ -482,7 +451,7 @@ export class StudentsService {
       ]);
 
       parsedRows.push({
-        rowNumber: i + 2, // 1-indexed header is row 1
+        rowNumber: i + 2,
         uid,
         name,
         email,
@@ -502,14 +471,18 @@ export class StudentsService {
     const allFileEmails = parsedRows.map((r) => r.email).filter(Boolean);
 
     const [existingUsersByUid, existingUsersByEmail] = await Promise.all([
-      this.userModel
-        .find({ uid: { $in: allFileUids } })
-        .select('uid')
-        .lean(),
-      this.userModel
-        .find({ email: { $in: allFileEmails } })
-        .select('email')
-        .lean(),
+      allFileUids.length > 0
+        ? this.userRepository.find({
+            where: { uid: In(allFileUids) },
+            select: { uid: true },
+          })
+        : [],
+      allFileEmails.length > 0
+        ? this.userRepository.find({
+            where: { email: In(allFileEmails) },
+            select: { email: true },
+          })
+        : [],
     ]);
 
     const existingUidSet = new Set(existingUsersByUid.map((u) => u.uid));
@@ -613,13 +586,14 @@ export class StudentsService {
       throw new BadRequestException('No valid rows provided for import');
     }
 
-    // Never trust client-supplied rows: re-check duplicates server-side
     const uids = validRows.map((r) => String(r.uid || '').toUpperCase());
     const emails = validRows.map((r) => String(r.email || '').toLowerCase());
+
     const [dupUids, dupEmails] = await Promise.all([
-      this.userModel.find({ uid: { $in: uids } }).select('uid').lean(),
-      this.userModel.find({ email: { $in: emails } }).select('email').lean(),
+      this.userRepository.find({ where: { uid: In(uids) }, select: { uid: true } }),
+      this.userRepository.find({ where: { email: In(emails) }, select: { email: true } }),
     ]);
+
     if (dupUids.length || dupEmails.length) {
       throw new ConflictException(
         'Some students already exist; please re-upload the file for validation',
@@ -633,21 +607,17 @@ export class StudentsService {
     }
 
     const salt = await bcrypt.genSalt(10);
-    const usersToInsert: any[] = [];
-    const emailJobsToInsert: any[] = [];
-    const pgUsersToInsert: any[] = [];
+    const usersToInsert: User[] = [];
+    const emailJobsToInsert: EmailJob[] = [];
 
     for (const row of validRows) {
-      // Random per-student temporary password unless one is supplied
       const rawPassword =
         row.password && String(row.password).trim()
           ? String(row.password).trim()
           : crypto.randomBytes(9).toString('base64url');
       const hashedPassword = await bcrypt.hash(rawPassword, salt);
-      const studentId = new Types.ObjectId();
 
-      usersToInsert.push({
-        _id: studentId,
+      const u = this.userRepository.create({
         name: row.name,
         email: row.email,
         uid: row.uid,
@@ -668,63 +638,33 @@ export class StudentsService {
           year: row.year || new Date().getFullYear(),
         },
       });
+      usersToInsert.push(u);
 
-      pgUsersToInsert.push({
-        mongoId: studentId.toString(),
-        name: row.name,
-        email: row.email,
-        uid: row.uid,
-        password: hashedPassword,
-        role: 'student',
-        isAssessmentStudent: true,
-        forcePasswordChange: true,
-        isActive: true,
-        authProvider: 'local',
-        studentProfile: {
-          university: row.university || '',
-          department: row.department || '',
-          course: row.course || '',
-          semester: row.semester || 1,
-          section: row.section || '',
-          group: row.group || '',
-          batch: row.batch || '',
-          year: row.year || new Date().getFullYear(),
-        },
-      });
-
-      emailJobsToInsert.push({
-        studentId,
+      const job = this.emailJobRepo.create({
         uid: row.uid,
         email: row.email,
         name: row.name,
         temporaryPassword: rawPassword,
         status: 'pending',
         retryCount: 0,
-        createdBy: adminUser?._id,
+        createdBy: adminUser?.id || adminUser?._id,
       });
+      emailJobsToInsert.push(job);
     }
 
-    // Insert in batches of 500 for optimal performance (3,200 rows in < 10s)
     const chunkSize = 500;
     for (let i = 0; i < usersToInsert.length; i += chunkSize) {
-      const userChunk = usersToInsert.slice(i, i + chunkSize);
-      await this.userModel.insertMany(userChunk, { ordered: false });
-    }
-
-    for (let i = 0; i < pgUsersToInsert.length; i += chunkSize) {
-      const pgUserChunk = pgUsersToInsert.slice(i, i + chunkSize);
-      const entities = this.userRepository.create(pgUserChunk);
-      await this.userRepository.save(entities);
+      const chunk = usersToInsert.slice(i, i + chunkSize);
+      await this.userRepository.save(chunk);
     }
 
     for (let i = 0; i < emailJobsToInsert.length; i += chunkSize) {
-      const jobChunk = emailJobsToInsert.slice(i, i + chunkSize);
-      await this.emailJobModel.insertMany(jobChunk, { ordered: false });
+      const chunk = emailJobsToInsert.slice(i, i + chunkSize);
+      await this.emailJobRepo.save(chunk);
     }
 
-    // Audit log
-    await this.auditLogModel.create({
-      actorId: adminUser?._id,
+    const audit = this.auditLogRepo.create({
+      actorId: adminUser?.id || adminUser?._id,
       actorEmail: adminUser?.email || 'admin',
       action: 'IMPORT_STUDENTS',
       targetType: 'User',
@@ -735,6 +675,7 @@ export class StudentsService {
         emailJobsCreated: emailJobsToInsert.length,
       },
     });
+    await this.auditLogRepo.save(audit);
 
     return {
       message: `Successfully imported ${usersToInsert.length} students.`,
@@ -744,14 +685,9 @@ export class StudentsService {
   }
 
   async sendCredentials(jobIds?: string[], portalUrl?: string) {
-    const filter: any = {};
-    if (jobIds && jobIds.length > 0) {
-      filter._id = { $in: jobIds.map((id) => new Types.ObjectId(id)) };
-    } else {
-      filter.status = 'pending';
-    }
+    const where: any = jobIds && jobIds.length > 0 ? { id: In(jobIds) } : { status: 'pending' };
 
-    const pendingJobs = await this.emailJobModel.find(filter);
+    const pendingJobs = await this.emailJobRepo.find({ where });
     if (!pendingJobs || pendingJobs.length === 0) {
       return {
         enqueuedCount: 0,
@@ -761,12 +697,12 @@ export class StudentsService {
 
     for (const job of pendingJobs) {
       job.status = 'queued';
-      await job.save();
+      await this.emailJobRepo.save(job);
 
       await this.credentialEmailQueue.add(
         'send-credential',
         {
-          emailJobId: job._id.toString(),
+          emailJobId: job.id,
           portalUrl,
         },
         {
@@ -787,21 +723,25 @@ export class StudentsService {
   }
 
   async sendIndividualCredential(studentId: string, portalUrl?: string) {
-    const student = await this.userModel.findById(studentId);
+    const student = await this.userRepository.findOne({
+      where: [{ id: studentId }, { mongoId: studentId }],
+    });
     if (!student) throw new NotFoundException('Student not found');
 
-    let emailJob = await this.emailJobModel
-      .findOne({ studentId: student._id })
-      .sort({ createdAt: -1 });
+    let emailJob = await this.emailJobRepo.findOne({
+      where: { uid: student.uid },
+      order: { createdAt: 'DESC' },
+    });
 
     if (!emailJob || !emailJob.temporaryPassword) {
       const tempPass = this.generateSecurePassword(10);
-      student.password = tempPass;
+      const salt = await bcrypt.genSalt(10);
+      student.password = await bcrypt.hash(tempPass, salt);
       student.forcePasswordChange = true;
-      await student.save();
+      await this.userRepository.save(student);
 
-      emailJob = await this.emailJobModel.create({
-        studentId: student._id,
+      emailJob = this.emailJobRepo.create({
+        student: { id: student.id } as any,
         uid: student.uid,
         email: student.email,
         name: student.name,
@@ -809,15 +749,16 @@ export class StudentsService {
         status: 'queued',
         retryCount: 0,
       });
+      await this.emailJobRepo.save(emailJob);
     } else {
       emailJob.status = 'queued';
-      await emailJob.save();
+      await this.emailJobRepo.save(emailJob);
     }
 
     await this.credentialEmailQueue.add(
       'send-credential',
       {
-        emailJobId: emailJob._id.toString(),
+        emailJobId: emailJob.id,
         portalUrl,
       },
       {
@@ -829,12 +770,12 @@ export class StudentsService {
     return {
       success: true,
       message: `Credential email enqueued for ${student.name} (${student.uid})`,
-      jobId: emailJob._id,
+      jobId: emailJob.id,
     };
   }
 
   async retryFailedCredentials(portalUrl?: string) {
-    const failedJobs = await this.emailJobModel.find({ status: 'failed' });
+    const failedJobs = await this.emailJobRepo.find({ where: { status: 'failed' } });
     if (!failedJobs || failedJobs.length === 0) {
       return {
         retriedCount: 0,
@@ -844,12 +785,12 @@ export class StudentsService {
 
     for (const job of failedJobs) {
       job.status = 'queued';
-      await job.save();
+      await this.emailJobRepo.save(job);
 
       await this.credentialEmailQueue.add(
         'send-credential',
         {
-          emailJobId: job._id.toString(),
+          emailJobId: job.id,
           portalUrl,
         },
         {
@@ -867,10 +808,7 @@ export class StudentsService {
 
   async getEmailStatus(page = 1, limit = 20, status?: string) {
     const skip = (Math.max(1, page) - 1) * limit;
-    const filter: any = {};
-    if (status && status !== 'all') {
-      filter.status = status;
-    }
+    const where: any = status && status !== 'all' ? { status } : {};
 
     const [
       total,
@@ -882,19 +820,19 @@ export class StudentsService {
       jobs,
       filteredTotal,
     ] = await Promise.all([
-      this.emailJobModel.countDocuments(),
-      this.emailJobModel.countDocuments({ status: 'pending' }),
-      this.emailJobModel.countDocuments({ status: 'queued' }),
-      this.emailJobModel.countDocuments({ status: 'sent' }),
-      this.emailJobModel.countDocuments({ status: 'failed' }),
-      this.emailJobModel.countDocuments({ status: 'retrying' }),
-      this.emailJobModel
-        .find(filter)
-        .sort({ updatedAt: -1, createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      this.emailJobModel.countDocuments(filter),
+      this.emailJobRepo.count(),
+      this.emailJobRepo.count({ where: { status: 'pending' } }),
+      this.emailJobRepo.count({ where: { status: 'queued' } }),
+      this.emailJobRepo.count({ where: { status: 'sent' } }),
+      this.emailJobRepo.count({ where: { status: 'failed' } }),
+      this.emailJobRepo.count({ where: { status: 'retrying' } }),
+      this.emailJobRepo.find({
+        where,
+        order: { updatedAt: 'DESC', createdAt: 'DESC' },
+        skip,
+        take: limit,
+      }),
+      this.emailJobRepo.count({ where }),
     ]);
 
     return {
@@ -906,7 +844,7 @@ export class StudentsService {
         failed,
         retrying,
       },
-      jobs,
+      jobs: jobs.map((j) => ({ ...j, _id: j.id })),
       pagination: {
         page,
         limit,

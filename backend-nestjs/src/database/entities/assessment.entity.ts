@@ -53,9 +53,12 @@ export class Assessment {
   @Column({ default: true })
   negativeMarking: boolean;
 
+  @Column({ type: 'varchar', nullable: true })
+  mongoId?: string;
+
   // Kept for backwards compatibility. In real PG, we'd use a JoinTable (Many-to-Many).
-  // But since sections can hold questions, we'll store UUIDs here for easy transition.
-  @Column('uuid', { array: true, default: '{}' })
+  // But since sections can hold questions, we'll store UUIDs/IDs here for easy transition.
+  @Column('text', { array: true, default: '{}' })
   questions: string[];
 
   @Column({ type: 'jsonb', default: [] })

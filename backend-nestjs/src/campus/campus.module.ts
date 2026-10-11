@@ -1,22 +1,13 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { CampusController } from './campus.controller';
 import { CampusService } from './campus.service';
-import {
-  University,
-  UniversitySchema,
-} from '../database/schemas/university.schema';
-import {
-  UniversityUser,
-  UniversityUserSchema,
-} from '../database/schemas/university-user.schema';
+import { University } from '../database/entities/university.entity';
+import { UniversityUser } from '../database/entities/university-user.entity';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: University.name, schema: UniversitySchema },
-      { name: UniversityUser.name, schema: UniversityUserSchema },
-    ]),
+    TypeOrmModule.forFeature([University, UniversityUser]),
   ],
   controllers: [CampusController],
   providers: [CampusService],

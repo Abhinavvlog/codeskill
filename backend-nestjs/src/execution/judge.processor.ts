@@ -1,26 +1,31 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
-import * as os from 'os';
-import { ExecutionService, Status } from './execution.service';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import {
-  Submission,
-  SubmissionDocument,
-  SubmissionStatus,
-} from '../database/schemas/submission.schema';
-import {
-  ProblemMetadata,
-  ProblemMetadataDocument,
-} from '../database/schemas/problem-metadata.schema';
-import {
-  ProblemTestCase,
-  ProblemTestCaseDocument,
-} from '../database/schemas/problem-testcase.schema';
-import { User, UserDocument } from '../database/schemas/user.schema';
+import { Job } from 'bullmq';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ExecutionService } from './execution.service';
+import { Submission } from '../database/entities/submission.entity';
+import { ProblemMetadata } from '../database/entities/problem-metadata.entity';
+import { ProblemTestCase } from '../database/entities/problem-testcase.entity';
+import { Problem } from '../database/entities/problem.entity';
+import { User } from '../database/entities/user.entity';
 import { AppGateway } from '../gateway/app.gateway';
 import { RedisService } from '../redis/redis.service';
+import { Status } from './execution.types';
+import * as os from 'os';
+
+export enum SubmissionStatus {
+  QUEUED = 'queued',
+  RUNNING = 'running',
+  TESTING = 'testing',
+  ACCEPTED = 'accepted',
+  WRONG_ANSWER = 'wrong_answer',
+  TIME_LIMIT_EXCEEDED = 'time_limit_exceeded',
+  MEMORY_LIMIT_EXCEEDED = 'memory_limit_exceeded',
+  COMPILATION_ERROR = 'compilation_error',
+  RUNTIME_ERROR = 'runtime_error',
+  SYSTEM_ERROR = 'system_error',
+}
 
 const WORKER_CONCURRENCY = Number(process.env.WORKER_CONCURRENCY) || 10;
 
@@ -32,14 +37,14 @@ export class JudgeProcessor extends WorkerHost {
 
   constructor(
     private readonly executionService: ExecutionService,
-    @InjectModel(Submission.name)
-    private submissionModel: Model<SubmissionDocument>,
-    @InjectModel(ProblemMetadata.name)
-    private problemModel: Model<ProblemMetadataDocument>,
-    @InjectModel(ProblemTestCase.name)
-    private testCaseModel: Model<ProblemTestCaseDocument>,
-    @InjectModel(User.name)
-    private userModel: Model<UserDocument>,
+    @InjectRepository(Submission)
+    private readonly submissionRepo: Repository<Submission>,
+    @InjectRepository(ProblemMetadata)
+    private readonly problemModel: Repository<ProblemMetadata>,
+    @InjectRepository(ProblemTestCase)
+    private readonly testCaseModel: Repository<ProblemTestCase>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly appGateway: AppGateway,
     private readonly redisService: RedisService,
   ) {
@@ -100,11 +105,15 @@ export class JudgeProcessor extends WorkerHost {
 
       try {
         // 1. Mark as running in DB
-        await this.submissionModel.findByIdAndUpdate(submissionId, {
-          status: SubmissionStatus.RUNNING,
-          startedAt: new Date(),
-          runnerId: this.runnerId,
+        const submission = await this.submissionRepo.findOne({
+          where: [{ id: submissionId }, { mongoId: submissionId }],
         });
+
+        if (submission) {
+          submission.status = SubmissionStatus.RUNNING;
+          submission.startedAt = new Date();
+          await this.submissionRepo.save(submission);
+        }
 
         this.appGateway.emitToUser(userId, 'submission_status', {
           submissionId,
@@ -113,24 +122,13 @@ export class JudgeProcessor extends WorkerHost {
         });
 
         // 2. Fetch actual test cases from DB
-        const problem = await this.problemModel
-          .findById(problemId)
-          .populate('config')
-          .populate('testCases')
-          .lean();
-
-        if (!problem) {
-          throw new Error(`Problem not found: ${problemId}`);
-        }
-
         let testCases: any[] = [];
-        const populatedTestCases = problem.testCases as any;
+        const testCaseDoc = await this.testCaseModel.findOne({
+          where: [{ id: problemId }, { metadata_id: problemId }],
+        });
 
-        if (
-          populatedTestCases?.cases &&
-          Array.isArray(populatedTestCases.cases)
-        ) {
-          testCases = populatedTestCases.cases.map((tc: any, i: number) => ({
+        if (testCaseDoc?.cases && Array.isArray(testCaseDoc.cases)) {
+          testCases = testCaseDoc.cases.map((tc: any, i: number) => ({
             id: i + 1,
             input: tc.input || '',
             expected: tc.output || '',
@@ -139,28 +137,15 @@ export class JudgeProcessor extends WorkerHost {
         }
 
         if (testCases.length === 0) {
-          const testCaseDoc = await this.testCaseModel
-            .findOne({ metadataId: problemId })
-            .lean();
-          if (testCaseDoc?.cases && Array.isArray(testCaseDoc.cases)) {
-            testCases = testCaseDoc.cases.map((tc: any, i: number) => ({
-              id: i + 1,
-              input: tc.input || '',
-              expected: tc.output || '',
-              isHidden: tc.isHidden === true,
-            }));
-          }
-        }
-
-        if (testCases.length === 0) {
           this.logger.warn(
             `[Judge] No test cases found for problem ${problemId}`,
           );
-          await this.submissionModel.findByIdAndUpdate(submissionId, {
-            status: SubmissionStatus.SYSTEM_ERROR,
-            compileOutput: 'No test cases configured for this problem',
-            completedAt: new Date(),
-          });
+          if (submission) {
+            submission.status = SubmissionStatus.SYSTEM_ERROR;
+            submission.compileOutput = 'No test cases configured for this problem';
+            submission.completedAt = new Date();
+            await this.submissionRepo.save(submission);
+          }
           this.appGateway.emitToUser(userId, 'execution_error', {
             submissionId,
             status: SubmissionStatus.SYSTEM_ERROR,
@@ -179,20 +164,6 @@ export class JudgeProcessor extends WorkerHost {
 
         // 4. Build execution config
         const config: any = {};
-        const problemConfig = problem.config as any;
-        if (problemConfig) {
-          if (problemConfig.timeLimit)
-            config.timeLimit = problemConfig.timeLimit;
-          if (problemConfig.memoryLimit)
-            config.memoryLimit = problemConfig.memoryLimit;
-          if (problemConfig.cpuLimit) config.cpuLimit = problemConfig.cpuLimit;
-          if (problemConfig.executionMode)
-            config.executionMode = problemConfig.executionMode;
-          if (problemConfig.functionSignature) {
-            config.functionSignature = problemConfig.functionSignature;
-          }
-          if (problemConfig.exactOutput === true) config.exactOutput = true;
-        }
 
         // 5. Execute code in sandbox
         const start = Date.now();
@@ -243,36 +214,44 @@ export class JudgeProcessor extends WorkerHost {
         }
 
         // 7. Update DB with final results
-        const updatedSubmission = await this.submissionModel.findByIdAndUpdate(
-          submissionId,
-          {
-            status,
-            runtime: `${runtime}ms`,
-            executionTimeMs: runtime,
-            memory: '0',
-            testCasesPassed: passedCount,
-            totalTestCases: testCases.length,
-            compileOutput: compileOutput || undefined,
-            completedAt: new Date(),
-            testResults: results.map((result, index) =>
-              testCases[index]?.isHidden
-                ? {
-                    id: result.id,
-                    passed: result.passed,
-                    status: result.status,
-                    executionTime: result.executionTime,
-                  }
-                : result,
-            ),
-          },
-          { new: true },
-        );
-
-        if (updatedSubmission && status === SubmissionStatus.ACCEPTED) {
-          await this.userModel.updateOne(
-            { _id: userId },
-            { $inc: { 'stats.acceptedSubmissions': 1 } },
+        if (submission) {
+          submission.status = status;
+          submission.runtime = runtime;
+          submission.executionTime = runtime;
+          submission.testCasesPassed = passedCount;
+          submission.testsPassed = passedCount;
+          submission.totalTestCases = testCases.length;
+          submission.totalTests = testCases.length;
+          submission.compileOutput = compileOutput || undefined;
+          submission.completedAt = new Date();
+          submission.testResults = results.map((result, index) =>
+            testCases[index]?.isHidden
+              ? {
+                  testId: String(result.id),
+                  passed: result.passed,
+                  executionTime: result.executionTime,
+                  error: result.error,
+                }
+              : {
+                  testId: String(result.id),
+                  passed: result.passed,
+                  executionTime: result.executionTime,
+                  error: result.error,
+                },
           );
+          await this.submissionRepo.save(submission);
+        }
+
+        if (status === SubmissionStatus.ACCEPTED && userId) {
+          const user = await this.userRepo.findOne({ where: { id: userId } });
+          if (user) {
+            const stats = user.stats || {};
+            user.stats = {
+              ...stats,
+              acceptedSubmissions: (stats.acceptedSubmissions || 0) + 1,
+            };
+            await this.userRepo.save(user);
+          }
         }
 
         // 8. Notify user of completion
@@ -316,11 +295,15 @@ export class JudgeProcessor extends WorkerHost {
           err.stack,
         );
 
-        await this.submissionModel.findByIdAndUpdate(submissionId, {
-          status: SubmissionStatus.SYSTEM_ERROR,
-          compileOutput: `Internal error: ${err.message}`,
-          completedAt: new Date(),
+        const sub = await this.submissionRepo.findOne({
+          where: [{ id: submissionId }, { mongoId: submissionId }],
         });
+        if (sub) {
+          sub.status = SubmissionStatus.SYSTEM_ERROR;
+          sub.compileOutput = `Internal error: ${err.message}`;
+          sub.completedAt = new Date();
+          await this.submissionRepo.save(sub);
+        }
 
         this.appGateway.emitToUser(userId, 'execution_error', {
           submissionId,
@@ -330,7 +313,6 @@ export class JudgeProcessor extends WorkerHost {
 
         throw err;
       } finally {
-        // Decrement active count in Redis for user
         const client = this.redisService.getClient();
         if (client && userId) {
           try {

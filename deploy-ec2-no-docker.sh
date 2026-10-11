@@ -20,25 +20,19 @@ curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
 sudo npm install -g pm2
 
-# 4. Install MongoDB & Redis directly on host
-echo "[4/8] Installing MongoDB and Redis..."
-sudo apt-get install -y redis-server
+# 4. Install PostgreSQL & Redis directly on host
+echo "[4/8] Installing PostgreSQL and Redis..."
+sudo apt-get install -y postgresql postgresql-contrib redis-server
 sudo systemctl enable redis-server
 sudo systemctl start redis-server
-
-# MongoDB installation (Ubuntu 22.04 example)
-wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | sudo apt-key add -
-echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
-sudo apt-get update
-sudo apt-get install -y mongodb-org
-sudo systemctl enable mongod
-sudo systemctl start mongod
+sudo systemctl enable postgresql
+sudo systemctl start postgresql
 
 # 5. Setup Project Env Files (Placeholder)
 echo "[5/8] Setting up environment files..."
 if [ ! -f backend-nestjs/.env ]; then
   echo "PORT=5001" > backend-nestjs/.env
-  echo "DATABASE_URI=mongodb://localhost:27017/codeskill" >> backend-nestjs/.env
+  echo "DATABASE_URL=postgresql://postgres:password123@localhost:5432/codeskill" >> backend-nestjs/.env
   echo "REDIS_HOST=localhost" >> backend-nestjs/.env
   echo "REDIS_PORT=6379" >> backend-nestjs/.env
   echo "JWT_SECRET=super_secret_jwt_key_here" >> backend-nestjs/.env

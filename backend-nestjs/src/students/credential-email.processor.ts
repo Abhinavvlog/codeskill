@@ -1,12 +1,9 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import {
-  EmailJob,
-  EmailJobDocument,
-} from '../database/schemas/email-job.schema';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { EmailJob } from '../database/entities/email-job.entity';
 import { EmailService } from '../emails/email.service';
 
 @Processor('credential-email')
@@ -14,8 +11,8 @@ export class CredentialEmailProcessor extends WorkerHost {
   private readonly logger = new Logger(CredentialEmailProcessor.name);
 
   constructor(
-    @InjectModel(EmailJob.name)
-    private readonly emailJobModel: Model<EmailJobDocument>,
+    @InjectRepository(EmailJob)
+    private readonly emailJobRepo: Repository<EmailJob>,
     private readonly emailService: EmailService,
   ) {
     super();
@@ -27,7 +24,9 @@ export class CredentialEmailProcessor extends WorkerHost {
     const { emailJobId, portalUrl } = job.data;
     this.logger.log(`[BullMQ] Processing credential email job: ${emailJobId}`);
 
-    const emailJob = await this.emailJobModel.findById(emailJobId);
+    const emailJob = await this.emailJobRepo.findOne({
+      where: [{ id: emailJobId }, { mongoId: emailJobId }],
+    });
     if (!emailJob) {
       this.logger.error(`[BullMQ] EmailJob record ${emailJobId} not found`);
       return;
@@ -49,14 +48,13 @@ export class CredentialEmailProcessor extends WorkerHost {
       emailJob.status = 'sent';
       emailJob.sentAt = new Date();
       emailJob.error = '';
-      // Securely blank out plaintext password once sent
-      emailJob.temporaryPassword = undefined;
-      await emailJob.save();
+      emailJob.temporaryPassword = '';
+      await this.emailJobRepo.save(emailJob);
 
       this.logger.log(
         `[BullMQ] Credential email successfully dispatched for ${emailJob.uid} (${emailJob.email})`,
       );
-      return { success: true, emailJobId: emailJob._id };
+      return { success: true, emailJobId: emailJob.id };
     } catch (error: any) {
       this.logger.error(
         `[BullMQ] Failed to send credential email for ${emailJob.uid}: ${error.message}`,
@@ -65,7 +63,7 @@ export class CredentialEmailProcessor extends WorkerHost {
       emailJob.retryCount = (emailJob.retryCount || 0) + 1;
       emailJob.error = error.message;
       emailJob.status = emailJob.retryCount >= 3 ? 'failed' : 'retrying';
-      await emailJob.save();
+      await this.emailJobRepo.save(emailJob);
 
       throw error;
     }
