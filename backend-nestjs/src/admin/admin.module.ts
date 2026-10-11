@@ -35,6 +35,14 @@ import {
   Submission,
   SubmissionSchema,
 } from '../database/schemas/submission.schema';
+import {
+  Assessment,
+  AssessmentSchema,
+} from '../database/schemas/assessment.schema';
+import {
+  Question,
+  QuestionSchema,
+} from '../database/schemas/question.schema';
 
 @Module({
   imports: [
@@ -48,6 +56,8 @@ import {
       { name: Company.name, schema: CompanySchema },
       { name: University.name, schema: UniversitySchema },
       { name: Submission.name, schema: SubmissionSchema },
+      { name: Assessment.name, schema: AssessmentSchema },
+      { name: Question.name, schema: QuestionSchema },
     ]),
   ],
   controllers: [

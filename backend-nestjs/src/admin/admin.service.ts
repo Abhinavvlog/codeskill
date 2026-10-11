@@ -34,6 +34,14 @@ import {
   SubmissionDocument,
   Submission,
 } from '../database/schemas/submission.schema';
+import {
+  AssessmentDocument,
+  Assessment,
+} from '../database/schemas/assessment.schema';
+import {
+  QuestionDocument,
+  Question,
+} from '../database/schemas/question.schema';
 import { CacheService } from '../redis/cache.service';
 
 @Injectable()
@@ -54,39 +62,72 @@ export class AdminService {
     private universityModel: Model<UniversityDocument>,
     @InjectModel(Submission.name)
     private submissionModel: Model<SubmissionDocument>,
+    @InjectModel(Assessment.name)
+    private assessmentModel: Model<AssessmentDocument>,
+    @InjectModel(Question.name)
+    private questionModel: Model<QuestionDocument>,
     private cacheService: CacheService,
   ) {}
 
   async getDashboardStats() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const [
       totalUsers,
       totalProblems,
       totalContests,
       totalSubmissions,
+      totalAssessments,
+      totalQuestions,
+      activeToday,
       recentUsers,
       recentSubmissions,
+      recentAssessments,
     ] = await Promise.all([
       this.userModel.countDocuments(),
       this.problemModel.countDocuments(),
       this.contestModel.countDocuments(),
       this.submissionModel.countDocuments(),
+      this.assessmentModel.countDocuments().catch(() => 0),
+      this.questionModel.countDocuments().catch(() => 0),
+      this.userModel.countDocuments({ updatedAt: { $gte: today } }).catch(() => 0),
       this.userModel
         .find()
         .sort({ createdAt: -1 })
-        .limit(5)
-        .select('name email createdAt authProvider')
+        .limit(6)
+        .select('name email role createdAt authProvider')
         .lean(),
       this.submissionModel
         .find()
         .sort({ createdAt: -1 })
-        .limit(5)
-        .populate('user', 'name')
+        .limit(6)
+        .populate('user', 'name email')
         .lean(),
+      this.assessmentModel
+        .find()
+        .sort({ createdAt: -1 })
+        .limit(6)
+        .select('title status durationMinutes allowedAttempts createdAt')
+        .lean()
+        .catch(() => []),
     ]);
 
     return {
-      stats: { totalUsers, totalProblems, totalContests, totalSubmissions },
-      recentActivity: { users: recentUsers, submissions: recentSubmissions },
+      stats: {
+        totalUsers,
+        totalProblems,
+        totalContests,
+        totalSubmissions,
+        totalAssessments,
+        totalQuestions,
+        activeToday: Math.max(activeToday, 1),
+      },
+      recentActivity: {
+        users: recentUsers,
+        submissions: recentSubmissions,
+        assessments: recentAssessments,
+      },
     };
   }
 
