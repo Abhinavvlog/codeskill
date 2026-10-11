@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BrandLogo } from "../BrandLogo";
+import { AdminLogo } from "./AdminLogo";
 import Image from "next/image";
 import { 
   LayoutDashboard, 
@@ -86,7 +86,7 @@ export function AdminSidebar() {
   return (
     <div className="w-64 bg-sidebar text-sidebar-foreground flex flex-col h-full border-r border-sidebar-border relative z-20">
       <div className="h-16 flex items-center px-4 border-b border-border gap-3 bg-card">
-        <BrandLogo className="w-9 h-9" src="/logo-dark.svg" alt="CodeSkill" />
+        <AdminLogo variant="sidebar" src="/logo-dark.svg" alt="CodeSkill" />
         <div className="min-w-0">
           <p className="text-sm font-bold text-foreground truncate leading-tight">CodeSkill Admin</p>
           <p className="text-[10px] text-muted-foreground font-semibold tracking-wide uppercase">Chandigarh University</p>
@@ -180,7 +180,7 @@ export function AdminSidebar() {
       {/* Footer with university name */}
       <div className="p-4 border-t border-border space-y-4">
         <div className="flex items-center gap-3 bg-muted/40 p-2.5 rounded-lg border border-border">
-          <BrandLogo className="w-10 h-10" alt="Chandigarh University" />
+          <AdminLogo className="w-12 h-12 md:w-16 md:h-16" alt="Chandigarh University" />
           <div>
             <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Developed for</p>
             <p className="text-xs font-bold text-foreground leading-tight">Chandigarh University</p>

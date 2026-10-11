@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -12,11 +12,13 @@ import {
   Eye, 
   EyeOff, 
   Mail, 
-  Lock
+  Lock,
+  ArrowLeft
 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import Link from "next/link";
 import { AuthUI } from "@/components/ui/auth-ui";
+import { OtpInput, type OtpInputHandle, type OtpStatus } from "@/components/ui/otp-input";
 
 const adminLoginSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address." }),
@@ -31,6 +33,9 @@ export default function AdminLoginPage() {
   const [showOTP, setShowOTP] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [otpStatus, setOtpStatus] = useState<OtpStatus>("idle");
+  const [otpErrorMessage, setOtpErrorMessage] = useState<string>("");
+  const otpRef = useRef<OtpInputHandle>(null);
   const { adminLogin, adminLoginVerify } = useAuth();
   const router = useRouter();
 
@@ -45,6 +50,8 @@ export default function AdminLoginPage() {
     setIsLoading(true);
     form.clearErrors("root");
     setInfoMessage(null);
+    setOtpStatus("idle");
+    setOtpErrorMessage("");
     try {
       if (!showOTP) {
         const res = await adminLogin({ email: data.email, password: data.password });
@@ -55,15 +62,27 @@ export default function AdminLoginPage() {
           window.location.href = "/admin/dashboard";
         }
       } else {
-        if (!data.otp) {
-          form.setError("otp", { type: "manual", message: "OTP is required" });
+        const otpCode = data.otp?.trim() || "";
+        if (!otpCode || otpCode.length < 6) {
+          setOtpStatus("error");
+          setOtpErrorMessage("Please enter all 6 digits of the OTP code.");
+          form.setError("otp", { type: "manual", message: "OTP must be 6 digits" });
           return;
         }
-        await adminLoginVerify({ email: data.email, otp: data.otp });
-        window.location.href = "/admin/dashboard";
+        await adminLoginVerify({ email: data.email, otp: otpCode });
+        setOtpStatus("success");
+        setTimeout(() => {
+          window.location.href = "/admin/dashboard";
+        }, 500);
       }
     } catch (err: any) {
-      form.setError("root", { type: "manual", message: err.message || "Failed to authenticate admin" });
+      const msg = err.message || "Failed to authenticate admin";
+      if (showOTP) {
+        setOtpStatus("error");
+        setOtpErrorMessage(msg);
+      } else {
+        form.setError("root", { type: "manual", message: msg });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -87,10 +106,16 @@ export default function AdminLoginPage() {
           <div className="flex flex-col">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-50 border border-zinc-200 text-zinc-600 text-[10px] font-bold tracking-widest uppercase mb-6 w-fit">
               <ShieldCheck className="w-3.5 h-3.5 text-[#F5B800]" />
-              Admin Portal
+              {showOTP ? "Two-Factor Verification" : "Admin Portal"}
             </div>
-            <h2 className="text-[28px] font-bold tracking-tight text-foreground mb-2">CodeSkill Admin</h2>
-            <p className="text-sm text-muted-foreground">Sign in to access the assessment administration console.</p>
+            <h2 className="text-[28px] font-bold tracking-tight text-foreground mb-2">
+              {showOTP ? "Verify Your Identity" : "CodeSkill Admin"}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {showOTP
+                ? `Enter the 6-digit security code sent to ${form.getValues("email") || "your administrator email"}.`
+                : "Sign in to access the assessment administration console."}
+            </p>
           </div>
 
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
@@ -112,69 +137,132 @@ export default function AdminLoginPage() {
               </div>
             )}
 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground">Email / Institutional ID</label>
-              <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                  <Mail className="w-4 h-4" />
+            {!showOTP ? (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">Email / Institutional ID</label>
+                  <div className="relative">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      <Mail className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="email"
+                      placeholder="admin@institution.edu"
+                      disabled={isLoading}
+                      {...form.register("email")}
+                      className={`w-full h-[46px] bg-background border ${form.formState.errors.email ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-input focus:border-primary focus:ring-primary/20'} rounded-xl pl-10 pr-4 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-4 transition-all text-sm font-medium disabled:opacity-50`}
+                    />
+                  </div>
+                  {form.formState.errors.email && (
+                    <p className="text-xs font-medium text-red-500 ml-1">{form.formState.errors.email.message}</p>
+                  )}
                 </div>
-                <input
-                  type="email"
-                  placeholder="admin@institution.edu"
-                  disabled={showOTP || isLoading}
-                  {...form.register("email")}
-                  className={`w-full h-[46px] bg-background border ${form.formState.errors.email ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-input focus:border-primary focus:ring-primary/20'} rounded-xl pl-10 pr-4 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-4 transition-all text-sm font-medium disabled:opacity-50`}
-                />
-              </div>
-              {form.formState.errors.email && (
-                <p className="text-xs font-medium text-red-500 ml-1">{form.formState.errors.email.message}</p>
-              )}
-            </div>
 
-            <div className="space-y-2 relative">
-              <label className="text-sm font-semibold text-foreground">Password</label>
-              <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                  <Lock className="w-4 h-4" />
+                <div className="space-y-2 relative">
+                  <label className="text-sm font-semibold text-foreground">Password</label>
+                  <div className="relative">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      disabled={isLoading}
+                      {...form.register("password")}
+                      className={`w-full h-[46px] bg-background border ${form.formState.errors.password ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-input focus:border-primary focus:ring-primary/20'} rounded-xl pl-10 pr-11 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-4 transition-all text-sm font-medium tracking-wide disabled:opacity-50`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {form.formState.errors.password && (
+                    <p className="text-xs font-medium text-red-500 ml-1">{form.formState.errors.password.message}</p>
+                  )}
                 </div>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  disabled={showOTP || isLoading}
-                  {...form.register("password")}
-                  className={`w-full h-[46px] bg-background border ${form.formState.errors.password ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-input focus:border-primary focus:ring-primary/20'} rounded-xl pl-10 pr-11 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-4 transition-all text-sm font-medium tracking-wide disabled:opacity-50`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {form.formState.errors.password && (
-                <p className="text-xs font-medium text-red-500 ml-1">{form.formState.errors.password.message}</p>
-              )}
-            </div>
+              </>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-3 bg-muted/40 border border-border rounded-xl flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 text-foreground font-medium truncate max-w-[260px]">
+                    <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="truncate">{form.getValues("email")}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowOTP(false);
+                      setOtpStatus("idle");
+                      setOtpErrorMessage("");
+                      form.setValue("otp", "");
+                    }}
+                    className="text-primary hover:underline font-semibold shrink-0"
+                  >
+                    Change
+                  </button>
+                </div>
 
-            {showOTP && (
-              <div className="space-y-2 pt-2">
-                <label className="text-sm font-semibold text-foreground">Verification Code</label>
-                <input
-                  type="text"
-                  placeholder="000000"
-                  disabled={isLoading}
-                  {...form.register("otp")}
-                  className={`w-full h-[46px] bg-muted/30 border ${form.formState.errors.otp ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-input focus:border-primary focus:ring-primary/20'} rounded-xl px-4 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-4 transition-all text-sm tracking-[0.2em] font-mono text-center font-bold`}
-                />
-                {form.formState.errors.otp && (
-                  <p className="text-xs font-medium text-red-500 ml-1 text-center">{form.formState.errors.otp.message}</p>
-                )}
+                <div className="flex flex-col items-center justify-center py-2">
+                  <OtpInput
+                    ref={otpRef}
+                    length={6}
+                    groupEvery={3}
+                    autoFocus={true}
+                    disabled={isLoading}
+                    status={otpStatus}
+                    errorMessage={otpErrorMessage}
+                    successMessage="Code verified! Signing in..."
+                    hint="Enter the 6-digit one-time code"
+                    className="items-center"
+                    onChange={(val) => {
+                      form.setValue("otp", val);
+                      if (otpStatus !== "idle") {
+                        setOtpStatus("idle");
+                        setOtpErrorMessage("");
+                      }
+                    }}
+                    onComplete={(val) => {
+                      form.setValue("otp", val);
+                      form.handleSubmit(onSubmit)();
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-center pt-1">
+                  <button
+                    type="button"
+                    disabled={isLoading}
+                    onClick={async () => {
+                      try {
+                        setIsLoading(true);
+                        setOtpStatus("idle");
+                        setOtpErrorMessage("");
+                        const res = await adminLogin({
+                          email: form.getValues("email"),
+                          password: form.getValues("password"),
+                        });
+                        setInfoMessage(res.message || "A fresh OTP code has been dispatched to your email.");
+                        otpRef.current?.clear();
+                      } catch (err: any) {
+                        setOtpStatus("error");
+                        setOtpErrorMessage(err.message || "Failed to resend OTP");
+                      } finally {
+                        setIsLoading(false);
+                      }
+                    }}
+                    className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                  >
+                    Didn&apos;t receive code? <span className="text-primary underline">Resend OTP</span>
+                  </button>
+                </div>
               </div>
             )}
 
-            <div className="pt-4">
+            <div className="pt-2">
               <button
                 type="submit"
                 disabled={isLoading}

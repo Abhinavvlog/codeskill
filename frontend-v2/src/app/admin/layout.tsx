@@ -105,7 +105,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Standardized Admin Header with CodeSkill Branding & Theme Toggle */}
         <header className="bg-card border-b border-border h-16 flex items-center justify-between px-6 sticky top-0 z-10 shrink-0 shadow-xs">
           <div className="flex items-center gap-3">
-            <BrandLogo className="w-9 h-9" src="/logo-dark.svg" alt="CodeSkill" />
+            <BrandLogo className="w-12 h-12 md:w-16 md:h-16" src="/logo-dark.svg" alt="CodeSkill" />
             <div>
               <p className="text-sm font-bold text-foreground leading-tight">CodeSkill Admin</p>
               <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Chandigarh University</p>

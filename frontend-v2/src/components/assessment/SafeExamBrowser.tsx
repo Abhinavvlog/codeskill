@@ -9,6 +9,7 @@ interface SafeExamBrowserProps {
   children: React.ReactNode;
   maxWarnings?: number;
   onTerminate?: () => void;
+  onViolation?: (type: string, message: string) => void;
   isEnabled?: boolean;
 }
 
@@ -16,6 +17,7 @@ export default function SafeExamBrowser({
   children,
   maxWarnings = 3,
   onTerminate,
+  onViolation,
   isEnabled = true,
 }: SafeExamBrowserProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
