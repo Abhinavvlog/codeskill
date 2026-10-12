@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { adminProblemsAPI } from "@/config/api";
+import { adminProblemsAPI, adminQuestionsAPI } from "@/config/api";
 import { useQuestionStore } from "../../create/_store/useQuestionStore";
+import { formatConstraints } from "@/lib/utils";
 import Link from "next/link";
 import { ArrowLeft, Save, Settings, FileText, Code2, Database, BarChart3, Rocket, LayoutTemplate, Shield, Moon, Sun, Search, Cpu, AlertTriangle, ArrowRightLeft, Lightbulb, BookOpen, Sparkles, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -61,17 +62,30 @@ function EditQuestionContent() {
   useEffect(() => {
     async function fetchProblem() {
       try {
-        const res = await adminProblemsAPI.getById(params.id as string);
-        const data = res.data.data ? res.data.data : res.data; // ProblemMetadata
+        let data: any;
+        try {
+          const res = await adminQuestionsAPI.getById(params.id as string);
+          data = res.data.data ? res.data.data : res.data;
+        } catch {
+          const res = await adminProblemsAPI.getById(params.id as string);
+          data = res.data.data ? res.data.data : res.data;
+        }
+
+        const rawConstraints = data.constraints || data.statement?.constraints;
+        const constraintsString = Array.isArray(rawConstraints)
+          ? rawConstraints.join("\n")
+          : typeof rawConstraints === "string"
+          ? rawConstraints
+          : "";
 
         const mappedState: any = {
           metadata: {
-            title: data.title || "",
+            title: data.question || data.title || "",
             slug: data.slug || "",
-            difficulty: data.difficulty || "Easy",
-            categories: data.categories || [],
+            difficulty: (data.difficulty ? data.difficulty.charAt(0).toUpperCase() + data.difficulty.slice(1).toLowerCase() : "Easy"),
+            categories: data.topic ? [data.topic] : (data.categories || []),
             tags: data.tags || [],
-            visibility: data.visibility || "Draft",
+            visibility: data.status === "approved" || data.visibility === "Published" ? "Published" : "Draft",
             author: data.author || "",
             questionId: data._id || data.id || "",
             estimatedSolveTime: 30, // Default if not in backend
@@ -80,57 +94,45 @@ function EditQuestionContent() {
             metaTitle: data.metaTitle || "",
             metaDescription: data.metaDescription || "",
             keywords: data.keywords || [],
-          }
-        };
-
-        if (data.statement) {
-          mappedState.statement = {
-            description: data.statement.description || "",
-            inputFormat: data.statement.inputFormat || "",
-            outputFormat: data.statement.outputFormat || "",
-            constraints: data.statement.constraints || "",
-          };
-          mappedState.sampleExamples = data.statement.samples || [];
-        }
-
-        if (data.config) {
-          mappedState.languages = {
-            supported: data.config.supportedLanguages || [],
-            compilerVersions: {}
-          };
-          mappedState.execution = {
-            timeLimit: data.config.timeLimit || 2000,
-            memoryLimit: data.config.memoryLimit || 256,
-            cpuLimit: data.config.cpuLimit || 1,
-            maxSourceCodeSize: data.config.maxSourceCodeSize || 1048576,
-          };
-          
-          if (data.config.starterCode && typeof data.config.starterCode === 'object') {
-            mappedState.starterCode = data.config.starterCode;
-          }
-          if (data.config.referenceSolution && typeof data.config.referenceSolution === 'object') {
-            mappedState.referenceSolution = data.config.referenceSolution;
-          }
-          
-          mappedState.customChecker = {
-            enabled: data.config.hasCustomChecker || false,
-            language: data.config.customCheckerCode?.language || "cpp",
-            code: data.config.customCheckerCode?.code || "",
-          };
-        }
-
-        if (data.testCases) {
-          mappedState.testCases = data.testCases.cases || [];
-        }
-
-        mappedState.publishing = {
-          publishImmediately: data.visibility === "Published",
-          saveAsDraft: data.visibility === "Draft",
-          scheduledDate: "",
-          isArchived: false,
-          isFeatured: false,
-          contestOnly: false,
-          practiceOnly: true,
+          },
+          statement: {
+            description: data.problemStatement || data.statement?.description || data.question || "",
+            inputFormat: data.inputFormat || data.statement?.inputFormat || "",
+            outputFormat: data.outputFormat || data.statement?.outputFormat || "",
+            constraints: constraintsString,
+          },
+          sampleExamples: data.examples || data.statement?.samples || [],
+          languages: {
+            supported: data.supportedLanguages || data.config?.supportedLanguages || ["cpp", "java", "python", "javascript"],
+            compilerVersions: {},
+          },
+          execution: {
+            timeLimit: data.timeLimit || data.config?.timeLimit || 2000,
+            memoryLimit: data.memoryLimit || data.config?.memoryLimit || 256,
+            cpuLimit: data.config?.cpuLimit || 1,
+            maxSourceCodeSize: data.config?.maxSourceCodeSize || 1048576,
+          },
+          starterCode: (data.starterCode && typeof data.starterCode === "object") ? data.starterCode : {},
+          referenceSolution: (data.referenceSolutions && typeof data.referenceSolutions === "object")
+            ? data.referenceSolutions
+            : (data.referenceSolution && typeof data.referenceSolution === "object")
+            ? data.referenceSolution
+            : {},
+          customChecker: {
+            enabled: data.config?.hasCustomChecker || false,
+            language: data.config?.customCheckerCode?.language || "cpp",
+            code: data.config?.customCheckerCode?.code || "",
+          },
+          testCases: data.testCases?.cases || (Array.isArray(data.testCases) ? data.testCases : []),
+          publishing: {
+            publishImmediately: data.status === "approved" || data.visibility === "Published",
+            saveAsDraft: data.status !== "approved" && data.visibility !== "Published",
+            scheduledDate: "",
+            isArchived: false,
+            isFeatured: false,
+            contestOnly: false,
+            practiceOnly: true,
+          },
         };
 
         setAllData(mappedState);
@@ -228,18 +230,41 @@ function EditQuestionContent() {
         ? "Draft"
         : store.metadata.visibility || "Draft";
 
-      const payload = {
+      const formattedConstraints = formatConstraints(store.statement.constraints);
+
+      const payload: any = {
+        question: store.metadata.title,
+        title: store.metadata.title,
+        topic: store.metadata.categories[0] || "General",
+        difficulty: store.metadata.difficulty.toLowerCase(),
+        marks: store.metadata.points || 1,
+        status: visibility === "Published" ? "approved" : "draft",
+        tags: store.metadata.tags,
+        explanation: store.solutionExplanation?.content || "",
+        problemStatement: store.statement.description,
+        constraints: formattedConstraints,
+        inputFormat: store.statement.inputFormat,
+        outputFormat: store.statement.outputFormat,
+        examples: store.sampleExamples,
+        starterCode: store.starterCode,
+        referenceSolutions: store.referenceSolution,
+        testCases: store.testCases,
+        timeLimit: store.execution.timeLimit,
+        memoryLimit: store.execution.memoryLimit,
+        supportedLanguages: store.languages.supported,
+        // Legacy problem structure compatibility
         metadata: {
           ...store.metadata,
           visibility,
         },
         languages: store.languages.supported || store.languages,
         execution: store.execution,
-        statement: store.statement,
+        statement: {
+          ...store.statement,
+          constraints: formattedConstraints,
+        },
         sampleExamples: store.sampleExamples,
-        starterCode: store.starterCode,
         referenceSolution: store.referenceSolution,
-        testCases: { cases: store.testCases },
         customChecker: store.customChecker,
         solutionExplanation: store.solutionExplanation,
         seo: store.seo,
@@ -250,7 +275,11 @@ function EditQuestionContent() {
         },
       };
 
-      await adminProblemsAPI.update(params.id as string, payload);
+      try {
+        await adminQuestionsAPI.update(params.id as string, payload);
+      } catch {
+        await adminProblemsAPI.update(params.id as string, payload);
+      }
       addToast("success", "Question Updated", "Successfully updated question.");
       setTimeout(() => {
         router.push("/admin/questions");

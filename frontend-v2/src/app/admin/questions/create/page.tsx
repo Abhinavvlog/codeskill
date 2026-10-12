@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { ToastProvider, useToast } from "./_components/Toast";
+import { formatConstraints } from "@/lib/utils";
 import ProgressBar from "./_components/ProgressBar";
 
 import BasicInfo from "./_components/BasicInfo";
@@ -189,9 +190,9 @@ function UnifiedQuestionForm() {
         payload.language = store.codeOutput.language;
         payload.codeSnippet = store.codeOutput.code;
         payload.expectedOutput = store.codeOutput.expectedOutput;
-      } else if (questionType === "DSA") {
+      } else if (questionType === "DSA" || !["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE", "CODE_OUTPUT"].includes(questionType)) {
         payload.problemStatement = store.statement.description;
-        payload.constraints = store.statement.constraints;
+        payload.constraints = formatConstraints(store.statement.constraints);
         payload.inputFormat = store.statement.inputFormat;
         payload.outputFormat = store.statement.outputFormat;
         payload.examples = store.sampleExamples;

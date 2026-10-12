@@ -224,16 +224,34 @@ export class QuestionsService {
       throw new NotFoundException('Question not found');
     }
 
-    const options = dto.options || question.options;
-    const correctAnswer =
-      dto.correctAnswer !== undefined
-        ? dto.correctAnswer
-        : question.correctAnswer;
+    const type = String(dto.questionType || question.questionType || 'single_choice');
+    const isChoice = [
+      'single_choice',
+      'multiple_choice',
+      'MCQ',
+      'MULTIPLE_CHOICE',
+      'TRUE_FALSE',
+    ].includes(type);
 
-    if (correctAnswer < 0 || correctAnswer >= options.length) {
-      throw new BadRequestException(
-        `correctAnswer must be a valid index between 0 and ${options.length - 1}`,
-      );
+    if (isChoice) {
+      const rawOptions = dto.options || question.options;
+      const options = Array.isArray(rawOptions)
+        ? rawOptions.map((o: any) => (typeof o === 'string' ? o : o?.text || ''))
+        : [];
+      const correctAnswer =
+        dto.correctAnswer !== undefined
+          ? dto.correctAnswer
+          : question.correctAnswer;
+
+      if (options.length > 0 && (correctAnswer < 0 || correctAnswer >= options.length)) {
+        throw new BadRequestException(
+          `correctAnswer must be a valid index between 0 and ${options.length - 1}`,
+        );
+      }
+    }
+
+    if (dto.title && !dto.question) {
+      dto.question = dto.title;
     }
 
     Object.assign(question, dto);

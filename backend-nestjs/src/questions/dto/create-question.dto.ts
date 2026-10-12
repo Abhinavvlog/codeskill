@@ -8,6 +8,7 @@ import {
   IsIn,
   ArrayUnique,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateQuestionDto {
@@ -150,8 +151,17 @@ export class CreateQuestionDto {
   @IsString()
   problemStatement?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ type: [String] })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    return value;
+  })
   @IsArray()
   @IsString({ each: true })
   constraints?: string[];

@@ -849,9 +849,12 @@ export class AssessmentsService {
             (q.metadata as any)?.starterCode ||
             (q.questionType === 'coding' ? q.codeSnippet || '' : ''),
           language: q.language || 'python',
-          constraints: (q.metadata as any)?.constraints || '',
-          timeLimit: (q.metadata as any)?.timeLimit || 2000,
-          memoryLimit: (q.metadata as any)?.memoryLimit || 256,
+          constraints:
+            Array.isArray(q.constraints) && q.constraints.length > 0
+              ? q.constraints
+              : (q.metadata as any)?.constraints || [],
+          timeLimit: q.timeLimit || (q.metadata as any)?.timeLimit || 2000,
+          memoryLimit: q.memoryLimit || (q.metadata as any)?.memoryLimit || 256,
           testCases: (((q.metadata as any)?.testCases || []) as any[])
             .filter((tc: any) => !tc.isHidden)
             .map((tc: any, tcIdx: number) => ({

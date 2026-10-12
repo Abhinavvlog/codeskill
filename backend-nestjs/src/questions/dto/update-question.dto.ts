@@ -2,11 +2,10 @@ import {
   IsString,
   IsOptional,
   IsArray,
-  ArrayMinSize,
   IsNumber,
   IsIn,
-  ArrayUnique,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateQuestionDto {
@@ -18,15 +17,18 @@ export class UpdateQuestionDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
-  @ArrayMinSize(4)
-  @ArrayUnique()
-  @IsString({ each: true })
-  options?: string[];
+  options?: Array<string | { text: string; isCorrect?: boolean; explanation?: string }>;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
   correctAnswer?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  correctAnswers?: number[];
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -63,21 +65,158 @@ export class UpdateQuestionDto {
   @IsString()
   language?: string;
 
-  @ApiPropertyOptional({ enum: ['single_choice', 'multiple_choice'] })
-  @IsOptional()
-  @IsIn(['single_choice', 'multiple_choice'])
-  questionType?: 'single_choice' | 'multiple_choice';
-
   @ApiPropertyOptional({
-    enum: ['pending', 'approved', 'rejected', 'archived'],
+    enum: [
+      'single_choice',
+      'multiple_choice',
+      'coding',
+      'algorithmic',
+      'MCQ',
+      'MULTIPLE_CHOICE',
+      'TRUE_FALSE',
+      'CODE_OUTPUT',
+      'DSA',
+    ],
   })
   @IsOptional()
-  @IsIn(['pending', 'approved', 'rejected', 'archived'])
-  status?: 'pending' | 'approved' | 'rejected' | 'archived';
+  @IsIn([
+    'single_choice',
+    'multiple_choice',
+    'coding',
+    'algorithmic',
+    'MCQ',
+    'MULTIPLE_CHOICE',
+    'TRUE_FALSE',
+    'CODE_OUTPUT',
+    'DSA',
+  ])
+  questionType?: string;
+
+  @ApiPropertyOptional({
+    enum: ['pending', 'approved', 'rejected', 'archived', 'active', 'draft'],
+  })
+  @IsOptional()
+  @IsString()
+  status?: string;
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
+
+  // --- Extended Fields for Unified Model / Coding / DSA questions ---
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  slug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  codeSnippet?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  expectedOutput?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  problemStatement?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    return value;
+  })
+  @IsArray()
+  @IsString({ each: true })
+  constraints?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  examples?: Array<{ input: string; output: string; explanation?: string }>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  inputFormat?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  outputFormat?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  starterCode?: Array<{ language: string; code: string }>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  supportedLanguages?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  functionSignature?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  timeLimit?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  memoryLimit?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  testCases?: Array<{
+    id: string;
+    input: string;
+    expectedOutput: string;
+    isHidden: boolean;
+    weight: number;
+  }>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  referenceSolutions?: Array<{ language: string; sourceCode: string }>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  hints?: string[];
 }

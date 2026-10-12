@@ -749,7 +749,13 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
                               <AlertTriangle className="w-3.5 h-3.5" /> Constraints
                             </h3>
                             <div className="text-xs text-foreground/80 leading-relaxed prose dark:prose-invert prose-sm max-w-none"
-                              dangerouslySetInnerHTML={{ __html: problem.statement?.constraints || problem.constraints || "" }}
+                              dangerouslySetInnerHTML={{
+                                __html: Array.isArray(problem.statement?.constraints)
+                                  ? problem.statement.constraints.join("<br />")
+                                  : Array.isArray(problem.constraints)
+                                  ? problem.constraints.join("<br />")
+                                  : problem.statement?.constraints || problem.constraints || "",
+                              }}
                             />
                           </div>
                         )}

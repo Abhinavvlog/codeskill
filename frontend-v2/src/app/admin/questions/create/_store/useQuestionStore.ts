@@ -467,7 +467,15 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
       metadata: { ...state.metadata, ...data.metadata },
       languages: { ...state.languages, ...data.languages },
       execution: { ...state.execution, ...data.execution },
-      statement: { ...state.statement, ...data.statement },
+      statement: {
+        ...state.statement,
+        ...data.statement,
+        constraints: Array.isArray(data.statement?.constraints)
+          ? data.statement.constraints.join("\n")
+          : typeof data.statement?.constraints === "string"
+          ? data.statement.constraints
+          : state.statement.constraints,
+      },
       sampleExamples: data.sampleExamples || state.sampleExamples,
       starterCode: { ...state.starterCode, ...data.starterCode },
       referenceSolution: { ...state.referenceSolution, ...data.referenceSolution },

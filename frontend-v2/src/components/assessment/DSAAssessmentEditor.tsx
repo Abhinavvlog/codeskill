@@ -161,7 +161,7 @@ interface DSAAssessmentEditorProps {
     starterCode?: string;
     codeSnippet?: string;
     language?: string;
-    constraints?: string;
+    constraints?: string | string[];
     timeLimit?: number;
     memoryLimit?: number;
     testCases?: TestCase[];
@@ -481,7 +481,7 @@ export default function DSAAssessmentEditor({
               <div>• Memory Limit: {question.memoryLimit ? `${question.memoryLimit}MB` : "256 MB"}</div>
               {question.constraints && (
                 <div className="text-muted-foreground whitespace-pre-line pt-1">
-                  {question.constraints}
+                  {Array.isArray(question.constraints) ? question.constraints.join("\n") : question.constraints}
                 </div>
               )}
             </div>
