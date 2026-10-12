@@ -10,10 +10,13 @@ export default function ContestsAdminPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
+  const [updatedSlug, setUpdatedSlug] = useState<string | null>(null);
+
   const [createdSlug, setCreatedSlug] = useState<string | null>(null);
 
   useEffect(() => {
     setCreatedSlug(new URLSearchParams(window.location.search).get("created"));
+    setUpdatedSlug(new URLSearchParams(window.location.search).get("updated"));
     fetchContests();
   }, []);
 
@@ -70,11 +73,11 @@ export default function ContestsAdminPage() {
         </Link>
       </div>
 
-      {createdSlug && (
+      {(createdSlug || updatedSlug) && (
         <div className="mb-6 p-4 rounded-xl border border-green-500/30 bg-green-500/10 text-sm text-green-700 dark:text-green-400 flex flex-wrap items-center justify-between gap-3">
-          <span>Contest created successfully.</span>
+          <span>Contest {updatedSlug ? "updated" : "created"} successfully.</span>
           <span className="font-mono">
-            {typeof window !== "undefined" ? window.location.origin : ""}/contests/{createdSlug}
+            {typeof window !== "undefined" ? window.location.origin : ""}/contests/{updatedSlug || createdSlug}
           </span>
         </div>
       )}
@@ -167,13 +170,13 @@ export default function ContestsAdminPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center justify-end gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                           <Link href={`/contests/${contest.slug}`} target="_blank" className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors" title="View Contest">
                             <Eye className="w-4 h-4" />
                           </Link>
-                          <button className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors" title="Edit Contest">
+                          {(contest._id || contest.id) ? <Link href={`/admin/contests/${encodeURIComponent(contest._id || contest.id)}/edit`} className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors" title="Edit Contest" aria-label={`Edit ${contest.title}`}>
                             <Edit2 className="w-4 h-4" />
-                          </button>
+                          </Link> : <button type="button" disabled title="Contest ID is missing" aria-label="Edit unavailable" className="p-1.5 text-muted-foreground opacity-50"><Edit2 className="w-4 h-4" /></button>}
                           <button onClick={() => handleDelete(contest._id)} className="p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-md transition-colors" title="Delete Contest">
                             <Trash2 className="w-4 h-4" />
                           </button>

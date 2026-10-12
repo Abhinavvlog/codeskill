@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuestionStore } from "../_store/useQuestionStore";
+import { getQuestionTypeLabel, type QuestionType } from "@/lib/question-types";
 import SectionCard from "./SectionCard";
 import { FileText, X, Plus, Lock, Globe, Link as LinkIcon } from "lucide-react";
 
@@ -108,8 +109,9 @@ export default function BasicInfo() {
               Question Type <span className="text-red-500">*</span>
             </label>
             <select
+              aria-label="Question Type"
               value={metadata.questionType}
-              onChange={(e) => updateMetadata({ questionType: e.target.value as any })}
+              onChange={(e) => updateMetadata({ questionType: e.target.value as QuestionType })}
               className={`${inputClass} appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%207l5%205%205-5%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_10px_center] pr-10`}
             >
               <option value="MCQ">Single Choice (MCQ)</option>
@@ -209,6 +211,13 @@ export default function BasicInfo() {
           <label className={labelClass}>
             Categories <span className="text-red-500">*</span>
           </label>
+          <div className="flex flex-wrap items-center gap-2 py-1">
+            <span className="text-xs text-muted-foreground">Question type</span>
+            <span role="status" aria-label="Automatic question type" className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs font-medium rounded-lg" title="Automatically set by Question Type">
+              <Lock aria-hidden="true" className="w-3 h-3" />{getQuestionTypeLabel(metadata.questionType)}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">Topic categories</p>
           <div className="relative">
             <button
               type="button"

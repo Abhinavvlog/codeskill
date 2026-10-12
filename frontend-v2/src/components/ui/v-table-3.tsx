@@ -1,5 +1,7 @@
 "use client";
 
+import { getQuestionTypeLabel, getTopicCategories, QUESTION_TYPES } from "@/lib/question-types";
+
 import React, { useState } from "react";
 import {
   Table,
@@ -128,19 +130,7 @@ export function VTable3({
     }
   };
 
-  const getQuestionTypeLabel = (type: string) => {
-    switch(type) {
-      case "single_choice": return "Single MCQ";
-      case "multiple_choice": return "Multi MCQ";
-      case "coding": return "Coding";
-      case "subjective": return "Subjective";
-      case "TRUE_FALSE": return "True/False";
-      case "CODE_OUTPUT": return "Code Output";
-      case "DSA": return "DSA";
-      case "MCQ": return "MCQ";
-      default: return type;
-    }
-  };
+
 
   return (
     <div ref={containerRef} className="bg-card border border-border rounded-xl shadow-sm overflow-hidden flex flex-col space-y-0 w-full">
@@ -202,11 +192,7 @@ export function VTable3({
             className="px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-amber-500"
           >
             <option value="">All Types</option>
-            <option value="single_choice">Single Choice</option>
-            <option value="multiple_choice">Multiple Choice</option>
-            <option value="coding">Coding</option>
-            <option value="DSA">DSA</option>
-            <option value="MCQ">MCQ</option>
+            {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
           </select>
 
           <select
@@ -343,7 +329,7 @@ export function VTable3({
                     
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="text-xs font-medium text-foreground">{q.topic || "General"}</span>
+                        <span className="text-xs font-medium text-foreground">{getTopicCategories(q).join(", ") || "General"}</span>
                         {q.subtopic && <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{q.subtopic}</span>}
                       </div>
                     </TableCell>

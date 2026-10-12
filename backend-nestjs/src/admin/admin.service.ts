@@ -222,9 +222,20 @@ export class AdminService {
     };
   }
 
+  private contestLookup(id: string) {
+    if (
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+    ) {
+      return [{ id }, { mongoId: id }];
+    }
+    // Legacy Mongo IDs must not be compared with PostgreSQL's UUID column.
+    if (/^[0-9a-f]{24}$/i.test(id)) return [{ mongoId: id }];
+    throw new BadRequestException('Invalid contest ID');
+  }
+
   async getContestById(id: string) {
     const contest = await this.contestModel.findOne({
-      where: [{ id }, { mongoId: id }],
+      where: this.contestLookup(id),
     });
     if (!contest) throw new NotFoundException('Contest not found');
     return { ...contest, _id: contest.id };
@@ -232,7 +243,7 @@ export class AdminService {
 
   async deleteContest(id: string) {
     const contest = await this.contestModel.findOne({
-      where: [{ id }, { mongoId: id }],
+      where: this.contestLookup(id),
     });
     if (!contest) throw new NotFoundException('Contest not found');
     await this.contestModel.remove(contest);
@@ -303,7 +314,7 @@ export class AdminService {
   async updateContest(id: string, body: any) {
     const data = this.validateContestPayload(body);
     const contest = await this.contestModel.findOne({
-      where: [{ id }, { mongoId: id }],
+      where: this.contestLookup(id),
     });
     if (!contest) throw new NotFoundException('Contest not found');
 

@@ -103,13 +103,13 @@ export default function AdminLoginPage() {
           }
         }}
       >
-        <div className="w-full max-w-[400px] flex flex-col gap-6 mx-auto">
-          <div className="flex flex-col">
+        <div className="w-full max-w-md flex flex-col gap-6 mx-auto">
+          <div className="flex flex-col items-center text-center">
             {/* Prominent CodeSkill Admin Branding */}
-            <div className="flex items-center gap-3.5 mb-6">
+            <div className="flex flex-col items-center text-center gap-3 mb-6">
               <AdminLogo variant="icon" size="lg" />
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col items-center text-center">
+                <div className="flex items-center justify-center gap-2">
                   <span className="text-2xl font-black tracking-tight text-foreground leading-none">
                     Code<span className="text-rose-600 dark:text-rose-500">Skill</span>
                   </span>
@@ -117,27 +117,27 @@ export default function AdminLoginPage() {
                     Admin
                   </span>
                 </div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-1.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-1.5 text-center">
                   Chandigarh University
                 </p>
               </div>
             </div>
 
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 text-[10px] font-bold tracking-widest uppercase mb-3 w-fit">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 text-[10px] font-bold tracking-widest uppercase mb-3 mx-auto">
               <ShieldCheck className="w-3.5 h-3.5 text-[#F5B800]" />
               {showOTP ? "Two-Factor Verification" : "Secure Examination Console"}
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-foreground mb-1.5">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground mb-1.5 text-center">
               {showOTP ? "Verify Your Identity" : "Administrator Sign In"}
             </h2>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground text-center">
               {showOTP
                 ? `Enter the 6-digit security code sent to ${form.getValues("email") || "your administrator email"}.`
                 : "Sign in to access the examination and assessment administration console."}
             </p>
           </div>
 
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 text-left">
             {form.formState.errors.root && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5">
                 <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />

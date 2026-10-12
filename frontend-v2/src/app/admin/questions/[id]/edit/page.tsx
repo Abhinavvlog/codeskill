@@ -1,5 +1,7 @@
 "use client";
 
+import { getTopicCategories, normalizeQuestionType } from "@/lib/question-types";
+
 import { useEffect, useState, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { adminProblemsAPI, adminQuestionsAPI } from "@/config/api";
@@ -88,12 +90,7 @@ function EditQuestionContent() {
         }
 
         const rawType = data.questionType || (Array.isArray(data.options) && data.options.length ? "MCQ" : "DSA");
-        let qType: 'MCQ' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'CODE_OUTPUT' | 'DSA' = "DSA";
-        if (["TRUE_FALSE", "true_false"].includes(rawType)) qType = "TRUE_FALSE";
-        else if (["MULTIPLE_CHOICE", "multiple_choice"].includes(rawType)) qType = "MULTIPLE_CHOICE";
-        else if (["MCQ", "single_choice"].includes(rawType)) qType = "MCQ";
-        else if (["CODE_OUTPUT", "code_output"].includes(rawType)) qType = "CODE_OUTPUT";
-        else if (["DSA", "coding", "algorithmic"].includes(rawType)) qType = "DSA";
+        const qType = normalizeQuestionType(rawType, "DSA");
 
         const rawConstraints = data.constraints || data.statement?.constraints;
         const constraintsString = Array.isArray(rawConstraints)
@@ -107,7 +104,7 @@ function EditQuestionContent() {
             title: data.question || data.title || "",
             slug: data.slug || "",
             difficulty: (data.difficulty ? data.difficulty.charAt(0).toUpperCase() + data.difficulty.slice(1).toLowerCase() : "Easy"),
-            categories: data.topic ? [data.topic] : (data.categories || []),
+            categories: getTopicCategories(data),
             tags: data.tags || [],
             visibility: data.status === "approved" || data.visibility === "Published" ? "Published" : "Draft",
             author: data.author || "",
@@ -286,6 +283,7 @@ function EditQuestionContent() {
         question: store.metadata.title,
         title: store.metadata.title,
         topic: store.metadata.categories[0] || "General",
+        categories: store.metadata.categories,
         difficulty: store.metadata.difficulty.toLowerCase(),
         marks: store.metadata.points || 1,
         status: visibility === "Published" ? "approved" : "draft",

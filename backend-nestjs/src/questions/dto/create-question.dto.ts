@@ -46,6 +46,16 @@ export class CreateQuestionDto {
   @IsString()
   topic: string;
 
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Topic categories only; question type remains a separate field',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  categories?: string[];
+
   @ApiPropertyOptional({ example: 'Searching Algorithms' })
   @IsOptional()
   @IsString()

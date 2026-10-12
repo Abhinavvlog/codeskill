@@ -40,6 +40,16 @@ export class UpdateQuestionDto {
   @IsString()
   topic?: string;
 
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Topic categories only; question type remains a separate field',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  categories?: string[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
