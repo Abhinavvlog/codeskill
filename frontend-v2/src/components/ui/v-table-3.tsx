@@ -301,103 +301,109 @@ export function VTable3({
                 </TableCell>
               </TableRow>
             ) : (
-              questions.map((q) => (
-                <TableRow key={q._id} className="question-row group hover:bg-muted/20">
-                  <TableCell className="max-w-[300px]">
-                    <div className="flex flex-col gap-1">
-                      <div className="font-medium text-foreground truncate" title={q.question}>
-                        {q.question}
+              (questions || []).map((q) => {
+                const qId = q._id || q.id || "";
+                const shortId = qId ? qId.slice(-6).toUpperCase() : "QST";
+                const statusStr = (q.status || "active").replace("_", " ");
+
+                return (
+                  <TableRow key={qId || Math.random()} className="question-row group hover:bg-muted/20">
+                    <TableCell className="max-w-[300px]">
+                      <div className="flex flex-col gap-1">
+                        <div className="font-medium text-foreground truncate" title={q.question || q.title}>
+                          {q.question || q.title}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground font-mono">Q-{shortId}</span>
+                          {q.codeSnippet && (
+                            <span className="inline-flex items-center gap-1 text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground font-mono">
+                              <Code className="w-2.5 h-2.5 text-amber-500" />
+                              {q.language || "code"}
+                            </span>
+                          )}
+                          {q.aiGenerated && (
+                            <span className="inline-flex items-center gap-1 text-[10px] bg-purple-500/10 px-1.5 py-0.5 rounded text-purple-500 border border-purple-500/20">
+                              <Sparkles className="w-2.5 h-2.5" />
+                              AI
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-muted-foreground font-mono">Q-{q._id.slice(-6).toUpperCase()}</span>
-                        {q.codeSnippet && (
-                          <span className="inline-flex items-center gap-1 text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground font-mono">
-                            <Code className="w-2.5 h-2.5 text-amber-500" />
-                            {q.language || "code"}
-                          </span>
-                        )}
-                        {q.aiGenerated && (
-                          <span className="inline-flex items-center gap-1 text-[10px] bg-purple-500/10 px-1.5 py-0.5 rounded text-purple-500 border border-purple-500/20">
-                            <Sparkles className="w-2.5 h-2.5" />
-                            AI
-                          </span>
-                        )}
+                    </TableCell>
+                    
+                    <TableCell>
+                      <Badge variant="outline" className="text-[11px] font-medium bg-background text-muted-foreground border-border rounded-md">
+                        {getQuestionTypeLabel(q.questionType)}
+                      </Badge>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium text-foreground">{q.topic || "General"}</span>
+                        {q.subtopic && <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{q.subtopic}</span>}
                       </div>
-                    </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <Badge variant="outline" className="text-[11px] font-medium bg-background text-muted-foreground border-border rounded-md">
-                      {getQuestionTypeLabel(q.questionType)}
-                    </Badge>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="text-xs font-medium text-foreground">{q.topic}</span>
-                      {q.subtopic && <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{q.subtopic}</span>}
-                    </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <Badge variant="outline" className={`text-[11px] font-medium capitalize rounded-md ${getDifficultyColor(q.difficulty)}`}>
-                      {q.difficulty}
-                    </Badge>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <div className="flex items-center gap-1 text-xs font-mono">
-                      <span className="text-emerald-500 font-semibold">+{q.marks || 1}</span>
-                      {q.negativeMarks > 0 && <span className="text-rose-500">-{q.negativeMarks}</span>}
-                    </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <Badge variant="outline" className={`text-[11px] font-medium capitalize rounded-md ${getStatusColor(q.status)}`}>
-                      {q.status.replace("_", " ")}
-                    </Badge>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString() : "-"}
-                    </span>
-                  </TableCell>
-                  
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger className="p-2 hover:bg-muted rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/20">
-                        <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48 bg-card border-border">
-                        <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => onView(q)} className="cursor-pointer gap-2 text-sm focus:bg-muted">
-                          <Eye className="w-4 h-4 text-muted-foreground" />
-                          View Preview
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator className="bg-border" />
-                        {q.status === "pending_review" && (
-                          <>
-                            <DropdownMenuItem onClick={() => onApprove(q._id)} className="cursor-pointer gap-2 text-sm focus:bg-emerald-500/10 focus:text-emerald-500 text-emerald-600">
-                              <CheckCircle2 className="w-4 h-4" />
-                              Approve
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onReject(q._id)} className="cursor-pointer gap-2 text-sm focus:bg-rose-500/10 focus:text-rose-500 text-rose-600">
-                              <XCircle className="w-4 h-4" />
-                              Reject
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator className="bg-border" />
-                          </>
-                        )}
-                        <DropdownMenuItem onClick={() => onEdit(q._id)} className="cursor-pointer gap-2 text-sm focus:bg-muted">
-                          <Plus className="w-4 h-4 text-muted-foreground" />
-                          Edit Question
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+                    
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[11px] font-medium capitalize rounded-md ${getDifficultyColor(q.difficulty)}`}>
+                        {q.difficulty || "medium"}
+                      </Badge>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="flex items-center gap-1 text-xs font-mono">
+                        <span className="text-emerald-500 font-semibold">+{q.marks || 1}</span>
+                        {q.negativeMarks > 0 && <span className="text-rose-500">-{q.negativeMarks}</span>}
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[11px] font-medium capitalize rounded-md ${getStatusColor(q.status)}`}>
+                        {statusStr}
+                      </Badge>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString() : "-"}
+                      </span>
+                    </TableCell>
+                    
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger className="p-2 hover:bg-muted rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/20">
+                          <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48 bg-card border-border">
+                          <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">Actions</DropdownMenuLabel>
+                          <DropdownMenuItem onClick={() => onView(q)} className="cursor-pointer gap-2 text-sm focus:bg-muted">
+                            <Eye className="w-4 h-4 text-muted-foreground" />
+                            View Preview
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator className="bg-border" />
+                          {q.status === "pending_review" && (
+                            <>
+                              <DropdownMenuItem onClick={() => onApprove(qId)} className="cursor-pointer gap-2 text-sm focus:bg-emerald-500/10 focus:text-emerald-500 text-emerald-600">
+                                <CheckCircle2 className="w-4 h-4" />
+                                Approve
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => onReject(qId)} className="cursor-pointer gap-2 text-sm focus:bg-rose-500/10 focus:text-rose-500 text-rose-600">
+                                <XCircle className="w-4 h-4" />
+                                Reject
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator className="bg-border" />
+                            </>
+                          )}
+                          <DropdownMenuItem onClick={() => onEdit(qId)} className="cursor-pointer gap-2 text-sm focus:bg-muted">
+                            <Plus className="w-4 h-4 text-muted-foreground" />
+                            Edit Question
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

@@ -73,7 +73,7 @@ function EditQuestionContent() {
             tags: data.tags || [],
             visibility: data.visibility || "Draft",
             author: data.author || "",
-            questionId: data._id || "",
+            questionId: data._id || data.id || "",
             estimatedSolveTime: 30, // Default if not in backend
           },
           seo: {

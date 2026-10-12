@@ -51,9 +51,36 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle 401 errors globally without breaking login pages or public routes
+// Helper to recursively normalize PostgreSQL `id` and MongoDB `_id`
+function normalizeIds(obj: any): any {
+  if (!obj || typeof obj !== "object") return obj;
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) {
+      normalizeIds(obj[i]);
+    }
+  } else {
+    if (obj.id && !obj._id) {
+      obj._id = obj.id;
+    } else if (obj._id && !obj.id) {
+      obj.id = obj._id;
+    }
+    for (const key of Object.keys(obj)) {
+      if (obj[key] && typeof obj[key] === "object") {
+        normalizeIds(obj[key]);
+      }
+    }
+  }
+  return obj;
+}
+
+// Handle responses and 401 errors globally without breaking login pages or public routes
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    if (res.data) {
+      normalizeIds(res.data);
+    }
+    return res;
+  },
   (error) => {
     if (error.response?.status === 401 && typeof window !== "undefined") {
       const pathname = window.location.pathname;

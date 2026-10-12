@@ -137,9 +137,16 @@ export default function QuestionsAdminPage() {
         questionType: selectedType || undefined,
         status: selectedStatus || undefined,
       });
-      setQuestions(res.data.questions || []);
-      setTotalQuestions(res.data.total || 0);
-      setTotalPages(res.data.totalPages || 1);
+      const rawList = Array.isArray(res.data?.questions)
+        ? res.data.questions
+        : Array.isArray(res.data?.data)
+        ? res.data.data
+        : Array.isArray(res.data)
+        ? res.data
+        : [];
+      setQuestions(rawList);
+      setTotalQuestions(res.data?.pagination?.total ?? res.data?.total ?? rawList.length);
+      setTotalPages(res.data?.pagination?.totalPages ?? res.data?.totalPages ?? 1);
     } catch (err) {
       console.error("Failed to fetch questions", err);
     } finally {
@@ -206,8 +213,9 @@ export default function QuestionsAdminPage() {
     try {
       await adminQuestionsAPI.approve(id);
       fetchQuestions();
-      if (inspectQuestion?._id === id) {
-        setInspectQuestion((prev: any) => ({ ...prev, status: "active" }));
+      const currentId = inspectQuestion?._id || inspectQuestion?.id;
+      if (currentId === id) {
+        setInspectQuestion((prev: any) => ({ ...prev, status: "approved" }));
       }
     } catch (err) {
       console.error("Failed to approve question", err);
@@ -222,7 +230,8 @@ export default function QuestionsAdminPage() {
       setRejectModalId(null);
       setRejectionReason("");
       fetchQuestions();
-      if (inspectQuestion?._id === rejectModalId) {
+      const currentId = inspectQuestion?._id || inspectQuestion?.id;
+      if (currentId === rejectModalId) {
         setInspectQuestion((prev: any) => ({ ...prev, status: "rejected", rejectionReason }));
       }
     } catch (err) {
@@ -236,7 +245,8 @@ export default function QuestionsAdminPage() {
     try {
       await adminQuestionsAPI.delete(id);
       fetchQuestions();
-      if (inspectQuestion?._id === id) setInspectQuestion(null);
+      const currentId = inspectQuestion?._id || inspectQuestion?.id;
+      if (currentId === id) setInspectQuestion(null);
     } catch (err) {
       console.error("Failed to delete question", err);
     }
@@ -256,8 +266,8 @@ export default function QuestionsAdminPage() {
   };
 
   // Metrics calculations
-  const pendingCount = questions.filter(q => q.status === "pending_review").length;
-  const activeCount = questions.filter(q => q.status === "active").length;
+  const pendingCount = (questions || []).filter(q => q.status === "pending_review").length;
+  const activeCount = (questions || []).filter(q => q.status === "active" || q.status === "approved").length;
 
   return (
     <div ref={containerRef} className="p-8 font-sans max-w-7xl mx-auto space-y-6">
@@ -451,7 +461,7 @@ export default function QuestionsAdminPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {Array.isArray(banks) && banks.map((bank) => (
-                <div key={bank._id} className="bg-card border border-border p-5 rounded-xl hover:border-amber-500/40 transition-all flex flex-col justify-between">
+                <div key={bank._id || bank.id || Math.random()} className="bg-card border border-border p-5 rounded-xl hover:border-amber-500/40 transition-all flex flex-col justify-between">
                   <div>
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="font-semibold text-foreground text-base">{bank.name}</h3>
@@ -500,7 +510,7 @@ export default function QuestionsAdminPage() {
             </thead>
             <tbody className="divide-y divide-border">
               {Array.isArray(codingProblems) && codingProblems.map((prob) => (
-                <tr key={prob._id} className="hover:bg-muted/30">
+                <tr key={prob._id || prob.id || Math.random()} className="hover:bg-muted/30">
                   <td className="px-6 py-4 font-medium text-foreground">
                     <Link href={`/problems/${prob.slug}`} target="_blank" className="hover:underline flex items-center gap-1.5">
                       {prob.title}
@@ -683,14 +693,14 @@ export default function QuestionsAdminPage() {
                   <>
                     <button
                       onClick={() => {
-                        setRejectModalId(inspectQuestion._id);
+                        setRejectModalId(inspectQuestion._id || inspectQuestion.id);
                       }}
                       className="px-4 py-2 rounded-xl bg-white text-rose-600 border border-rose-200 font-semibold text-sm hover:bg-rose-50 transition-colors shadow-sm"
                     >
                       Reject
                     </button>
                     <button
-                      onClick={() => handleApprove(inspectQuestion._id)}
+                      onClick={() => handleApprove(inspectQuestion._id || inspectQuestion.id)}
                       className="px-5 py-2 rounded-xl bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 transition-colors shadow-sm"
                     >
                       Approve
@@ -699,7 +709,7 @@ export default function QuestionsAdminPage() {
                 )}
                 
                 <Link
-                  href={`/admin/questions/${inspectQuestion._id}/edit`}
+                  href={`/admin/questions/${inspectQuestion._id || inspectQuestion.id}/edit`}
                   className="px-4 py-2 rounded-xl bg-white text-slate-700 border border-slate-200 font-semibold text-sm hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-sm"
                 >
                   Edit Question

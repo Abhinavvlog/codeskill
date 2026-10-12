@@ -47,7 +47,7 @@ export default function PendingQuestionsReviewPage() {
     setActionLoading(id);
     try {
       await adminQuestionsAPI.approve(id);
-      setQuestions((prev) => prev.filter((q) => q._id !== id));
+      setQuestions((prev) => prev.filter((q) => (q._id || q.id) !== id));
     } catch (err) {
       console.error("Failed to approve question", err);
       alert("Failed to approve question.");
@@ -61,7 +61,7 @@ export default function PendingQuestionsReviewPage() {
     setActionLoading(rejectModalId);
     try {
       await adminQuestionsAPI.reject(rejectModalId, rejectionReason);
-      setQuestions((prev) => prev.filter((q) => q._id !== rejectModalId));
+      setQuestions((prev) => prev.filter((q) => (q._id || q.id) !== rejectModalId));
       setRejectModalId(null);
       setRejectionReason("");
     } catch (err) {
@@ -148,61 +148,63 @@ export default function PendingQuestionsReviewPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {questions.map((q, qIndex) => (
-            <div
-              key={q._id}
-              className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-5 hover:border-amber-500/30 transition-all"
-            >
-              {/* Question Card Header */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-muted text-foreground font-mono">
-                    #{qIndex + 1}
-                  </span>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                    {q.topic}
-                  </span>
-                  {q.subtopic && (
-                    <span className="text-xs text-muted-foreground px-2 py-0.5 rounded bg-muted">
-                      {q.subtopic}
+          {questions.map((q, qIndex) => {
+            const qId = q._id || q.id;
+            return (
+              <div
+                key={qId}
+                className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-5 hover:border-amber-500/30 transition-all"
+              >
+                {/* Question Card Header */}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-muted text-foreground font-mono">
+                      #{qIndex + 1}
                     </span>
-                  )}
-                  <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full capitalize ${
-                    q.difficulty === "easy"
-                      ? "bg-emerald-500/10 text-emerald-500"
-                      : q.difficulty === "medium"
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "bg-rose-500/10 text-rose-500"
-                  }`}>
-                    {q.difficulty}
-                  </span>
-                  {q.aiGenerated && (
-                    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                      <Sparkles className="w-3 h-3" />
-                      AI ({q.aiModel || "LLM"})
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                      {q.topic}
                     </span>
-                  )}
-                </div>
+                    {q.subtopic && (
+                      <span className="text-xs text-muted-foreground px-2 py-0.5 rounded bg-muted">
+                        {q.subtopic}
+                      </span>
+                    )}
+                    <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full capitalize ${
+                      q.difficulty === "easy"
+                        ? "bg-emerald-500/10 text-emerald-500"
+                        : q.difficulty === "medium"
+                        ? "bg-amber-500/10 text-amber-500"
+                        : "bg-rose-500/10 text-rose-500"
+                    }`}>
+                      {q.difficulty}
+                    </span>
+                    {q.aiGenerated && (
+                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                        <Sparkles className="w-3 h-3" />
+                        AI ({q.aiModel || "LLM"})
+                      </span>
+                    )}
+                  </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    disabled={actionLoading === q._id}
-                    onClick={() => handleApprove(q._id)}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950 transition-colors shadow-sm disabled:opacity-50"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    Approve & Activate
-                  </button>
-                  <button
-                    disabled={actionLoading === q._id}
-                    onClick={() => setRejectModalId(q._id)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors disabled:opacity-50"
-                  >
-                    <XCircle className="w-4 h-4" />
-                    Reject
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={actionLoading === qId}
+                      onClick={() => handleApprove(qId)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950 transition-colors shadow-sm disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Approve & Activate
+                    </button>
+                    <button
+                      disabled={actionLoading === qId}
+                      onClick={() => setRejectModalId(qId)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors disabled:opacity-50"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Reject
+                    </button>
+                  </div>
                 </div>
-              </div>
 
               {/* Statement */}
               <div>
@@ -281,7 +283,8 @@ export default function PendingQuestionsReviewPage() {
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

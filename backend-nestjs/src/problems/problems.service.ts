@@ -41,8 +41,8 @@ export class ProblemsService {
     }
 
     if (category !== 'All Topics' && category !== 'all') {
-      // JSONB array inclusion check in PostgreSQL
-      qb.andWhere(`EXISTS (SELECT 1 FROM jsonb_array_elements_text(problem.tags) AS t WHERE t ILIKE :category)`, { category: `%${category}%` });
+      // PostgreSQL text[] array inclusion check
+      qb.andWhere(`EXISTS (SELECT 1 FROM unnest(problem.tags) AS t WHERE t ILIKE :category)`, { category: `%${category}%` });
     }
 
     if (search !== 'none' && search.trim()) {
@@ -50,7 +50,7 @@ export class ProblemsService {
       qb.andWhere(new Brackets((searchQb) => {
         searchQb.where('problem.title ILIKE :search', { search: `%${s}%` })
                 .orWhere('problem.slug ILIKE :search', { search: `%${s}%` })
-                .orWhere(`EXISTS (SELECT 1 FROM jsonb_array_elements_text(problem.tags) AS t WHERE t ILIKE :search)`, { search: `%${s}%` });
+                .orWhere(`EXISTS (SELECT 1 FROM unnest(problem.tags) AS t WHERE t ILIKE :search)`, { search: `%${s}%` });
       }));
     }
 
