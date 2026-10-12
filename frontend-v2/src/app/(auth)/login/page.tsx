@@ -38,7 +38,7 @@ export default function AppLoginPage() {
   const [showForcePasswordModal, setShowForcePasswordModal] = useState(false);
   const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false);
 
-  const { studentLogin, adminLogin, forceChangePassword } = useAuth();
+  const { login, studentLogin, forceChangePassword } = useAuth();
   const router = useRouter();
 
   const forceForm = useForm<ForcePasswordFormValues>({
@@ -49,24 +49,16 @@ export default function AppLoginPage() {
   const handleLogin = async (data: LoginFormValues) => {
     setLoading(true);
     try {
-      const emailLower = data.email.toLowerCase().trim();
+      const input = data.email.trim();
+      const res = await login({ email: input, password: data.password });
 
-      if (emailLower.includes("@")) {
-        const res = await adminLogin({ email: emailLower, password: data.password });
-        if (res?.requireOTP) {
-          router.push(`/admin/login?email=${encodeURIComponent(data.email)}`);
-        } else {
-          window.location.href = "/admin/dashboard";
-        }
-        return;
-      }
-
-      const res = await studentLogin({ uid: data.email.toUpperCase().trim(), password: data.password });
       if (res?.user?.forcePasswordChange) {
         forceForm.setValue("currentPassword", data.password);
         setShowForcePasswordModal(true);
       } else if (res?.user?.isAdmin) {
         window.location.href = "/admin/dashboard";
+      } else if (res?.user?.isAssessmentStudent) {
+        window.location.href = "/assessments";
       } else {
         window.location.href = "/dashboard";
       }

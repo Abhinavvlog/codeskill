@@ -16,7 +16,7 @@ export class RegisterDto {
 }
 
 export class LoginDto {
-  @IsEmail()
+  @IsString()
   email: string;
 
   @IsString()
@@ -24,7 +24,7 @@ export class LoginDto {
 }
 
 export class AdminLoginDto {
-  @IsEmail()
+  @IsString()
   email: string;
 
   @IsOptional()

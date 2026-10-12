@@ -13,39 +13,24 @@ interface LoginPageProps {
 
 export function LoginPage({ redirectUrl = "/dashboard" }: LoginPageProps) {
   const [loading, setLoading] = useState(false);
-  const { studentLogin, adminLogin } = useAuth();
+  const { login } = useAuth();
   const router = useRouter();
 
   const handleLogin = async (data: LoginFormValues) => {
     setLoading(true);
     try {
-      const emailLower = data.email.toLowerCase().trim();
+      const input = data.email.trim();
+      const res = await login({
+        email: input,
+        password: data.password,
+      });
 
-      // Determine if admin or student based on email/uid presence of @
-      if (emailLower.includes("@")) {
-        const res = await adminLogin({
-          email: emailLower,
-          password: data.password,
-        });
-
-        if (res?.requireOTP) {
-          router.push(`/admin/login?email=${encodeURIComponent(data.email)}`);
-        } else {
-          router.push("/admin/dashboard");
-        }
+      if (res?.user?.isAdmin) {
+        window.location.href = "/admin/dashboard";
+      } else if (res?.user?.isAssessmentStudent) {
+        window.location.href = "/assessments";
       } else {
-        const res = await studentLogin({
-          uid: data.email.toUpperCase().trim(),
-          password: data.password,
-        });
-
-        // If force password change is needed, handle it (Could redirect to a dedicated setup page)
-        // Here we just redirect to the dashboard or admin if they happen to have admin flag
-        if (res?.user?.isAdmin) {
-          router.push("/admin/dashboard");
-        } else {
-          router.push(redirectUrl);
-        }
+        window.location.href = redirectUrl;
       }
     } finally {
       setLoading(false);

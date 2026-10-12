@@ -115,7 +115,7 @@ const iconsArray: IconConfig[] = [
 
 export default function AnimatedLoginPage() {
   const router = useRouter();
-  const { studentLogin, adminLogin } = useAuth();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     uid: '',
     password: '',
@@ -139,26 +139,16 @@ export default function AnimatedLoginPage() {
     setErrorField('');
 
     try {
-      if (formData.uid.includes('@')) {
-        const res = await adminLogin({
-          email: formData.uid.toLowerCase().trim(),
-          password: formData.password,
-        });
-        if (res?.requireOTP) {
-          router.push(`/admin/login?email=${encodeURIComponent(formData.uid)}`);
-        } else {
-          window.location.href = '/admin/dashboard';
-        }
-        return;
-      }
-
-      const res = await studentLogin({
-        uid: formData.uid.toUpperCase().trim(),
+      const input = formData.uid.trim();
+      const res = await login({
+        email: input,
         password: formData.password,
       });
 
       if (res?.user?.isAdmin) {
         window.location.href = '/admin/dashboard';
+      } else if (res?.user?.isAssessmentStudent) {
+        window.location.href = '/assessments';
       } else {
         window.location.href = '/dashboard';
       }

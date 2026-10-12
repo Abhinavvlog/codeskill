@@ -22,7 +22,7 @@ import { OtpInput, type OtpInputHandle, type OtpStatus } from "@/components/ui/o
 import { AdminLogo } from "@/components/admin/AdminLogo";
 
 const adminLoginSchema = z.object({
-  email: z.string().email({ message: "Please enter a valid email address." }),
+  email: z.string().min(1, { message: "Please enter your administrator email or ID." }),
   password: z.string().optional(),
   otp: z.string().optional(),
 });
@@ -165,8 +165,8 @@ export default function AdminLoginPage() {
                       <Mail className="w-4 h-4" />
                     </div>
                     <input
-                      type="email"
-                      placeholder="admin@institution.edu"
+                      type="text"
+                      placeholder="admin@institution.edu or ADM001"
                       disabled={isLoading}
                       {...form.register("email")}
                       className={`w-full h-[46px] bg-background border ${form.formState.errors.email ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-input focus:border-primary focus:ring-primary/20'} rounded-xl pl-10 pr-4 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-4 transition-all text-sm font-medium disabled:opacity-50`}

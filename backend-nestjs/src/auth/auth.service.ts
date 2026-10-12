@@ -7,7 +7,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, ILike } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { User as UserEntity } from '../database/entities/user.entity';
 import { OtpService } from '../redis/otp.service';
@@ -159,8 +159,12 @@ export class AuthService implements OnModuleInit {
   }
 
   async login(dto: LoginDto) {
+    const raw = dto.email.trim();
     const user = await this.userRepository.findOne({
-      where: { email: dto.email },
+      where: [
+        { email: ILike(raw) },
+        { uid: ILike(raw) },
+      ],
       select: { id: true, name: true, email: true, password: true, role: true, isAdmin: true, uid: true, isAssessmentStudent: true, forcePasswordChange: true, studentProfile: true, avatar: true, bio: true, profile: true, stats: true, authProvider: true, isActive: true }
     });
     if (!user) {
@@ -461,16 +465,19 @@ export class AuthService implements OnModuleInit {
   }
 
   async adminLogin(dto: AdminLoginDto) {
-    const normalizedEmail = dto.email.trim().toLowerCase();
+    const raw = dto.email.trim();
     const user = await this.userRepository.findOne({
-      where: { email: normalizedEmail },
+      where: [
+        { email: ILike(raw) },
+        { uid: ILike(raw) },
+      ],
       select: { id: true, name: true, email: true, password: true, role: true, isAdmin: true, uid: true, isAssessmentStudent: true, forcePasswordChange: true, studentProfile: true, avatar: true, bio: true, profile: true, stats: true, authProvider: true }
     });
     if (!user) {
-      throw new UnauthorizedException('User not found with this email');
+      throw new UnauthorizedException('User not found with this email or ID');
     }
     if (!user.isAdmin) {
-      throw new UnauthorizedException('Access denied. Admin only.');
+      throw new UnauthorizedException('Access denied. Admin privileges required.');
     }
 
     if (user.password) {
@@ -512,12 +519,11 @@ export class AuthService implements OnModuleInit {
   }
 
   async studentLogin(dto: StudentLoginDto) {
-    const formattedUid = dto.uid.toUpperCase().trim();
-    const formattedEmail = dto.uid.toLowerCase().trim();
+    const raw = dto.uid.trim();
     const user = await this.userRepository.findOne({
       where: [
-        { uid: formattedUid },
-        { email: formattedEmail }
+        { uid: ILike(raw) },
+        { email: ILike(raw) },
       ],
       select: { id: true, name: true, email: true, password: true, role: true, isAdmin: true, uid: true, isAssessmentStudent: true, forcePasswordChange: true, studentProfile: true, avatar: true, bio: true, profile: true, stats: true, authProvider: true, isActive: true }
     });
