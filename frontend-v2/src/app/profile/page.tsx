@@ -285,7 +285,7 @@ export default function ProfilePage() {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
+                  <div id="account-preferences" className="space-y-2 scroll-mt-24">
                     <label className="text-sm font-medium flex items-center gap-2">
                       <Code2 className="w-4 h-4 text-muted-foreground" /> Preferred Language
                     </label>

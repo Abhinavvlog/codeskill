@@ -199,7 +199,8 @@ export const discussionsAPI = {
 
 // ── Admin ──
 export const adminProblemsAPI = {
-  getAll: () => api.get("/admin/problems"),
+  getAll: (params?: { page?: number; limit?: number; search?: string }, signal?: AbortSignal) =>
+    api.get("/admin/problems", { params, signal }),
   getById: (id: string) => api.get(`/admin/problems/${id}`),
   create: (data: any) => api.post("/admin/problems", data),
   update: (id: string, data: any) => api.put(`/admin/problems/${id}`, data),
@@ -334,7 +335,7 @@ export const adminQuestionsAPI = {
     aiGenerated?: boolean;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
-  }) => api.get("/admin/questions", { params }),
+  }, signal?: AbortSignal) => api.get("/admin/questions", { params, signal }),
   getById: (id: string) => api.get(`/admin/questions/${id}`),
   create: (data: any) => api.post("/admin/questions", data),
   update: (id: string, data: any) => api.put(`/admin/questions/${id}`, data),
