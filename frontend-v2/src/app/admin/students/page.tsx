@@ -870,7 +870,7 @@ export default function AdminStudentsPage() {
 
                 <button
                   onClick={() => setResetModalData(null)}
-                  className="w-full h-10 bg-primary hover:bg-primary/90 text-white font-semibold rounded-xl text-sm transition-colors"
+                  className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-xl text-sm transition-colors"
                 >
                   Done
                 </button>

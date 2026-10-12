@@ -175,7 +175,7 @@ export default function AdminSettingsPage() {
                         ) : (
                           <button
                             onClick={() => handlePromote(u._id)}
-                            className="text-xs font-medium text-primary bg-primary/10 hover:bg-primary hover:text-white px-3 py-1.5 rounded-md transition-colors"
+                            className="text-xs font-medium text-primary bg-primary/10 hover:bg-primary hover:text-primary-foreground px-3 py-1.5 rounded-md transition-colors"
                           >
                             Promote to Admin
                           </button>

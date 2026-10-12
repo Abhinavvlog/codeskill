@@ -17,10 +17,7 @@ import {
   ArrowRight,
   RefreshCw,
   CheckCircle2,
-  Lock,
   Cpu,
-  Mail,
-  ExternalLink,
 } from "lucide-react";
 import { adminDashboardAPI } from "@/config/api";
 import { Spinner } from "@/components/ui/spinner";
@@ -85,12 +82,17 @@ export default function AdminDashboardPage() {
     () => {
       const mm = gsap.matchMedia();
       mm.add("(prefers-reduced-motion: no-preference)", () => {
-        const tl = gsap.timeline();
-        tl.from(".page-header", { opacity: 0, y: -15, duration: 0.35 })
-          .from(".stat-card", { opacity: 0, y: 15, stagger: 0.05, duration: 0.35 }, "-=0.15")
-          .from(".action-tile", { opacity: 0, y: 15, stagger: 0.05, duration: 0.35 }, "-=0.2")
-          .from(".activity-section", { opacity: 0, y: 15, duration: 0.35 }, "-=0.2");
+        // Explicit end states avoid capturing opacity: 0 when React replays effects.
+        // Remove animation styles afterwards so CSS hover states work normally.
+        const tl = gsap.timeline({
+          defaults: { duration: 0.35, clearProps: "opacity,transform,translate,rotate,scale" },
+        });
+        tl.fromTo(".page-header", { opacity: 0, y: -15 }, { opacity: 1, y: 0 })
+          .fromTo(".stat-card", { opacity: 0, y: 15 }, { opacity: 1, y: 0, stagger: 0.05 }, "-=0.15")
+          .fromTo(".action-tile", { opacity: 0, y: 15 }, { opacity: 1, y: 0, stagger: 0.05 }, "-=0.2")
+          .fromTo(".activity-section", { opacity: 0, y: 15 }, { opacity: 1, y: 0 }, "-=0.2");
       });
+      return () => mm.revert();
     },
     { scope: containerRef }
   );
@@ -179,7 +181,7 @@ export default function AdminDashboardPage() {
     },
     {
       title: "Active Today",
-      value: stats.activeToday || 1,
+      value: stats.activeToday ?? 0,
       sublabel: "Live Platform Activity",
       icon: Activity,
       href: "/admin/students",
@@ -282,7 +284,7 @@ export default function AdminDashboardPage() {
               <Link
                 key={kpi.title}
                 href={kpi.href}
-                className={`stat-card bg-card/50 backdrop-blur-md p-4 md:p-5 rounded-2xl border border-border/60 transition-all group hover:-translate-y-0.5 shadow-xs ${kpi.border}`}
+                className={`stat-card bg-card/50 backdrop-blur-md p-4 md:p-5 rounded-2xl border border-border/60 transition-[background-color,border-color,box-shadow,translate] group hover:-translate-y-0.5 shadow-xs ${kpi.border}`}
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${kpi.bg} ${kpi.color} group-hover:scale-105 transition-transform`}>
@@ -325,7 +327,7 @@ export default function AdminDashboardPage() {
               return (
                 <div
                   key={action.title}
-                  className={`action-tile relative bg-card/40 backdrop-blur-md border border-border/60 rounded-2xl p-5 flex flex-col justify-between hover:border-primary/40 transition-all group overflow-hidden shadow-xs hover:shadow-md`}
+                  className={`action-tile relative bg-card/40 backdrop-blur-md border border-border/60 rounded-2xl p-5 flex flex-col justify-between hover:border-primary/40 transition-[border-color,box-shadow] group overflow-hidden shadow-xs hover:shadow-md`}
                 >
                   <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${action.accent} blur-2xl rounded-full pointer-events-none group-hover:opacity-100 transition-opacity`} />
                   

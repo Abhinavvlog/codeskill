@@ -144,7 +144,7 @@ export default function AdminAssessmentsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md overflow-hidden bg-white shrink-0 border border-slate-200 p-0.5 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl overflow-hidden bg-card shrink-0 border border-border p-1 flex items-center justify-center shadow-xs">
               <img
                 src="https://images.seeklogo.com/logo-png/43/1/chandigarh-university-cu-logo-png_seeklogo-432515.png"
                 alt="Chandigarh University"
@@ -156,10 +156,10 @@ export default function AdminAssessmentsPage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold tracking-tight text-slate-900">
+                <h1 className="text-xl font-bold tracking-tight text-foreground">
                   Assessments & Examinations
                 </h1>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-primary border border-red-200">
+                <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/25">
                   Chandigarh University
                 </span>
               </div>
@@ -173,7 +173,7 @@ export default function AdminAssessmentsPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/admin/assessments/create"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 active:bg-primary/80 text-white text-xs font-semibold uppercase tracking-wider rounded-md transition-all shadow-xs"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold uppercase tracking-wider rounded-lg transition-all shadow-md shadow-primary/20 hover:scale-[1.02]"
           >
             <Plus className="w-4 h-4" /> Create Assessment
           </Link>

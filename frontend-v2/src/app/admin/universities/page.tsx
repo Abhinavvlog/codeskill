@@ -138,7 +138,7 @@ export default function AdminUniversitiesPage() {
         </div>
         <button
           onClick={() => { setShowAddModal(true); setCreateError(null); setCreateSuccess(false); }}
-          className="inline-flex items-center gap-2 px-3.5 py-2 bg-primary hover:bg-primary/90 active:bg-primary/80 text-white text-xs font-semibold rounded-md transition-colors shadow-xs shrink-0"
+          className="inline-flex items-center gap-2 px-3.5 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-lg transition-colors shadow-xs shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />
           Add University

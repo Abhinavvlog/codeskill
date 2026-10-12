@@ -150,7 +150,7 @@ export default function AdminCompaniesPage() {
                           className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1 ${
                             company.isVerified 
                               ? "bg-muted text-muted-foreground hover:bg-amber-500/10 hover:text-amber-500" 
-                              : "bg-primary/10 text-primary hover:bg-primary hover:text-white"
+                              : "bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
                           }`}
                           title={company.isVerified ? "Revoke Verification" : "Verify Company"}
                         >

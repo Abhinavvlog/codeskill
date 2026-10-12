@@ -192,7 +192,7 @@ export default function AssessmentResultsPage({
         <div className="flex items-center gap-2">
           <Link
             href={`/admin/assessments/${id}/analytics`}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-primary text-white text-xs font-bold rounded-md hover:bg-primary/90 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-primary text-primary-foreground text-xs font-bold rounded-md hover:bg-primary/90 transition-colors shadow-sm"
           >
             <BarChart3 className="w-3.5 h-3.5" /> Analytics Dashboard
           </Link>
@@ -426,7 +426,7 @@ export default function AssessmentResultsPage({
                           href={`http://localhost:3001/reports/assessment-attempt/${att._id}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary text-white hover:bg-primary/90 text-[11px] font-semibold rounded-lg shadow-sm transition-colors"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary text-primary-foreground hover:bg-primary/90 text-[11px] font-semibold rounded-lg shadow-sm transition-colors"
                           title="Download PDF Report"
                         >
                           <Download className="w-3 h-3" /> PDF
@@ -526,7 +526,7 @@ export default function AssessmentResultsPage({
                           href={`http://localhost:3001/reports/assessment-attempt/${att._id}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary text-white hover:bg-primary/90 text-[11px] font-semibold rounded-lg shadow-sm transition-colors"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary text-primary-foreground hover:bg-primary/90 text-[11px] font-semibold rounded-lg shadow-sm transition-colors"
                           title="Download PDF Report"
                         >
                           <Download className="w-3 h-3" /> PDF
