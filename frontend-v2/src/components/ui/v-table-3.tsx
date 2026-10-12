@@ -17,6 +17,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
+  DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
@@ -378,29 +379,35 @@ export function VTable3({
                           <MoreVertical className="w-4 h-4 text-muted-foreground" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48 bg-card border-border">
-                          <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">Actions</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => onView(q)} className="cursor-pointer gap-2 text-sm focus:bg-muted">
-                            <Eye className="w-4 h-4 text-muted-foreground" />
-                            View Preview
-                          </DropdownMenuItem>
+                          <DropdownMenuGroup>
+                            <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">Actions</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => onView(q)} className="cursor-pointer gap-2 text-sm focus:bg-muted">
+                              <Eye className="w-4 h-4 text-muted-foreground" />
+                              View Preview
+                            </DropdownMenuItem>
+                          </DropdownMenuGroup>
                           <DropdownMenuSeparator className="bg-border" />
                           {q.status === "pending_review" && (
                             <>
-                              <DropdownMenuItem onClick={() => onApprove(qId)} className="cursor-pointer gap-2 text-sm focus:bg-emerald-500/10 focus:text-emerald-500 text-emerald-600">
-                                <CheckCircle2 className="w-4 h-4" />
-                                Approve
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => onReject(qId)} className="cursor-pointer gap-2 text-sm focus:bg-rose-500/10 focus:text-rose-500 text-rose-600">
-                                <XCircle className="w-4 h-4" />
-                                Reject
-                              </DropdownMenuItem>
+                              <DropdownMenuGroup>
+                                <DropdownMenuItem onClick={() => onApprove(qId)} className="cursor-pointer gap-2 text-sm focus:bg-emerald-500/10 focus:text-emerald-500 text-emerald-600">
+                                  <CheckCircle2 className="w-4 h-4" />
+                                  Approve
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onReject(qId)} className="cursor-pointer gap-2 text-sm focus:bg-rose-500/10 focus:text-rose-500 text-rose-600">
+                                  <XCircle className="w-4 h-4" />
+                                  Reject
+                                </DropdownMenuItem>
+                              </DropdownMenuGroup>
                               <DropdownMenuSeparator className="bg-border" />
                             </>
                           )}
-                          <DropdownMenuItem onClick={() => onEdit(qId)} className="cursor-pointer gap-2 text-sm focus:bg-muted">
-                            <Plus className="w-4 h-4 text-muted-foreground" />
-                            Edit Question
-                          </DropdownMenuItem>
+                          <DropdownMenuGroup>
+                            <DropdownMenuItem onClick={() => onEdit(qId)} className="cursor-pointer gap-2 text-sm focus:bg-muted">
+                              <Plus className="w-4 h-4 text-muted-foreground" />
+                              Edit Question
+                            </DropdownMenuItem>
+                          </DropdownMenuGroup>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
