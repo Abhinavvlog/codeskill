@@ -164,6 +164,9 @@ export class AuthService implements OnModuleInit {
       where: [
         { email: ILike(raw) },
         { uid: ILike(raw) },
+        { username: ILike(raw) },
+        { name: ILike(raw) },
+        { email: ILike(`${raw}@%`) },
       ],
       select: { id: true, name: true, email: true, password: true, role: true, isAdmin: true, uid: true, isAssessmentStudent: true, forcePasswordChange: true, studentProfile: true, avatar: true, bio: true, profile: true, stats: true, authProvider: true, isActive: true }
     });
@@ -470,6 +473,9 @@ export class AuthService implements OnModuleInit {
       where: [
         { email: ILike(raw) },
         { uid: ILike(raw) },
+        { username: ILike(raw) },
+        { name: ILike(raw) },
+        { email: ILike(`${raw}@%`) },
       ],
       select: { id: true, name: true, email: true, password: true, role: true, isAdmin: true, uid: true, isAssessmentStudent: true, forcePasswordChange: true, studentProfile: true, avatar: true, bio: true, profile: true, stats: true, authProvider: true }
     });
@@ -524,6 +530,9 @@ export class AuthService implements OnModuleInit {
       where: [
         { uid: ILike(raw) },
         { email: ILike(raw) },
+        { username: ILike(raw) },
+        { name: ILike(raw) },
+        { email: ILike(`${raw}@%`) },
       ],
       select: { id: true, name: true, email: true, password: true, role: true, isAdmin: true, uid: true, isAssessmentStudent: true, forcePasswordChange: true, studentProfile: true, avatar: true, bio: true, profile: true, stats: true, authProvider: true, isActive: true }
     });
