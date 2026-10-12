@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useScroll, useMotionValueEvent, AnimatePresence } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -17,6 +17,10 @@ import {
   X,
   ShieldCheck,
   ArrowRight,
+  Settings,
+  HelpCircle,
+  ChevronDown,
+  SlidersHorizontal,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -29,6 +33,9 @@ export function Navbar() {
   const { user, logout } = useAuth();
   const [mounted, setMounted] = useState(false);
 
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -40,19 +47,37 @@ export function Navbar() {
   // Automatically close mobile menu on route changes
   useEffect(() => {
     setMobileMenuOpen(false);
+    setProfileDropdownOpen(false);
   }, [pathname]);
 
-  // Automatically close mobile menu on Escape key press
+  // Click outside to close profile dropdown
   useEffect(() => {
-    if (!mobileMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        profileDropdownRef.current &&
+        !profileDropdownRef.current.contains(event.target as Node)
+      ) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    if (profileDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [profileDropdownOpen]);
+
+  // Automatically close menus on Escape key press
+  useEffect(() => {
+    if (!mobileMenuOpen && !profileDropdownOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setMobileMenuOpen(false);
+        setProfileDropdownOpen(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [mobileMenuOpen]);
+  }, [mobileMenuOpen, profileDropdownOpen]);
 
   // Automatically close mobile menu when viewport width expands to desktop (1024px and above)
   useEffect(() => {
@@ -194,7 +219,7 @@ export function Navbar() {
             <ThemeToggle className="w-8.5 h-8.5 shrink-0" />
 
             {user ? (
-              <div className="flex items-center gap-1.5 xl:gap-2 shrink-0">
+              <div ref={profileDropdownRef} className="relative flex items-center gap-1.5 xl:gap-2 shrink-0">
                 {user.isAdmin && (
                   <Link
                     href="/admin/dashboard"
@@ -204,13 +229,106 @@ export function Navbar() {
                     <span className="whitespace-nowrap">Admin</span>
                   </Link>
                 )}
-                <Link
-                  href="/profile"
-                  className="inline-flex items-center gap-1.5 h-8.5 xl:h-9 px-2.5 xl:px-3 rounded-lg text-[13px] xl:text-[14px] font-medium text-[#1F2937] bg-[#FFFBF5] hover:bg-[#E5E7EB]/50 border border-[#E5E7EB] dark:text-background dark:bg-white/[0.05] dark:hover:bg-white/[0.1] dark:border-white/10 transition-colors duration-150 whitespace-nowrap shrink-0"
-                >
-                  <User className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-[#64748B] dark:text-muted-foreground shrink-0" />
-                  <span className="whitespace-nowrap">{user.name?.split(" ")[0] || "Profile"}</span>
-                </Link>
+
+                <div className="relative flex items-center">
+                  <Link
+                    href="/profile"
+                    className="inline-flex items-center gap-1.5 h-8.5 xl:h-9 px-2.5 xl:px-3 rounded-l-lg text-[13px] xl:text-[14px] font-medium text-[#111827] bg-[#FFFBF5] hover:bg-[#E5E7EB]/50 border border-[#E5E7EB] dark:text-white dark:bg-white/[0.05] dark:hover:bg-white/[0.1] dark:border-white/10 transition-colors duration-150 whitespace-nowrap shrink-0"
+                  >
+                    <User className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-[#64748B] dark:text-muted-foreground shrink-0" />
+                    <span className="whitespace-nowrap">{user.name?.split(" ")[0] || "Profile"}</span>
+                  </Link>
+                  <button
+                    onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                    aria-label="Open profile menu"
+                    aria-expanded={profileDropdownOpen}
+                    className="inline-flex items-center justify-center h-8.5 xl:h-9 px-1.5 rounded-r-lg border-y border-r border-[#E5E7EB] bg-[#FFFBF5] hover:bg-[#E5E7EB]/50 text-[#64748B] hover:text-[#111827] dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/[0.1] dark:text-muted-foreground dark:hover:text-white transition-colors duration-150 cursor-pointer"
+                  >
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${profileDropdownOpen ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {/* Anchored CodeSignal-Style Profile Dropdown */}
+                  <AnimatePresence>
+                    {profileDropdownOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-[#151E30] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl p-2 z-50 text-left"
+                      >
+                        {/* Profile Header */}
+                        <div className="px-3 py-2.5 mb-1.5 bg-[#FFFBF5] dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155]/60 flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-[#7F1D1D]/10 text-[#7F1D1D] dark:bg-[#7F1D1D]/30 dark:text-[#FACC15] flex items-center justify-center font-bold text-sm shrink-0 border border-[#7F1D1D]/20">
+                            {user.name ? user.name[0].toUpperCase() : "U"}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-[#111827] dark:text-[#F8FAFC] truncate">
+                              {user.name || "Student"}
+                            </p>
+                            <p className="text-[11px] text-[#64748B] dark:text-[#94A3B8] truncate">
+                              {user.email || "Active User"}
+                            </p>
+                            <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider bg-[#7F1D1D]/10 text-[#7F1D1D] dark:bg-[#FACC15]/15 dark:text-[#FACC15]">
+                              {user.isAdmin ? "Administrator" : "Student"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Navigation Destinations */}
+                        <div className="space-y-0.5 text-xs font-medium">
+                          <Link
+                            href="/profile"
+                            onClick={() => setProfileDropdownOpen(false)}
+                            className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#111827] dark:text-[#F8FAFC] hover:bg-[#FFFBF5] dark:hover:bg-[#1E293B] transition-colors"
+                          >
+                            <User className="w-4 h-4 text-[#64748B] dark:text-[#94A3B8]" />
+                            <span>Profile details</span>
+                          </Link>
+                          <Link
+                            href="/profile?tab=settings"
+                            onClick={() => setProfileDropdownOpen(false)}
+                            className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#111827] dark:text-[#F8FAFC] hover:bg-[#FFFBF5] dark:hover:bg-[#1E293B] transition-colors"
+                          >
+                            <Settings className="w-4 h-4 text-[#64748B] dark:text-[#94A3B8]" />
+                            <span>Account settings</span>
+                          </Link>
+                          <Link
+                            href="/profile?tab=preferences"
+                            onClick={() => setProfileDropdownOpen(false)}
+                            className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#111827] dark:text-[#F8FAFC] hover:bg-[#FFFBF5] dark:hover:bg-[#1E293B] transition-colors"
+                          >
+                            <SlidersHorizontal className="w-4 h-4 text-[#64748B] dark:text-[#94A3B8]" />
+                            <span>Preferences</span>
+                          </Link>
+                          <Link
+                            href="/contact"
+                            onClick={() => setProfileDropdownOpen(false)}
+                            className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#111827] dark:text-[#F8FAFC] hover:bg-[#FFFBF5] dark:hover:bg-[#1E293B] transition-colors"
+                          >
+                            <HelpCircle className="w-4 h-4 text-[#64748B] dark:text-[#94A3B8]" />
+                            <span>Help and support</span>
+                          </Link>
+                        </div>
+
+                        <div className="my-1.5 border-t border-[#E5E7EB] dark:border-[#334155]/60" />
+
+                        {/* Sign Out Action in dropdown */}
+                        <button
+                          onClick={() => {
+                            setProfileDropdownOpen(false);
+                            handleLogout();
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors cursor-pointer"
+                        >
+                          <LogOut className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                          <span>Log out</span>
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
                 <button
                   onClick={handleLogout}
                   className="inline-flex items-center justify-center h-8.5 w-8.5 xl:h-9 xl:w-9 rounded-lg text-[#64748B] hover:text-[#7F1D1D] hover:bg-[#7F1D1D]/5 border border-[#E5E7EB] dark:text-muted-foreground dark:hover:text-white dark:hover:bg-white/[0.06] dark:border-white/10 transition-colors duration-150 cursor-pointer shrink-0"
@@ -223,7 +341,7 @@ export function Navbar() {
               <div className="flex items-center gap-2 xl:gap-2.5 shrink-0">
                 <Link
                   href="/login"
-                  className="inline-flex items-center justify-center h-8.5 xl:h-9 px-2.5 xl:px-3.5 rounded-lg text-[13.5px] xl:text-[14.5px] font-semibold text-[#1F2937] hover:text-[#7F1D1D] dark:text-foreground/90 dark:hover:text-white transition-colors duration-150 whitespace-nowrap shrink-0"
+                  className="inline-flex items-center justify-center h-8.5 xl:h-9 px-2.5 xl:px-3.5 rounded-lg text-[13.5px] xl:text-[14.5px] font-semibold text-[#111827] hover:text-[#7F1D1D] dark:text-foreground/90 dark:hover:text-white transition-colors duration-150 whitespace-nowrap shrink-0"
                 >
                   Log In
                 </Link>
@@ -351,17 +469,17 @@ export function Navbar() {
                 ) : (
                   <div className="flex flex-col gap-2 pt-1">
                     <Link
-                      href="/login"
+                      href="/problems"
                       onClick={() => setMobileMenuOpen(false)}
                       className="flex items-center justify-center gap-1.5 w-full h-10 rounded-xl bg-[#7F1D1D] hover:bg-[#450A0A] text-white font-bold text-[14px] shadow-xs transition-all"
                     >
-                      <span>Get Started</span>
+                      <span>Start Coding</span>
                       <ArrowRight className="w-4 h-4 text-[#FACC15]" />
                     </Link>
                     <Link
                       href="/login"
                       onClick={() => setMobileMenuOpen(false)}
-                      className="flex items-center justify-center w-full h-9.5 rounded-xl bg-white text-[#1F2937] hover:bg-[#FFFBF5] font-semibold text-[14px] border border-[#E5E7EB] transition-colors"
+                      className="flex items-center justify-center w-full h-9.5 rounded-xl bg-white text-[#111827] hover:bg-[#FFFBF5] font-semibold text-[14px] border border-[#E5E7EB] transition-colors"
                     >
                       Log In
                     </Link>

@@ -546,16 +546,16 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
     : "N/A";
 
   return (
-    <div ref={containerRef} className={`flex flex-col ${embedded ? "h-full" : "h-dvh"} bg-background overflow-hidden font-sans text-foreground relative`}>
+    <div ref={containerRef} className={`flex flex-col ${embedded ? "h-full" : "h-dvh"} bg-[#080D1B] overflow-hidden font-sans text-[#F8FAFC] relative`}>
       
 
         {/* ─── TOP NAVBAR ─────────────────────────────────────────────────── */}
-        <header className="h-13 border-b border-[#1F2937] bg-[#0A0A0A] flex items-center justify-between px-4 shrink-0 gap-3">
+        <header className="h-13 border-b border-[#334155] bg-[#111827] flex items-center justify-between px-4 shrink-0 gap-3">
           <div className="flex items-center gap-3 min-w-0">
             {!embedded && <Link 
               href="/problems" 
               title="Back to Problems" 
-              className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-[#D1D5DB] transition-colors hover:bg-[#1F2937] hover:text-[#FFFFFF] shrink-0"
+              className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-[#94A3B8] transition-colors hover:bg-[#1E293B] hover:text-[#F8FAFC] shrink-0"
               onMouseEnter={(e) => gsap.to(e.currentTarget, { scale: 1.02, duration: 0.15 })}
               onMouseLeave={(e) => gsap.to(e.currentTarget, { scale: 1, duration: 0.15 })}
               onMouseDown={(e) => gsap.to(e.currentTarget, { scale: 0.98, duration: 0.15 })}
@@ -565,15 +565,15 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
               <span>Back</span>
             </Link>}
             
-            <div className="w-px h-5 bg-[#374151] shrink-0" />
+            <div className="w-px h-5 bg-[#334155] shrink-0" />
             
             <div className="flex items-center gap-2 min-w-0">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary border border-border text-[11px] font-bold text-foreground/80 shrink-0">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#1E293B] border border-[#334155] text-[11px] font-bold text-[#F8FAFC] shrink-0">
                 <ProgrammingLanguageIcon language={language} className="w-3.5 h-3.5" />
                 <span>{LANGUAGES.find(l => l.id === language)?.name || "Language"}</span>
               </div>
               
-              <h1 className="text-[15px] sm:text-[16px] font-bold text-foreground truncate max-w-[280px] md:max-w-[420px] whitespace-nowrap">
+              <h1 className="text-[15px] sm:text-[16px] font-bold text-[#F8FAFC] truncate max-w-[280px] md:max-w-[420px] whitespace-nowrap">
                 {problem.title}
               </h1>
               
@@ -583,19 +583,19 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
             </div>
             
             {/* Progress Indicator */}
-            <div className="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded-md bg-secondary border border-border text-[11px] text-muted-foreground shrink-0 ml-1">
-              <span className="font-medium text-foreground/80">Lesson Progress</span>
+            <div className="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#1E293B] border border-[#334155] text-[11px] text-[#94A3B8] shrink-0 ml-1">
+              <span className="font-medium text-[#F8FAFC]">Lesson Progress</span>
               <div className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-[#10B981]" title="Completed" />
-                <span className="w-2 h-2 rounded-full bg-primary" title="Current Lesson" />
-                <span className="w-2 h-2 rounded-full bg-white/20" title="Upcoming" />
+                <span className="w-2 h-2 rounded-full bg-[#FACC15]" title="Current Lesson" />
+                <span className="w-2 h-2 rounded-full bg-[#334155]" title="Upcoming" />
               </div>
             </div>
 
             {lastSaved && (
               <motion.span 
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                className="hidden xl:flex text-[11px] text-muted-foreground ml-1 items-center gap-1.5 shrink-0"
+                className="hidden xl:flex text-[11px] text-[#94A3B8] ml-1 items-center gap-1.5 shrink-0"
               >
                 <CheckCircle2 className="w-3.5 h-3.5 text-[#10B981]" /> Saved {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </motion.span>
@@ -606,13 +606,13 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
             <button
               type="button"
               onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
-              className="inline-flex h-9 min-w-[120px] items-center justify-between gap-2 rounded-[8px] border border-[#3F3F46] bg-[#18181B] px-3 text-sm font-medium text-[#F3F4F6] hover:bg-[#27272A] focus:outline-none focus:ring-1 focus:ring-[#FACC15] transition-colors"
+              className="inline-flex h-9 min-w-[120px] items-center justify-between gap-2 rounded-lg border border-[#334155] bg-[#151E30] px-3 text-sm font-medium text-[#F8FAFC] hover:bg-[#1E293B] focus:outline-none focus:ring-1 focus:ring-[#FACC15] transition-colors shadow-xs"
               aria-expanded={showLanguageDropdown}
               aria-haspopup="listbox"
               aria-label="Select programming language"
             >
               <span>{LANGUAGES.find(l => l.id === language)?.name || "Language"}</span>
-              <ChevronDown className={`h-4 w-4 text-[#9CA3AF] transition-transform duration-200 ${showLanguageDropdown ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`h-4 w-4 text-[#94A3B8] transition-transform duration-200 ${showLanguageDropdown ? 'rotate-180' : ''}`} />
             </button>
 
             <AnimatePresence>
@@ -627,7 +627,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -4, scale: 0.98 }}
                     transition={{ duration: 0.2, ease: "easeOut" }}
-                    className="absolute top-full right-0 mt-1.5 w-[140px] rounded-[10px] border border-[#3F3F46] bg-[#18181B] py-1.5 shadow-xl origin-top-right z-50"
+                    className="absolute top-full right-0 mt-1.5 w-[140px] rounded-xl border border-[#334155] bg-[#151E30] py-1.5 shadow-xl origin-top-right z-50"
                     role="listbox"
                   >
                   {LANGUAGES.map(lang => (
@@ -639,7 +639,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
                         setLanguage(lang.id);
                         setShowLanguageDropdown(false);
                       }}
-                      className="flex w-full items-center justify-between px-3 py-2 text-sm text-[#E5E7EB] hover:bg-[#27272A] transition-colors text-left"
+                      className="flex w-full items-center justify-between px-3 py-2 text-sm text-[#F8FAFC] hover:bg-[#1E293B] transition-colors text-left"
                     >
                       <span className={language === lang.id ? "text-[#FACC15] font-semibold" : "font-medium"}>{lang.name}</span>
                       {language === lang.id && <Check className="h-3.5 w-3.5 text-[#FACC15]" />}
@@ -659,7 +659,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
         {/* ═══════════════════════════════════════════════════════════════════════
             1. SLIM LEFT SIDEBAR (Activity Bar) — Modern Developer icon rail
            ═══════════════════════════════════════════════════════════════════════ */}
-        <div className="w-12 border-r border-[#1F2937] bg-[#0A0A0A] flex flex-col items-center py-3 gap-1 z-10 shrink-0">
+        <div className="w-12 border-r border-[#334155] bg-[#111827] flex flex-col items-center py-3 gap-1 z-10 shrink-0">
           
           {SIDEBAR_TABS.map(tab => (
             <SidebarIcon
@@ -683,17 +683,17 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
             {/* ═══════════════════════════════════════════════════════════════
                 CENTER PANEL — Problem Description / Editorial / Hints / etc.
                ═══════════════════════════════════════════════════════════════ */}
-            <Panel defaultSize={40} minSize={20} className="bg-card border border-border rounded-xl overflow-hidden flex flex-col shadow-sm">
+            <Panel defaultSize={35} minSize={20} className="bg-[#151E30] border border-[#334155] rounded-xl overflow-hidden flex flex-col shadow-sm">
               
               {/* Panel Header */}
-              <div className="px-3.5 py-2 border-b border-border bg-muted/50 flex items-center justify-between shrink-0">
+              <div className="px-3.5 py-2 border-b border-[#334155] bg-[#1E293B] flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
                   {(() => {
                     const tab = SIDEBAR_TABS.find(t => t.id === activeSidebarTab);
                     const TabIcon = tab?.icon || FileText;
-                    return <TabIcon className="w-3.5 h-3.5 text-primary" />;
+                    return <TabIcon className="w-3.5 h-3.5 text-[#FACC15]" />;
                   })()}
-                  <span className="text-xs font-bold text-foreground capitalize">
+                  <span className="text-xs font-bold text-[#F8FAFC] capitalize">
                     {activeSidebarTab.replace('_', ' ')}
                   </span>
                 </div>
@@ -1197,51 +1197,51 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
               </div>
             </Panel>
 
-            <PanelResizeHandle className="w-1.5 rounded-full bg-accent hover:bg-indigo-500/50 transition-colors cursor-col-resize" />
+            <PanelResizeHandle className="w-1.5 rounded-full bg-[#334155] hover:bg-[#FACC15] transition-colors cursor-col-resize" />
 
             {/* ═══════════════════════════════════════════════════════════════
                 RIGHT PANEL — Editor + Console
                ═══════════════════════════════════════════════════════════════ */}
-            <Panel defaultSize={60} minSize={30} className="flex flex-col gap-1.5">
+            <Panel defaultSize={65} minSize={30} className="flex flex-col gap-1.5">
               <PanelGroup orientation="vertical" className="gap-1.5">
                 
                 {/* ─── Editor ──────────────────────────────────────────── */}
-                <Panel defaultSize={65} className="bg-card border border-border rounded-xl overflow-hidden flex flex-col shadow-sm">
-                  <div className="px-3.5 py-1.5 border-b border-border bg-muted flex justify-between items-center h-9 shrink-0">
+                <Panel defaultSize={65} className="bg-[#151E30] border border-[#334155] rounded-xl overflow-hidden flex flex-col shadow-sm">
+                  <div className="px-3.5 py-1.5 border-b border-[#334155] bg-[#1E293B] flex justify-between items-center h-9 shrink-0">
                     <div className="flex items-center gap-2">
-                      <List className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="text-xs font-semibold text-foreground bg-background px-2.5 py-0.5 rounded border border-border font-mono">
+                      <List className="w-3.5 h-3.5 text-[#94A3B8]" />
+                      <span className="text-xs font-semibold text-[#F8FAFC] bg-[#111827] px-2.5 py-0.5 rounded border border-[#334155] font-mono">
                         {LANGUAGES.find(l => l.id === language)?.ext}
                       </span>
                       {lastSaved && (
-                        <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-muted-foreground ml-1 font-mono">
+                        <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-[#94A3B8] ml-1 font-mono">
                           <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" /> Saved
                         </span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-semibold text-muted-foreground hidden md:inline">
+                      <span className="text-[11px] font-semibold text-[#94A3B8] hidden md:inline">
                         {LANGUAGES.find(l => l.id === language)?.name}
                       </span>
-                      <div className="w-px h-3.5 bg-muted hidden md:inline" />
-                      <button onClick={handleCopyCode} title="Copy code" className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-all">
+                      <div className="w-px h-3.5 bg-[#334155] hidden md:inline" />
+                      <button onClick={handleCopyCode} title="Copy code" className="p-1 rounded text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#151E30] transition-all">
                         <Copy className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={handleResetCode} title="Reset to default" className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-all">
+                      <button onClick={handleResetCode} title="Reset to default" className="p-1 rounded text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#151E30] transition-all">
                         <RotateCcw className="w-3.5 h-3.5" />
                       </button>
-                      <div className="w-px h-3.5 bg-muted" />
-                      <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors select-none">
-                        <input type="checkbox" checked={vimMode} onChange={(e) => setVimMode(e.target.checked)} className="rounded border-white/[0.12] bg-background w-3 h-3 accent-primary" />
+                      <div className="w-px h-3.5 bg-[#334155]" />
+                      <label className="flex items-center gap-1.5 text-[11px] text-[#94A3B8] cursor-pointer hover:text-[#F8FAFC] transition-colors select-none">
+                        <input type="checkbox" checked={vimMode} onChange={(e) => setVimMode(e.target.checked)} className="rounded border-[#334155] bg-[#111827] w-3 h-3 accent-[#FACC15]" />
                         Vim
                       </label>
                     </div>
                   </div>
                   
                   {/* Vim Status Bar */}
-                  <div id="vim-status" className={`text-[10px] px-3 bg-background text-foreground border-b border-border flex items-center font-mono transition-all ${vimMode ? 'h-5 opacity-100' : 'h-0 opacity-0 overflow-hidden border-none'}`}></div>
+                  <div id="vim-status" className={`text-[10px] px-3 bg-[#111827] text-[#F8FAFC] border-b border-[#334155] flex items-center font-mono transition-all ${vimMode ? 'h-5 opacity-100' : 'h-0 opacity-0 overflow-hidden border-none'}`}></div>
 
-                  <div className="flex-1 min-h-0 relative bg-card">
+                  <div className="flex-1 min-h-0 relative bg-[#080D1B]">
                     <Editor
                       height="100%"
                       language={language}
@@ -1275,11 +1275,11 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
                   </div>
                 </Panel>
 
-                <PanelResizeHandle className="h-1.5 rounded-full bg-accent hover:bg-primary/50 transition-colors cursor-row-resize" />
+                <PanelResizeHandle className="h-1.5 rounded-full bg-[#334155] hover:bg-[#FACC15] transition-colors cursor-row-resize" />
 
                 {/* ─── Console / Testcases ─────────────────────────────── */}
-                <Panel defaultSize={35} className="bg-card border border-border rounded-xl overflow-hidden flex flex-col shadow-sm">
-                  <div className="flex items-center border-b border-border bg-muted/50 px-2 py-1 gap-1 shrink-0">
+                <Panel defaultSize={35} className="bg-[#151E30] border border-[#334155] rounded-xl overflow-hidden flex flex-col shadow-sm">
+                  <div className="flex items-center border-b border-[#334155] bg-[#1E293B] px-2 py-1 gap-1 shrink-0">
                     <TabButton active={activeBottomTab === "testcases"} onClick={() => setActiveBottomTab("testcases")} icon={Terminal}>Output</TabButton>
                     <TabButton active={activeBottomTab === "console"} onClick={() => setActiveBottomTab("console")}>
                       Terminal
@@ -1293,7 +1293,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
                       )}
                     </TabButton>
                   </div>
-                  <div className="flex-1 min-h-0 p-3.5 overflow-auto bg-background/60">
+                  <div className="flex-1 min-h-0 p-3.5 overflow-auto bg-[#080D1B]">
                     {activeBottomTab === "testcases" ? (
                       <>
                         <div className="flex gap-1.5 mb-3">
@@ -1303,8 +1303,8 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
                               onClick={() => setActiveTestCase(index)}
                               className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1.5 ${
                                 activeTestCase === index 
-                                  ? "bg-secondary text-foreground border border-white/[0.12] shadow-xs" 
-                                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-transparent"
+                                  ? "bg-[#1E293B] text-[#F8FAFC] border border-[#334155] shadow-xs" 
+                                  : "text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#1E293B] border border-transparent"
                               }`}
                             >
                               Case {tc.id}
@@ -1314,27 +1314,27 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
                         
                         <div className="space-y-3 font-mono text-xs">
                           <div>
-                            <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider font-sans font-semibold">Input</div>
-                            <div className="bg-card border border-border rounded-lg p-2.5 text-foreground/80 whitespace-pre-wrap">{testCases[activeTestCase]?.input}</div>
+                            <div className="text-[10px] text-[#94A3B8] mb-1 uppercase tracking-wider font-sans font-semibold">Input</div>
+                            <div className="bg-[#151E30] border border-[#334155] rounded-lg p-2.5 text-[#F8FAFC] whitespace-pre-wrap">{testCases[activeTestCase]?.input}</div>
                           </div>
                           <div>
-                            <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider font-sans font-semibold">Expected Output</div>
-                            <div className="bg-card border border-border rounded-lg p-2.5 text-foreground/80 whitespace-pre-wrap">{testCases[activeTestCase]?.expected}</div>
+                            <div className="text-[10px] text-[#94A3B8] mb-1 uppercase tracking-wider font-sans font-semibold">Expected Output</div>
+                            <div className="bg-[#151E30] border border-[#334155] rounded-lg p-2.5 text-[#F8FAFC] whitespace-pre-wrap">{testCases[activeTestCase]?.expected}</div>
                           </div>
                         </div>
                       </>
                     ) : (
                       <div className="font-mono text-xs">
                         {!runResult && !isRunning && !isSubmitting && (
-                          <div className="text-muted-foreground text-xs flex flex-col h-full items-center justify-center py-8 gap-2">
-                            <Terminal className="w-6 h-6 text-muted-foreground/40" />
-                            <span>Click <kbd className="font-sans text-[10px] bg-secondary text-foreground/80 px-1.5 py-0.5 rounded border border-border">Run</kbd> or <kbd className="font-sans text-[10px] bg-secondary text-foreground/80 px-1.5 py-0.5 rounded border border-border">Submit</kbd> to execute your code.</span>
+                          <div className="text-[#94A3B8] text-xs flex flex-col h-full items-center justify-center py-8 gap-2">
+                            <Terminal className="w-6 h-6 text-[#94A3B8]/40" />
+                            <span>Click <kbd className="font-sans text-[10px] bg-[#1E293B] text-[#F8FAFC] px-1.5 py-0.5 rounded border border-[#334155]">Run</kbd> or <kbd className="font-sans text-[10px] bg-[#1E293B] text-[#F8FAFC] px-1.5 py-0.5 rounded border border-[#334155]">Submit</kbd> to execute your code.</span>
                           </div>
                         )}
                         
                         {(isRunning || isSubmitting) && (
-                           <div className="text-foreground/80 text-xs flex h-full items-center justify-center py-8 gap-2">
-                             <Spinner className="w-4 h-4 animate-spin text-primary" /> 
+                           <div className="text-[#F8FAFC] text-xs flex h-full items-center justify-center py-8 gap-2">
+                             <Spinner className="w-4 h-4 animate-spin text-[#FACC15]" /> 
                              <span>{isSubmitting ? "Submitting solution..." : "Running code tests..."}</span>
                            </div>
                         )}
@@ -1364,7 +1364,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
                               ) : (
                                 <><AlertTriangle className="w-5 h-5" /> Error</>
                               )}
-                              <span className="text-foreground/80 ml-auto text-[10px] font-sans font-medium bg-secondary px-2.5 py-0.5 rounded-full border border-border">
+                              <span className="text-[#F8FAFC] ml-auto text-[10px] font-sans font-medium bg-[#1E293B] px-2.5 py-0.5 rounded-full border border-[#334155]">
                                 {runResult.passedCount}/{runResult.totalCount} passed
                               </span>
                             </div>
@@ -1379,8 +1379,8 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
                                       onClick={() => setActiveResultCase(i)}
                                       className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1.5 ${
                                         activeResultCase === i
-                                          ? "bg-secondary text-foreground border border-white/[0.12] shadow-xs"
-                                          : "text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-transparent"
+                                          ? "bg-[#1E293B] text-[#F8FAFC] border border-[#334155] shadow-xs"
+                                          : "text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#1E293B] border border-transparent"
                                       }`}
                                     >
                                       <span className={`w-1.5 h-1.5 rounded-full ${r.passed ? "bg-emerald-500" : "bg-rose-500"}`} />
@@ -1392,14 +1392,14 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
                                 {runResult.results[activeResultCase] && (
                                   <div className="space-y-2.5">
                                     <div>
-                                      <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider font-sans font-semibold">Your Output</div>
+                                      <div className="text-[10px] text-[#94A3B8] mb-1 uppercase tracking-wider font-sans font-semibold">Your Output</div>
                                       <div className={`border rounded-lg p-2.5 whitespace-pre-wrap ${runResult.results[activeResultCase].passed ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" : "bg-rose-500/10 border-rose-500/25 text-rose-400"}`}>
                                         {runResult.results[activeResultCase].output || "No output"}
                                       </div>
                                     </div>
                                     <div>
-                                      <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider font-sans font-semibold">Expected</div>
-                                      <div className="bg-card border border-border rounded-lg p-2.5 text-foreground/80 whitespace-pre-wrap">
+                                      <div className="text-[10px] text-[#94A3B8] mb-1 uppercase tracking-wider font-sans font-semibold">Expected</div>
+                                      <div className="bg-[#151E30] border border-[#334155] rounded-lg p-2.5 text-[#F8FAFC] whitespace-pre-wrap">
                                         {runResult.results[activeResultCase].expected}
                                       </div>
                                     </div>
@@ -1418,9 +1418,9 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
 
                             {/* Logs */}
                             {runResult.logs.length > 0 && (
-                              <div className="mt-4 pt-3 border-t border-white/[0.07]">
-                                <div className="text-[10px] text-muted-foreground mb-1.5 uppercase tracking-wider font-sans font-semibold">Stdout</div>
-                                <div className="bg-card border border-border rounded-lg p-2.5 space-y-0.5 font-mono text-[11px] text-foreground/80 max-h-32 overflow-auto">
+                              <div className="mt-4 pt-3 border-t border-[#334155]">
+                                <div className="text-[10px] text-[#94A3B8] mb-1.5 uppercase tracking-wider font-sans font-semibold">Stdout</div>
+                                <div className="bg-[#151E30] border border-[#334155] rounded-lg p-2.5 space-y-0.5 font-mono text-[11px] text-[#F8FAFC] max-h-32 overflow-auto">
                                   {runResult.logs.map((log, i) => (
                                     <div key={i}>{log}</div>
                                   ))}
@@ -1429,8 +1429,8 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
                             )}
 
                             {/* Runtime Stats */}
-                            <div className="mt-4 pt-3 border-t border-white/[0.07] flex gap-4 text-muted-foreground font-sans text-[11px]">
-                              <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Runtime: <span className="text-foreground font-semibold">{runResult.runtime} ms</span></span>
+                            <div className="mt-4 pt-3 border-t border-[#334155] flex gap-4 text-[#94A3B8] font-sans text-[11px]">
+                              <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-[#FACC15]" /> Runtime: <span className="text-[#F8FAFC] font-semibold">{runResult.runtime} ms</span></span>
                             </div>
                           </motion.div>
                         )}
@@ -1449,27 +1449,27 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
       </div> {/* End MAIN ROW */}
 
       {/* ─── BOTTOM NAVIGATION BAR (STICKY ACTION BAR) ───────────────────── */}
-      <footer className="coding-action-bar h-[64px] border-t border-[#1F2937] bg-[#0A0A0A] flex items-center justify-between px-6 shrink-0 shadow-[0_-4px_24px_rgba(0,0,0,0.04)] pb-[env(safe-area-inset-bottom)]">
+      <footer className="coding-action-bar h-[60px] border-t border-[#334155] bg-[#111827] flex items-center justify-between px-6 shrink-0 shadow-lg pb-[env(safe-area-inset-bottom)]">
 
           <div className="flex items-center gap-2">
             <Link href="/problems">
-              <Button variant="ghost" className="h-[42px] px-4 text-[14px] font-semibold gap-2 text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-[#1F2937] rounded-[8px] btn-interactive">
+              <Button variant="ghost" className="h-[38px] px-3.5 text-xs font-semibold gap-2 text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#1E293B] rounded-lg">
                 <ArrowLeft className="w-4 h-4" />
                 <span className="hidden sm:inline">Back</span>
               </Button>
             </Link>
           </div>
           <div className="flex items-center gap-3">
-            <Button onClick={handleRun} disabled={isRunning || isSubmitting} className="h-[42px] px-5 text-[14px] font-bold gap-2 bg-[#1F2937] hover:bg-[#374151] text-[#E5E7EB] border border-[#374151] rounded-[8px] btn-interactive disabled:opacity-45 disabled:cursor-not-allowed">
+            <Button onClick={handleRun} disabled={isRunning || isSubmitting} className="h-[38px] px-5 text-xs font-bold gap-2 bg-[#1E293B] hover:bg-[#334155] text-[#F8FAFC] border border-[#334155] rounded-lg shadow-xs disabled:opacity-45 disabled:cursor-not-allowed">
               {isRunning ? <Spinner className="w-4 h-4 text-[#FACC15] animate-spin" /> : <Play className="w-4 h-4 text-[#FACC15]" />}
               <span>Run</span>
             </Button>
-            <Button onClick={handleSubmit} disabled={isRunning || isSubmitting} className="bg-[#7F1D1D] hover:bg-[#450A0A] text-white h-[42px] px-6 text-[14px] font-bold gap-2 shadow-sm border-0 rounded-[8px] btn-interactive disabled:opacity-45 disabled:cursor-not-allowed">
+            <Button onClick={handleSubmit} disabled={isRunning || isSubmitting} className="bg-[#7F1D1D] hover:bg-[#991B1B] text-white h-[38px] px-6 text-xs font-bold gap-2 shadow-xs border border-[#991B1B]/40 rounded-lg disabled:opacity-45 disabled:cursor-not-allowed">
               {isSubmitting ? <Spinner className="w-4 h-4 animate-spin text-[#FACC15]" /> : <Check className="w-4 h-4 text-[#FACC15]" />}
               <span>Submit</span>
             </Button>
             <Link href="/problems">
-              <Button variant="outline" className="h-[42px] px-5 text-[14px] font-semibold gap-2 bg-transparent hover:bg-[#1F2937] text-[#D1D5DB] border border-[#4B5563] rounded-[8px] btn-interactive">
+              <Button variant="outline" className="h-[38px] px-4 text-xs font-semibold gap-2 bg-transparent hover:bg-[#1E293B] text-[#94A3B8] hover:text-[#F8FAFC] border border-[#334155] rounded-lg">
                 <span className="hidden sm:inline">Next</span>
                 <ArrowRight className="w-4 h-4" />
               </Button>
@@ -1493,26 +1493,26 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 10 }}
               onClick={(e: any) => e.stopPropagation()}
-              className="bg-card border border-white/[0.12] rounded-2xl p-8 max-w-sm w-full shadow-2xl relative overflow-hidden"
+              className="bg-[#151E30] border border-[#334155] rounded-2xl p-8 max-w-sm w-full shadow-2xl relative overflow-hidden"
             >
               <div className="relative z-10 text-center">
-                <div className="w-16 h-16 bg-primary/15 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-primary/30">
-                  <User className="w-8 h-8 text-primary" />
+                <div className="w-16 h-16 bg-[#7F1D1D]/15 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-[#7F1D1D]/30">
+                  <User className="w-8 h-8 text-[#7F1D1D]" />
                 </div>
                 
-                <h3 className="text-xl font-bold text-foreground mb-2">Login Required</h3>
-                <p className="text-sm text-muted-foreground mb-8 leading-relaxed">
+                <h3 className="text-xl font-bold text-[#F8FAFC] mb-2">Login Required</h3>
+                <p className="text-sm text-[#94A3B8] mb-8 leading-relaxed">
                   You need to be logged in to save your code submissions and track your progress.
                 </p>
                 
                 <div className="flex flex-col gap-3">
                   <Link href="/login" className="w-full block">
-                    <Button className="w-full bg-primary hover:bg-primary/90 text-white transition-all border-0 font-semibold">
+                    <Button className="w-full bg-[#7F1D1D] hover:bg-[#991B1B] text-white transition-all border-0 font-bold">
                       Log In to Account
                     </Button>
                   </Link>
                   <Link href="/register" className="w-full block">
-                    <Button variant="outline" className="w-full bg-secondary border-border text-foreground hover:bg-accent transition-all">
+                    <Button variant="outline" className="w-full bg-[#1E293B] border-[#334155] text-[#F8FAFC] hover:bg-[#334155] transition-all">
                       Create an Account
                     </Button>
                   </Link>
@@ -1521,7 +1521,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
               
               <button 
                 onClick={() => setShowLoginModal(false)}
-                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md"
+                className="absolute top-4 right-4 text-[#94A3B8] hover:text-[#F8FAFC] transition-colors p-1 rounded-md"
               >
                 <XCircle className="w-5 h-5" />
               </button>
@@ -1543,12 +1543,12 @@ function SidebarIcon({ icon: Icon, label, shortcut, active = false, onClick }: a
       aria-label={label}
       className={`p-2 rounded-lg transition-all relative group ${
         active 
-          ? 'bg-primary/15 text-primary' 
-          : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+          ? 'bg-[#1E293B] text-[#FACC15]' 
+          : 'text-[#94A3B8] hover:bg-[#1E293B] hover:text-[#F8FAFC]'
       }`}
     >
       <Icon className="w-[18px] h-[18px]" />
-      {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 bg-primary rounded-r-full" />}
+      {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 bg-[#FACC15] rounded-r-full" />}
     </button>
   );
 }
@@ -1559,8 +1559,8 @@ function TabButton({ active, onClick, icon: Icon, children }: any) {
       onClick={onClick}
       className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-semibold transition-all ${
         active 
-          ? "bg-secondary text-foreground shadow-xs border border-white/[0.12]" 
-          : "text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-transparent"
+          ? "bg-[#151E30] text-[#F8FAFC] shadow-xs border border-[#334155]" 
+          : "text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#1E293B] border border-transparent"
       }`}
     >
       {Icon && <Icon className="w-3 h-3" />}
@@ -1571,8 +1571,8 @@ function TabButton({ active, onClick, icon: Icon, children }: any) {
 
 function MetaBadge({ icon: Icon, label, className = "" }: any) {
   return (
-    <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${
-      className || "text-foreground/80 bg-secondary border-border"
+    <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2.5 py-0.5 rounded-full border ${
+      className || "text-[#94A3B8] bg-[#1E293B] border-[#334155]"
     }`}>
       <Icon className="w-3 h-3" />
       {label}
@@ -1583,11 +1583,11 @@ function MetaBadge({ icon: Icon, label, className = "" }: any) {
 function EmptyState({ icon: Icon, title, description }: any) {
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="w-12 h-12 rounded-xl bg-secondary border border-border flex items-center justify-center mb-3">
-        <Icon className="w-6 h-6 text-muted-foreground" />
+      <div className="w-12 h-12 rounded-xl bg-[#1E293B] border border-[#334155] flex items-center justify-center mb-3">
+        <Icon className="w-6 h-6 text-[#94A3B8]" />
       </div>
-      <h3 className="text-sm font-semibold text-foreground mb-1">{title}</h3>
-      <p className="text-xs text-muted-foreground max-w-[240px] leading-relaxed">{description}</p>
+      <h3 className="text-sm font-semibold text-[#F8FAFC] mb-1">{title}</h3>
+      <p className="text-xs text-[#94A3B8] max-w-[240px] leading-relaxed">{description}</p>
     </div>
   );
 }
