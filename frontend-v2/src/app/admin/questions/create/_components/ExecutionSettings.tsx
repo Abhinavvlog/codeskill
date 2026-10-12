@@ -124,22 +124,27 @@ export default function ExecutionSettings() {
                 className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
                   execution[toggle.key]
                     ? "bg-indigo-50/50 border-indigo-200 dark:bg-indigo-500/10 dark:border-indigo-500/20"
-                    : "bg-muted/50/50 border-border dark:bg-card/50 dark:border-border"
+                    : "bg-muted/50 border-border dark:bg-card/50 dark:border-border"
                 }`}
               >
-                <div className="pt-0.5">
+                <div className="relative pt-0.5 shrink-0">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label={toggle.label}
+                    checked={execution[toggle.key]}
+                    onChange={(event) => updateExecution({ [toggle.key]: event.target.checked })}
+                    className="peer sr-only"
+                  />
                   <div
-                    className={`relative w-9 h-5 rounded-full transition-colors ${
+                    className={`relative w-9 h-5 rounded-full transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-500 peer-focus-visible:ring-offset-2 ${
                       execution[toggle.key] ? "bg-indigo-600 dark:bg-indigo-500" : "bg-gray-300 dark:bg-slate-600"
                     }`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      updateExecution({ [toggle.key]: !execution[toggle.key] });
-                    }}
+                    aria-hidden="true"
                   >
                     <div
-                      className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
-                        execution[toggle.key] ? "translate-x-4" : "translate-x-0.5"
+                      className={`absolute left-0 top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
+                        execution[toggle.key] ? "translate-x-[18px]" : "translate-x-0.5"
                       }`}
                     />
                   </div>

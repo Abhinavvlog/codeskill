@@ -110,7 +110,7 @@ export default function PublishingSection() {
             ].map((toggle) => (
               <label
                 key={toggle.key}
-                className={`flex flex-col items-center gap-2 p-3 rounded-xl border cursor-pointer text-center transition-all ${
+                className={`flex flex-col items-center gap-2 p-3 rounded-xl border cursor-pointer text-center focus-within:ring-2 focus-within:ring-indigo-500 focus-within:ring-offset-2 transition-all ${
                   publishing[toggle.key]
                     ? "bg-indigo-50 border-indigo-200 dark:bg-indigo-500/10 dark:border-indigo-500/20"
                     : "bg-muted/50 border-border dark:bg-card dark:border-border"
@@ -119,7 +119,7 @@ export default function PublishingSection() {
                 <input
                   type="checkbox"
                   checked={publishing[toggle.key]}
-                  onChange={() => updatePublishing({ [toggle.key]: !publishing[toggle.key] })}
+                  onChange={(event) => updatePublishing({ [toggle.key]: event.target.checked })}
                   className="sr-only"
                 />
                 <toggle.icon
