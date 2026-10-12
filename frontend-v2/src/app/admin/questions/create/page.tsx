@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { adminProblemsAPI, adminQuestionsAPI } from "@/config/api";
 import { useQuestionStore } from "./_store/useQuestionStore";
@@ -62,6 +62,7 @@ export default function CreateQuestionContent() {
 
 function UnifiedQuestionForm() {
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [loading, setLoading] = useState(false);
   const { addToast } = useToast();
 
@@ -107,26 +108,33 @@ function UnifiedQuestionForm() {
   }, [markSaved]);
 
   useEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+    const root = form.closest("main");
+    // Reset a selection that disappeared after changing the question type.
+    if (!navItems.some(({ id }) => id === useQuestionStore.getState().activeSection)) {
+      setActiveSection("basic-info");
+    }
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) setActiveSection(entry.target.id);
         });
       },
-      { rootMargin: "-20% 0px -80% 0px" }
+      { root, rootMargin: "-100px 0px -50% 0px", threshold: 0 }
     );
     navItems.forEach(({ id }) => {
-      const el = document.getElementById(id);
+      const el = form.querySelector<HTMLElement>(`[id="${id}"]`);
       if (el) observer.observe(el);
     });
     return () => observer.disconnect();
   }, [setActiveSection, navItems]);
 
   const scrollToSection = (id: string) => {
-    const el = document.getElementById(id);
+    const el = formRef.current?.querySelector<HTMLElement>(`[id="${id}"]`);
     if (el) {
-      const offsetPosition = el.getBoundingClientRect().top + window.scrollY - 100;
-      window.scrollTo({ top: offsetPosition, behavior: "smooth" });
+      setActiveSection(id);
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
@@ -286,6 +294,7 @@ function UnifiedQuestionForm() {
                   key={item.id}
                   type="button"
                   onClick={() => scrollToSection(item.id)}
+                  aria-current={activeSection === item.id ? "location" : undefined}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium rounded-lg transition-all text-left ${
                     activeSection === item.id
                       ? "bg-primary/10 text-primary"
@@ -305,7 +314,7 @@ function UnifiedQuestionForm() {
 
           {/* Main form */}
           <div className="flex-1 w-full min-w-0 pb-32">
-            <form id="question-form" onSubmit={handleSubmit} className="space-y-8 max-w-4xl">
+            <form ref={formRef} id="question-form" onSubmit={handleSubmit} className="space-y-8 max-w-4xl [&>div[id]]:scroll-mt-[100px]">
               <BasicInfo />
               
               {["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType) && (
