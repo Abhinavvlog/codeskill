@@ -55,6 +55,13 @@ export default function ProfilePage() {
     }
   }, [user, loading, router, reset]);
 
+  // The form appears after authentication; scroll only once its anchor is mounted.
+  useEffect(() => {
+    if (mounted && !loading && window.location.hash === "#account-preferences") {
+      document.getElementById("account-preferences")?.scrollIntoView({ block: "start" });
+    }
+  }, [mounted, loading]);
+
   if (!mounted || loading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-background min-h-screen">
