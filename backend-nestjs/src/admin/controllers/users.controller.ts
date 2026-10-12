@@ -11,6 +11,9 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AdminService } from '../admin.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AdminGuard } from '../../common/guards/admin.guard';
+import { SuperAdminGuard } from '../../common/guards/super-admin.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { UpdateUserRoleDto } from '../dto/update-user-role.dto';
 
 @ApiTags('Admin - Users')
 @ApiBearerAuth()
@@ -36,9 +39,13 @@ export class AdminUsersController {
   }
 
   @Put(':id/role')
-  @ApiOperation({ summary: 'Update user role (admin/campus/company)' })
-  async updateUserRole(@Param('id') id: string, @Body() body: any) {
-    const user = await this.adminService.updateUserRole(id, body);
+  @ApiOperation({ summary: 'Update user role with strict authorization checks' })
+  async updateUserRole(
+    @Param('id') id: string,
+    @Body() body: UpdateUserRoleDto,
+    @CurrentUser() currentUser: any,
+  ) {
+    const user = await this.adminService.updateUserRole(id, body, currentUser);
     return { success: true, user };
   }
 
@@ -49,30 +56,22 @@ export class AdminUsersController {
   }
 
   @Put(':id/promote')
-  @ApiOperation({ summary: 'Promote user to admin' })
-  async promoteUser(@Param('id') id: string) {
-    const user = await this.adminService.updateUserRole(id, {
-      isAdmin: true,
-      'profile.role': 'admin',
-    });
-    return {
-      success: true,
-      message: `${user.email} is now an admin`,
-      user,
-    };
+  @UseGuards(SuperAdminGuard)
+  @ApiOperation({ summary: 'Promote user to admin (super_admin only)' })
+  async promoteUser(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: any,
+  ) {
+    return this.adminService.promoteUser(id, currentUser);
   }
 
   @Put(':id/demote')
-  @ApiOperation({ summary: 'Demote user from admin' })
-  async demoteUser(@Param('id') id: string) {
-    const user = await this.adminService.updateUserRole(id, {
-      isAdmin: false,
-      'profile.role': 'student',
-    });
-    return {
-      success: true,
-      message: `${user.email} is no longer an admin`,
-      user,
-    };
+  @UseGuards(SuperAdminGuard)
+  @ApiOperation({ summary: 'Demote user from admin (super_admin only)' })
+  async demoteUser(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: any,
+  ) {
+    return this.adminService.demoteUser(id, currentUser);
   }
 }

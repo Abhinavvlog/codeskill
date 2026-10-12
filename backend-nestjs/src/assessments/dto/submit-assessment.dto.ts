@@ -11,10 +11,15 @@ export class QuestionAnswerDto {
   @IsString()
   questionId: string;
 
-  // Selected option index (0, 1, 2, 3...) or -1 if unselected
+  // Selected option index (0, 1, 2, 3...) or -1 if unselected (for single-choice MCQ)
   @IsNumber()
   @IsOptional()
   selectedAnswer?: number;
+
+  // Selected option indices for multiple-choice questions
+  @IsArray()
+  @IsOptional()
+  selectedAnswers?: number[];
 
   @IsNumber()
   @IsOptional()
@@ -31,14 +36,8 @@ export class QuestionAnswerDto {
   @IsString()
   @IsOptional()
   language?: string;
-
-  @IsNumber()
-  @IsOptional()
-  testCasesPassed?: number;
-
-  @IsNumber()
-  @IsOptional()
-  totalTestCases?: number;
+  // NOTE (AUD-002): testCasesPassed, totalTestCases, isCorrect, and marksAwarded
+  // are deliberately excluded. All evaluation is performed strictly server-side.
 }
 
 export class ProctoringViolationDto {

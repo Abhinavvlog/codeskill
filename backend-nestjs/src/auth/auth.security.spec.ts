@@ -1,12 +1,12 @@
 jest.mock('@nestjs/typeorm', () => ({ InjectRepository: () => () => {} }));
 jest.mock('../redis/otp.service', () => ({ OtpService: class {} }));
 
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { validateSync } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service';
-import { AdminLoginDto } from './dto/auth.dto';
+import { AdminLoginDto, ResetPasswordDto } from './dto/auth.dto';
 import { User } from '../database/entities/user.entity';
 
 const correctPassword = 'fixture-only-admin-credential';
@@ -17,6 +17,19 @@ describe('Admin password authentication security', () => {
   let service: AuthService;
   const repository = { findOne: jest.fn(), save: jest.fn() };
   const otp = { verifyOTP: jest.fn() };
+  const tokens = {
+    issueTokens: jest.fn().mockResolvedValue({
+      token: 'fixture-only-token',
+      refreshToken: 'fixture-only-refresh-token',
+      expiresIn: 3600,
+    }),
+    invalidateUserSessions: jest.fn().mockResolvedValue(undefined),
+  };
+  const throttle = {
+    assertAllowed: jest.fn().mockResolvedValue(undefined),
+    recordFailure: jest.fn().mockResolvedValue(undefined),
+    recordSuccess: jest.fn().mockResolvedValue(undefined),
+  };
 
   beforeAll(async () => {
     hash = await bcrypt.hash(correctPassword, 4);
@@ -32,8 +45,8 @@ describe('Admin password authentication security', () => {
       role: 'admin',
       isAdmin: true,
       isActive: true,
+      tokenVersion: 0,
     });
-    admin.getSignedJwtToken = jest.fn(() => 'fixture-only-token');
     repository.findOne.mockResolvedValue(admin);
     repository.save.mockImplementation(async (user: User) => user);
     otp.verifyOTP.mockResolvedValue(true);
@@ -41,6 +54,8 @@ describe('Admin password authentication security', () => {
       repository as never,
       otp as never,
       { get: jest.fn() } as never,
+      tokens as never,
+      throttle as never,
     );
   });
 
@@ -50,13 +65,10 @@ describe('Admin password authentication security', () => {
       password: correctPassword,
     });
     expect(result.token).toBe('fixture-only-token');
+    expect(result.refreshToken).toBe('fixture-only-refresh-token');
     expect(result.user.id).toBe(admin.id);
     expect(result.user).not.toHaveProperty('password');
-    expect(repository.findOne).toHaveBeenCalledWith(
-      expect.objectContaining({
-        select: expect.objectContaining({ isActive: true }),
-      }),
-    );
+    expect(throttle.recordSuccess).toHaveBeenCalled();
   });
 
   it.each([undefined, null, ''])(
@@ -66,7 +78,8 @@ describe('Admin password authentication security', () => {
       await expect(
         service.adminLogin({ email: admin.email, password: correctPassword }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
-      expect(admin.getSignedJwtToken).not.toHaveBeenCalled();
+      expect(tokens.issueTokens).not.toHaveBeenCalled();
+      expect(throttle.recordFailure).toHaveBeenCalled();
     },
   );
 
@@ -76,18 +89,20 @@ describe('Admin password authentication security', () => {
       await expect(
         service.adminLogin({ email: admin.email, password: missing as string }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
-      expect(admin.getSignedJwtToken).not.toHaveBeenCalled();
+      expect(tokens.issueTokens).not.toHaveBeenCalled();
+      expect(throttle.recordFailure).toHaveBeenCalled();
     },
   );
 
-  it('rejects a wrong password', async () => {
+  it('rejects a wrong password and records failure', async () => {
     await expect(
       service.adminLogin({
         email: admin.email,
         password: 'fixture-only-wrong',
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
-    expect(admin.getSignedJwtToken).not.toHaveBeenCalled();
+    expect(tokens.issueTokens).not.toHaveBeenCalled();
+    expect(throttle.recordFailure).toHaveBeenCalled();
   });
 
   it('rejects a deactivated admin even when the password is correct', async () => {
@@ -95,7 +110,7 @@ describe('Admin password authentication security', () => {
     await expect(
       service.adminLogin({ email: admin.email, password: correctPassword }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
-    expect(admin.getSignedJwtToken).not.toHaveBeenCalled();
+    expect(tokens.issueTokens).not.toHaveBeenCalled();
   });
 
   it('rejects a non-admin even when its password is correct', async () => {
@@ -103,7 +118,7 @@ describe('Admin password authentication security', () => {
     await expect(
       service.adminLogin({ email: admin.email, password: correctPassword }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
-    expect(admin.getSignedJwtToken).not.toHaveBeenCalled();
+    expect(tokens.issueTokens).not.toHaveBeenCalled();
   });
 
   it('rejects an unknown account', async () => {
@@ -111,24 +126,50 @@ describe('Admin password authentication security', () => {
     await expect(
       service.adminLogin({ email: admin.email, password: correctPassword }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(throttle.recordFailure).toHaveBeenCalled();
   });
 
   it('rejects deactivated admins after OTP verification as well', async () => {
     admin.isActive = false;
     await expect(
-      service.adminVerifyOtp({ email: admin.email, otp: 'fixture-code' }),
+      service.adminVerifyOtp({ email: admin.email, otp: '123456' }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
-    expect(admin.getSignedJwtToken).not.toHaveBeenCalled();
+    expect(tokens.issueTokens).not.toHaveBeenCalled();
     expect(repository.save).not.toHaveBeenCalled();
   });
 
-  it('retains valid active-admin OTP authentication', async () => {
+  it('retains valid active-admin OTP authentication with admin_login purpose', async () => {
     const result = await service.adminVerifyOtp({
       email: admin.email,
-      otp: 'fixture-code',
+      otp: '123456',
     });
     expect(result.token).toBe('fixture-only-token');
-    expect(otp.verifyOTP).toHaveBeenCalled();
+    expect(otp.verifyOTP).toHaveBeenCalledWith(admin.email, '123456', 'admin_login');
+  });
+
+  it('invalidates user sessions upon password reset', async () => {
+    const newPassword = 'SecureNewPassword123!';
+    await service.resetPassword({
+      email: admin.email,
+      otp: '123456',
+      newPassword,
+    });
+    expect(tokens.invalidateUserSessions).toHaveBeenCalledWith(admin.id);
+  });
+
+  it('rejects common/trivial passwords during reset', async () => {
+    await expect(
+      service.resetPassword({
+        email: admin.email,
+        otp: '123456',
+        newPassword: 'password123',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects passwordless login via sendOtp and verifyOtp', async () => {
+    await expect(service.sendOtp({ email: admin.email })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.verifyOtp({ email: admin.email, code: '123456' })).rejects.toBeInstanceOf(BadRequestException);
   });
 });
 

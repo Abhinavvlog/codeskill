@@ -23,23 +23,23 @@ export function Hero() {
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
-              className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-black/8 dark:border-border bg-white dark:bg-muted/60 text-xs font-semibold text-[#262626] dark:text-foreground shadow-xs"
+              className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#E5E7EB] dark:border-border bg-white dark:bg-muted/60 text-xs font-semibold text-[#1F2937] dark:text-foreground shadow-xs"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-[#FACC15] ring-2 ring-[#FACC15]/30 animate-pulse" />
               <span>Algorithmic Assessment &amp; Skill System</span>
             </motion.div>
 
-            {/* Primary Headline */}
+            {/* Primary Headline with Dark Red Emphasis & Yellow Accent */}
             <motion.h1
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.1 }}
-              className="text-4xl sm:text-5xl lg:text-[54px] font-extrabold tracking-tight leading-[1.12] text-foreground dark:text-foreground group/headline select-none"
+              className="text-4xl sm:text-5xl lg:text-[54px] font-extrabold tracking-tight leading-[1.12] text-[#1F2937] dark:text-foreground select-none"
             >
-              <span className="hover:text-amber-500 dark:hover:text-amber-400 transition-colors duration-300">Build Stronger</span> <br className="hidden sm:inline" />
-              <span className="text-foreground dark:text-foreground hover:text-amber-500 dark:hover:text-amber-400 relative inline-block transition-colors duration-300 group/coding">
+              <span>Build Stronger</span> <br className="hidden sm:inline" />
+              <span className="text-[#7F1D1D] dark:text-[#FACC15] relative inline-block transition-colors duration-300">
                 Coding Skills.
-                <span className="absolute bottom-1 left-0 right-0 h-2.5 bg-[rgba(245,158,11,0.25)] group-hover/coding:bg-[rgba(245,158,11,0.45)] group-hover/headline:bg-[rgba(245,158,11,0.45)] dark:bg-amber-400/30 dark:group-hover/coding:bg-amber-400/60 dark:group-hover/headline:bg-amber-400/60 -z-10 rounded-xs transition-all duration-300" />
+                <span className="absolute bottom-1.5 left-0 right-0 h-3 bg-[#FACC15]/30 dark:bg-[#FACC15]/20 -z-10 rounded-sm" />
               </span>
             </motion.h1>
 
@@ -48,12 +48,12 @@ export function Hero() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.2 }}
-              className="text-base sm:text-lg text-muted-foreground dark:text-muted-foreground leading-relaxed max-w-lg"
+              className="text-base sm:text-lg text-[#64748B] dark:text-muted-foreground leading-relaxed max-w-lg"
             >
-              Practice data structures and algorithms, take proctored assessments, and prepare for technical interviews.
+              Practice data structures and algorithms, take proctored assessments, and prepare for technical evaluations in an institutional-grade judge.
             </motion.p>
 
-            {/* CTA Group */}
+            {/* CTA Group: Start Coding & Explore Assessments */}
             <motion.div
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -61,18 +61,18 @@ export function Hero() {
               className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 w-full sm:w-auto pt-1"
             >
               <Link
-                href="/login"
-                className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-lg bg-foreground hover:bg-[#262626] text-background dark:bg-white dark:hover:bg-neutral-100 dark:text-black font-bold text-sm transition-all shadow-xs hover:shadow-md hover:scale-[1.02] group active:scale-[0.98]"
+                href="/problems"
+                className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-lg bg-[#7F1D1D] hover:bg-[#450A0A] text-white font-bold text-sm transition-all shadow-xs hover:shadow-md hover:scale-[1.02] group active:scale-[0.98]"
               >
-                <span>Log In</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                <span>Start Coding</span>
+                <ArrowRight className="w-4 h-4 text-[#FACC15] group-hover:translate-x-0.5 transition-transform" />
               </Link>
 
               <Link
                 href="/assessments"
-                className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-lg bg-background hover:bg-[#F5F5F5] text-foreground border border-black/10 dark:bg-card dark:hover:bg-muted dark:text-foreground dark:border-border font-semibold text-sm transition-all shadow-xs hover:border-black/20 dark:hover:border-foreground/30"
+                className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-lg bg-white hover:bg-[#FFFBF5] text-[#1F2937] border border-[#E5E7EB] dark:bg-card dark:hover:bg-muted dark:text-foreground dark:border-border font-semibold text-sm transition-all shadow-xs hover:border-[#7F1D1D]/30"
               >
-                <span>View Assessments</span>
+                <span>Explore Assessments</span>
               </Link>
             </motion.div>
 
@@ -81,9 +81,9 @@ export function Hero() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.4 }}
-              className="flex items-center gap-2 pt-2 text-xs text-muted-foreground"
+              className="flex items-center gap-2 pt-2 text-xs text-[#64748B] dark:text-muted-foreground"
             >
-              <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+              <ShieldCheck className="w-4 h-4 text-[#16A34A] shrink-0" />
               <span>Proctored execution environment with instant evaluation</span>
             </motion.div>
 

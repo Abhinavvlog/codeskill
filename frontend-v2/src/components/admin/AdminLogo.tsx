@@ -16,31 +16,23 @@ export function CodeSkillShieldIcon({ className = 'w-full h-full' }: { className
     <svg viewBox="0 0 160 160" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="shieldBorder" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#FF2E55" />
-          <stop offset="100%" stopColor="#C8102E" />
-        </linearGradient>
-        <linearGradient id="slashGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#FF2E55" />
-          <stop offset="100%" stopColor="#E11D48" />
-        </linearGradient>
-        <linearGradient id="bracketCyan" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#38BDF8" />
-          <stop offset="100%" stopColor="#0EA5E9" />
+          <stop offset="0%" stopColor="#7F1D1D" />
+          <stop offset="100%" stopColor="#450A0A" />
         </linearGradient>
       </defs>
       {/* Outer Hex Shield */}
       <polygon
         points="80,10 145,45 145,115 80,150 15,115 15,45"
-        fill="#0B0F19"
-        stroke="url(#shieldBorder)"
-        strokeWidth="8"
+        fill="#7F1D1D"
+        stroke="#450A0A"
+        strokeWidth="6"
         strokeLinejoin="round"
       />
       {/* Inner subtle outline */}
       <polygon
         points="80,22 135,51 135,109 80,138 25,109 25,51"
         fill="none"
-        stroke="rgba(255,255,255,0.08)"
+        stroke="rgba(255,255,255,0.15)"
         strokeWidth="2"
       />
       {/* Left Bracket < */}
@@ -51,17 +43,17 @@ export function CodeSkillShieldIcon({ className = 'w-full h-full' }: { className
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* Center Slash / */}
+      {/* Center Slash / (Yellow Accent) */}
       <path
         d="M87 54 L73 106"
-        stroke="url(#slashGrad)"
+        stroke="#FACC15"
         strokeWidth="11"
         strokeLinecap="round"
       />
       {/* Right Bracket > */}
       <path
         d="M100 62 L120 80 L100 98"
-        stroke="url(#bracketCyan)"
+        stroke="#FFFFFF"
         strokeWidth="11"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -106,9 +98,9 @@ export function AdminLogo({
 
   const iconElement = (
     <div
-      className={`relative shrink-0 flex items-center justify-center rounded-xl bg-slate-950 border border-slate-800 shadow-md shadow-rose-950/20 p-1.5 transition-transform duration-200 hover:scale-105 ${currentSize.box}`}
+      className={`relative shrink-0 flex items-center justify-center rounded-xl bg-white border border-[#E5E7EB] shadow-xs p-1.5 transition-transform duration-200 hover:scale-105 ${currentSize.box}`}
     >
-      <CodeSkillShieldIcon className="w-full h-full drop-shadow-sm" />
+      <CodeSkillShieldIcon className="w-full h-full drop-shadow-xs" />
     </div>
   );
 
@@ -121,17 +113,17 @@ export function AdminLogo({
       {iconElement}
       <div className="min-w-0 flex flex-col justify-center">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className={`${currentSize.title} font-black tracking-tight text-foreground leading-none`}>
-            Code<span className="text-rose-600 dark:text-rose-500">Skill</span>
+          <span className={`${currentSize.title} font-black tracking-tight text-[#1F2937] leading-none`}>
+            Code<span className="text-[#7F1D1D]">Skill</span>
           </span>
           <span
-            className={`${currentSize.badge} font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/25 rounded-md leading-none shadow-xs`}
+            className={`${currentSize.badge} font-bold uppercase tracking-wider bg-[#7F1D1D]/10 text-[#7F1D1D] border border-[#7F1D1D]/20 rounded-md leading-none shadow-xs`}
           >
             Admin
           </span>
         </div>
         {showSubtitle && (
-          <span className={`${currentSize.sub} font-semibold text-muted-foreground uppercase tracking-wider mt-1 truncate`}>
+          <span className={`${currentSize.sub} font-semibold text-[#64748B] uppercase tracking-wider mt-1 truncate`}>
             Chandigarh University
           </span>
         )}

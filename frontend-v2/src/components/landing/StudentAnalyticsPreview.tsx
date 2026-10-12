@@ -6,10 +6,10 @@ import { motion } from "framer-motion";
 import { ContributionSkyline, type ContributionDay, dayMs, DAY_MS, toKey } from "@/components/ui/contribution-skyline";
 
 const SKILL_METRICS = [
-  { name: "Data Structures", score: 88, color: "bg-primary" },
-  { name: "Algorithms & Logic", score: 76, color: "bg-indigo-500" },
-  { name: "Problem Solving", score: 79, color: "bg-emerald-500" },
-  { name: "Overall DSA Mastery", score: 82, color: "bg-cyan-500" },
+  { name: "Data Structures", score: 88, color: "bg-[#7F1D1D]" },
+  { name: "Algorithms & Logic", score: 76, color: "bg-[#D97706]" },
+  { name: "Problem Solving", score: 79, color: "bg-[#16A34A]" },
+  { name: "Overall DSA Mastery", score: 82, color: "bg-[#1F2937]" },
 ];
 
 function generateTelemetryActivity(): ContributionDay[] {
@@ -78,19 +78,19 @@ export function StudentAnalyticsPreview() {
   const telemetryData = useMemo(() => generateTelemetryActivity(), []);
 
   return (
-    <section className="w-full py-20 px-4 sm:px-6 md:px-8 border-b border-border/70 bg-background text-foreground">
+    <section className="w-full py-20 px-4 sm:px-6 md:px-8 border-b border-[#E5E7EB] bg-white text-[#1F2937] dark:text-foreground">
       <div className="max-w-7xl mx-auto space-y-12">
 
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-muted/60 text-foreground text-xs font-semibold uppercase tracking-wider">
-            <Activity className="w-3.5 h-3.5 text-primary" />
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#7F1D1D]/20 bg-[#7F1D1D]/5 text-[#7F1D1D] text-xs font-bold uppercase tracking-wider">
+            <Activity className="w-3.5 h-3.5 text-[#FACC15]" />
             <span>Telemetry &amp; Progress Insights</span>
           </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
-            Track coding progress in real-time.
+          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[#1F2937] dark:text-foreground">
+            Track coding progress in <span className="text-[#7F1D1D]">real-time.</span>
           </h2>
-          <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+          <p className="text-sm sm:text-base text-[#64748B] dark:text-muted-foreground leading-relaxed">
             Gain granular transparency over your algorithmic strengths, benchmark performance across campus percentiles, and build interview readiness.
           </p>
         </div>
@@ -107,16 +107,16 @@ export function StudentAnalyticsPreview() {
                 initial={{ opacity: 0, x: -10 }}
                 whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }}
-                className="p-5 rounded-2xl bg-card border border-border/80 shadow-xs flex items-center justify-between"
+                className="p-5 rounded-2xl bg-white dark:bg-card border border-[#E5E7EB] dark:border-border/80 shadow-xs flex items-center justify-between"
               >
                 <div className="space-y-1">
-                  <span className="text-xs font-mono uppercase text-muted-foreground">Problems Solved</span>
-                  <div className="text-3xl font-extrabold text-foreground font-mono">247</div>
-                  <div className="text-[11px] text-emerald-500 font-semibold flex items-center gap-1">
+                  <span className="text-xs font-mono uppercase text-[#64748B]">Problems Solved</span>
+                  <div className="text-3xl font-extrabold text-[#1F2937] dark:text-foreground font-mono">247</div>
+                  <div className="text-[11px] text-[#16A34A] font-semibold flex items-center gap-1">
                     <TrendingUp className="w-3 h-3" /> +14 this week
                   </div>
                 </div>
-                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-xl bg-[#16A34A]/10 text-[#16A34A] flex items-center justify-center">
                   <CheckCircle2 className="w-6 h-6" />
                 </div>
               </motion.div>
@@ -127,33 +127,33 @@ export function StudentAnalyticsPreview() {
                 whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: 0.1 }}
-                className="p-5 rounded-2xl bg-card border border-border/80 shadow-xs flex items-center justify-between"
+                className="p-5 rounded-2xl bg-white dark:bg-card border border-[#E5E7EB] dark:border-border/80 shadow-xs flex items-center justify-between"
               >
                 <div className="space-y-1">
-                  <span className="text-xs font-mono uppercase text-muted-foreground">Assessments Completed</span>
-                  <div className="text-3xl font-extrabold text-foreground font-mono">18</div>
-                  <div className="text-[11px] text-muted-foreground font-mono">Avg Score: 92.4%</div>
+                  <span className="text-xs font-mono uppercase text-[#64748B]">Assessments Completed</span>
+                  <div className="text-3xl font-extrabold text-[#7F1D1D] dark:text-foreground font-mono">18</div>
+                  <div className="text-[11px] text-[#64748B] font-mono">Avg Score: 92.4%</div>
                 </div>
-                <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                <div className="w-12 h-12 rounded-xl bg-[#7F1D1D]/10 text-[#7F1D1D] flex items-center justify-center">
                   <Trophy className="w-6 h-6" />
                 </div>
               </motion.div>
 
-              {/* Stat 3: Current Streak */}
+              {/* Stat 3: Current Streak with Yellow Flame */}
               <motion.div
                 initial={{ opacity: 0, x: -10 }}
                 whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: 0.2 }}
-                className="p-5 rounded-2xl bg-card border border-border/80 shadow-xs flex items-center justify-between"
+                className="p-5 rounded-2xl bg-white dark:bg-card border border-[#E5E7EB] dark:border-border/80 shadow-xs flex items-center justify-between"
               >
                 <div className="space-y-1">
-                  <span className="text-xs font-mono uppercase text-muted-foreground">Current Streak</span>
-                  <div className="text-3xl font-extrabold text-foreground font-mono">21 days</div>
-                  <div className="text-[11px] text-emerald-500 font-semibold">Top 3% consistency</div>
+                  <span className="text-xs font-mono uppercase text-[#64748B]">Current Streak</span>
+                  <div className="text-3xl font-extrabold text-[#1F2937] dark:text-foreground font-mono">21 days</div>
+                  <div className="text-[11px] text-[#D97706] font-semibold">Top 3% consistency</div>
                 </div>
-                <div className="w-12 h-12 rounded-xl bg-foreground/5 text-foreground flex items-center justify-center">
-                  <Flame className="w-6 h-6" />
+                <div className="w-12 h-12 rounded-xl bg-[#FACC15]/20 text-[#D97706] flex items-center justify-center border border-[#FACC15]/30">
+                  <Flame className="w-6 h-6 fill-[#FACC15]" />
                 </div>
               </motion.div>
 
@@ -164,7 +164,7 @@ export function StudentAnalyticsPreview() {
               initial={{ opacity: 0, scale: 0.98 }}
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
-              className="lg:col-span-7 p-6 sm:p-7 rounded-2xl bg-card border border-border/80 shadow-md flex flex-col justify-between space-y-6"
+              className="lg:col-span-7 p-6 sm:p-7 rounded-2xl bg-white dark:bg-card border border-[#E5E7EB] dark:border-border/80 shadow-md flex flex-col justify-between space-y-6"
             >
               <div className="flex items-center justify-between border-b border-border/60 pb-3">
                 <div>

@@ -5,6 +5,8 @@ import {
   Res,
   NotFoundException,
   BadRequestException,
+  UseGuards,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -15,9 +17,14 @@ import type { Response } from 'express';
 import { renderToStream } from '@react-pdf/renderer';
 import { StudentResultReport, StudentResult } from './student-result.pdf';
 import * as React from 'react';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
+@UseGuards(JwtAuthGuard)
 @Controller('reports')
 export class ReportsController {
+  private readonly logger = new Logger(ReportsController.name);
+
   constructor(
     @InjectRepository(AssessmentAttempt)
     private readonly attemptRepo: Repository<AssessmentAttempt>,
@@ -30,6 +37,7 @@ export class ReportsController {
   @Get('assessment-attempt/:attemptId')
   async getStudentResultReport(
     @Param('attemptId') attemptId: string,
+    @CurrentUser() user: any,
     @Res() res: Response,
   ) {
     if (!attemptId) {
@@ -40,6 +48,23 @@ export class ReportsController {
       where: [{ id: attemptId }, { mongoId: attemptId }],
     });
     if (!attempt) {
+      throw new NotFoundException('Attempt not found');
+    }
+
+    // Confidentiality enforcement (AUD-003):
+    // Only the student who completed the attempt or an administrator may view the report.
+    const studentId = attempt.studentId;
+    const isOwner = user && (user.id === studentId || user.mongoId === studentId);
+    const isAdmin =
+      user &&
+      (user.isAdmin === true ||
+        ['admin', 'super_admin', 'assessment_admin'].includes(user.role));
+
+    if (!isOwner && !isAdmin) {
+      this.logger.warn(
+        `User ${user?.id} attempted unauthorized access to attempt ${attemptId} of student ${studentId}`,
+      );
+      // Return 404 to prevent resource enumeration
       throw new NotFoundException('Attempt not found');
     }
 
@@ -97,6 +122,9 @@ export class ReportsController {
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="result-${attempt.studentUid || attempt.id}.pdf"`,
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0',
     });
 
     try {
@@ -105,7 +133,7 @@ export class ReportsController {
       );
       stream.pipe(res);
     } catch (error) {
-      console.error(error);
+      this.logger.error('Error generating PDF report', error);
       res.status(500).send('Error generating PDF');
     }
   }

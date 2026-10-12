@@ -20,9 +20,11 @@ import { University } from '../database/entities/university.entity';
 import { Submission } from '../database/entities/submission.entity';
 import { Assessment } from '../database/entities/assessment.entity';
 import { Question } from '../database/entities/question.entity';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
+    AuthModule,
     TypeOrmModule.forFeature([
       User,
       Problem,

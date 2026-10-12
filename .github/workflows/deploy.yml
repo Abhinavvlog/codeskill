@@ -32,24 +32,29 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
 
-      - name: Install and Build Backend
+      - name: Install, Test, and Build Backend
         working-directory: ./backend-nestjs
         run: |
           npm install --legacy-peer-deps
+          npm test
           npm run build
 
-      - name: Install and Build Frontend
+      - name: Install, Test, and Build Frontend
         working-directory: ./frontend-v2
         run: |
           echo "NEXT_PUBLIC_API_URL=https://codeskill.novaserve.cloud/api" >> .env
           echo "NEXT_PUBLIC_GOOGLE_CLIENT_ID=968191151730-mglf3rq4pldoqqhhcrbqfbt9g2j9n8o6.apps.googleusercontent.com" >> .env
           npm install --legacy-peer-deps
+          npm test
           npm run build
 
       - name: Package Application
         run: |
           # Create a deployment directory
           mkdir deploy_package
+
+          # Copy PM2 Ecosystem configuration
+          cp ecosystem.config.js deploy_package/
           
           # Copy Backend files
           mkdir -p deploy_package/backend-nestjs

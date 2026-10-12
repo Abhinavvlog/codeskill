@@ -43,11 +43,10 @@ describe('Navbar Component', () => {
     // Brand logo
     expect(screen.getByText('CodeSkill')).toBeInTheDocument();
 
-    // 6 Core Navigation Links
+    // 5 Core Navigation Links (deduplicated Contests & Leaderboard)
     expect(screen.getByRole('link', { name: 'Problems', exact: true })).toHaveAttribute('href', '/problems');
     expect(screen.getByRole('link', { name: 'Assessments', exact: true })).toHaveAttribute('href', '/assessments');
     expect(screen.getByRole('link', { name: 'Contests', exact: true })).toHaveAttribute('href', '/contests');
-    expect(screen.getByRole('link', { name: 'Contests Leaderboard', exact: true })).toHaveAttribute('href', '/contests/leaderboard');
     expect(screen.getByRole('link', { name: 'Leaderboard', exact: true })).toHaveAttribute('href', '/leaderboard');
     expect(screen.getByRole('link', { name: 'Dashboard', exact: true })).toHaveAttribute('href', '/dashboard');
   });
@@ -194,12 +193,11 @@ describe('Navbar Component', () => {
       expect(screen.getByRole('link', { name: 'Problems' })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Assessments' })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Contests' })).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Contests Leaderboard' })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Leaderboard' })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
     });
 
-    it('verifies wide desktop layout at 1440px: clean alignment and all 6 links visible', () => {
+    it('verifies wide desktop layout at 1440px: clean alignment and all 5 links visible', () => {
       act(() => {
         window.innerWidth = 1440;
       });

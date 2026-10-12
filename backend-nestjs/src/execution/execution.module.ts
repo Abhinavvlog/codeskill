@@ -11,8 +11,15 @@ import { GatewayModule } from '../gateway/gateway.module';
 import { RedisModule } from '../redis/redis.module';
 import { ProblemsModule } from '../problems/problems.module';
 
-const judgeProviders =
-  process.env.PROCESS_ROLE === 'judge' ? [JudgeProcessor] : [];
+import { SubmissionRateLimitGuard } from '../common/guards/submission-rate-limit.guard';
+
+const shouldRegisterJudge =
+  process.env.PROCESS_ROLE === 'judge' ||
+  process.env.PROCESS_ROLE === 'worker' ||
+  process.env.ENABLE_EMBEDDED_JUDGE === 'true' ||
+  (!process.env.PROCESS_ROLE && process.env.NODE_ENV !== 'production');
+
+const judgeProviders = shouldRegisterJudge ? [JudgeProcessor] : [];
 
 @Module({
   imports: [
@@ -25,7 +32,12 @@ const judgeProviders =
     ProblemsModule,
   ],
   controllers: [ExecutionController],
-  providers: [ExecutionService, AzureExecutionService, ...judgeProviders],
+  providers: [
+    ExecutionService,
+    AzureExecutionService,
+    SubmissionRateLimitGuard,
+    ...judgeProviders,
+  ],
   exports: [ExecutionService, AzureExecutionService],
 })
 export class ExecutionModule {}

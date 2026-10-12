@@ -46,7 +46,11 @@ export class CompanyController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update company profile' })
-  async updateCompany(@Param('id') id: string, @Body() body: any) {
-    return this.companiesService.updateCompany(id, body);
+  async updateCompany(
+    @Param('id') id: string,
+    @Body() body: any,
+    @Request() req: any,
+  ) {
+    return this.companiesService.updateCompany(id, body, req.user);
   }
 }

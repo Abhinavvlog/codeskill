@@ -96,19 +96,19 @@ export function FooterSectionView({
 }: FooterSectionProps) {
   return (
     <footer
-      className={`relative w-full max-w-7xl mx-auto flex flex-col items-center justify-center rounded-t-3xl border-t border-border/70 bg-[radial-gradient(35%_128px_at_50%_0%,rgba(200,16,46,0.12),transparent)] px-6 py-12 lg:py-16 ${className}`}
+      className={`relative w-full max-w-7xl mx-auto flex flex-col items-center justify-center rounded-t-3xl border-t border-[#E5E7EB] dark:border-border/70 bg-white dark:bg-card px-6 py-12 lg:py-16 ${className}`}
     >
-      <div className="bg-primary/30 absolute top-0 right-1/2 left-1/2 h-px w-1/3 -translate-x-1/2 -translate-y-1/2 rounded-full blur" />
+      <div className="bg-[#7F1D1D]/20 absolute top-0 right-1/2 left-1/2 h-px w-1/3 -translate-x-1/2 -translate-y-1/2 rounded-full blur" />
 
       <div className="grid w-full gap-8 xl:grid-cols-3 xl:gap-8">
         <AnimatedContainer className="space-y-4">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-950 border border-primary/30 shadow-xs flex items-center justify-center p-1.5 shrink-0 mt-0.5">
+            <div className="w-10 h-10 rounded-xl overflow-hidden bg-[#7F1D1D] border border-[#7F1D1D]/30 shadow-xs flex items-center justify-center p-1.5 shrink-0 mt-0.5">
               <svg viewBox="0 0 160 160" className="w-full h-full" fill="none">
                 <polygon
                   points="80,10 145,45 145,115 80,150 15,115 15,45"
-                  fill="#0F172A"
-                  stroke="#C8102E"
+                  fill="#7F1D1D"
+                  stroke="#FFFFFF"
                   strokeWidth="8"
                   strokeLinejoin="round"
                 />
@@ -121,13 +121,13 @@ export function FooterSectionView({
                 />
                 <path
                   d="M85 55 L75 105"
-                  stroke="#C8102E"
+                  stroke="#FACC15"
                   strokeWidth="10"
                   strokeLinecap="round"
                 />
                 <path
                   d="M100 62 L120 80 L100 98"
-                  stroke="#38BDF8"
+                  stroke="#FFFFFF"
                   strokeWidth="10"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -137,15 +137,15 @@ export function FooterSectionView({
 
             <div className="space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-extrabold text-xl text-foreground tracking-tight">
+                <span className="font-extrabold text-xl text-[#1F2937] dark:text-foreground tracking-tight">
                   {brandName}
                 </span>
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#7F1D1D]/10 text-[#7F1D1D] border border-[#7F1D1D]/20">
                   by Chandigarh University
                 </span>
               </div>
-              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                <GraduationCap className="w-3.5 h-3.5 text-primary shrink-0" />
+              <p className="text-xs font-medium text-[#64748B] flex items-center gap-1.5">
+                <GraduationCap className="w-3.5 h-3.5 text-[#7F1D1D] shrink-0" />
                 <span>Department of Skill Development &amp; Lab</span>
               </p>
             </div>

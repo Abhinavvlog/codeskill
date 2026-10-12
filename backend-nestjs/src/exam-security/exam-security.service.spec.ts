@@ -1,15 +1,16 @@
-import { Test, TestingModule } from '@nestjs/testing';
+jest.mock('@nestjs/typeorm', () => ({ InjectRepository: () => () => {} }));
+
 import { ExamSecurityService } from './exam-security.service';
 
 describe('ExamSecurityService', () => {
   let service: ExamSecurityService;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [ExamSecurityService],
-    }).compile();
-
-    service = module.get<ExamSecurityService>(ExamSecurityService);
+  beforeEach(() => {
+    service = new ExamSecurityService(
+      {} as never,
+      {} as never,
+      {} as never,
+    );
   });
 
   it('should be defined', () => {

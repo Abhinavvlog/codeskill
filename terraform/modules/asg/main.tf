@@ -88,31 +88,30 @@ cd /opt/codeskill
 npm install --prefix backend-nestjs --omit=dev --legacy-peer-deps
 npm install --prefix frontend-v2 --omit=dev --legacy-peer-deps
 
-# Create .env for backend
-cat << 'ENVFILE' > /opt/codeskill/backend-nestjs/.env
-DATABASE_URL="postgresql://${var.db_username}:${var.db_password}@${var.db_endpoint}/${var.db_name}?schema=public"
+# Fetch backend .env securely from AWS SSM Parameter Store (AUD-004, X-03)
+if aws ssm get-parameter --name "/${var.name_prefix}/production/backend_env" --with-decryption --query "Parameter.Value" --output text > /opt/codeskill/backend-nestjs/.env 2>/dev/null; then
+  echo "Loaded backend configuration securely from AWS SSM Parameter Store."
+else
+  # Minimal fallback configuration without embedded default admin passwords or weak JWT secrets
+  cat << 'ENVFILE' > /opt/codeskill/backend-nestjs/.env
+DATABASE_URL="postgresql://${var.db_username}:${var.db_password}@${var.db_endpoint}/${var.db_name}?sslmode=require"
 REDIS_HOST="${var.redis_endpoint}"
 REDIS_PORT=6379
-JWT_SECRET=supersecretcodeskilljwt
-JWT_EXPIRE=30d
-ADMIN_EMAILS=admin@codeskill.com,admin@cuchd.in,md.shadab.azam.ansari@gmail.com,kanhamishra555@gmail.com,shaikhmustakim2942@gmail.com
-ADMIN_PASSWORD=admin123
-ADMIN_CUCHD_PASSWORD=Admin@CodeSkill2026
+NODE_ENV=production
 AWS_SES_EMAIL=noreply@codeskill.novaserve.cloud
 AWS_SES_SENDER=noreply@codeskill.novaserve.cloud
-NODE_ENV=production
 ENVFILE
+fi
+chmod 600 /opt/codeskill/backend-nestjs/.env
 chown ec2-user:ec2-user /opt/codeskill/backend-nestjs/.env
 
-# Run database migrations
+# Run database migrations (AUD-011: runtime schema sync disabled in production)
 cd /opt/codeskill/backend-nestjs
 NODE_ENV=production node dist/database/run-practice-submission-source.js || true
 
-# Sync database schema with RDS PostgreSQL
-npm run typeorm:sync
-
-pm2 start dist/main.js --name "codeskill-backend"
-cd /opt/codeskill/frontend-v2 && pm2 start npm --name "codeskill-frontend" -- run start
+# Start API server, Judge Worker, and Next.js frontend via ecosystem configuration (AUD-009, AUD-021)
+cd /opt/codeskill
+pm2 start ecosystem.config.js
 
 pm2 save
 EOSUDO

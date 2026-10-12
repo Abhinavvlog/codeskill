@@ -29,9 +29,11 @@ import { AuditLog } from './entities/audit-log.entity';
 import { EmailJob } from './entities/email-job.entity';
 import { ExamSession } from './entities/exam-session.entity';
 import { ExamSecurityEvent } from './entities/exam-security-event.entity';
+import { RefreshToken } from './entities/refresh-token.entity';
 
 const entities = [
   User,
+  RefreshToken,
   Problem,
   ProblemMetadata,
   ProblemStatement,
@@ -65,13 +67,16 @@ const entities = [
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => {
+        const isProduction = process.env.NODE_ENV === 'production';
+        const isSyncAllowed = !isProduction && process.env.DB_SYNCHRONIZE === 'true';
+
         const url = configService.get<string>('database.postgres.url');
         if (url) {
           return {
             type: 'postgres',
             url,
             autoLoadEntities: true,
-            synchronize: process.env.NODE_ENV !== 'production',
+            synchronize: isSyncAllowed,
             invalidWhereValuesBehavior: {
               null: 'ignore',
             },
@@ -88,7 +93,7 @@ const entities = [
             ? { rejectUnauthorized: false }
             : false,
           autoLoadEntities: true,
-          synchronize: process.env.NODE_ENV !== 'production',
+          synchronize: isSyncAllowed,
           invalidWhereValuesBehavior: {
             null: 'ignore',
           },

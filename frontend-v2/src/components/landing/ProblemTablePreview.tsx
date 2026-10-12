@@ -37,33 +37,33 @@ export function ProblemTablePreview() {
         {/* Section Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-              Problems
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[#7F1D1D] dark:text-foreground">
+              Coding Challenges
             </h2>
-            <p className="text-xs sm:text-sm text-neutral-600 dark:text-neutral-400">
-              Curated algorithmic challenges categorized by concept and difficulty.
+            <p className="text-xs sm:text-sm text-[#64748B] dark:text-muted-foreground mt-0.5">
+              Curated algorithmic challenges categorized by concept, data structure, and difficulty.
             </p>
           </div>
 
           <Link
             href="/problems"
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground hover:underline"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#7F1D1D] hover:text-[#450A0A] hover:underline transition-colors"
           >
             <span>View all problems</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <ArrowRight className="w-3.5 h-3.5 text-[#FACC15]" />
           </Link>
         </div>
 
         {/* Search & Filter Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-md bg-card border border-border">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-xl bg-white dark:bg-card border border-[#E5E7EB] dark:border-border shadow-xs">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748B]" />
             <input
               type="text"
-              placeholder="Search problems..."
+              placeholder="Search problems by name or topic..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-md bg-background border border-border focus:outline-none focus:border-foreground transition-colors"
+              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg bg-[#FFFBF5] dark:bg-background border border-[#E5E7EB] dark:border-border text-[#1F2937] focus:outline-none focus:border-[#7F1D1D] transition-colors"
             />
           </div>
 
@@ -72,10 +72,10 @@ export function ProblemTablePreview() {
               <button
                 key={diff}
                 onClick={() => setFilterDifficulty(diff)}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   filterDifficulty === diff
-                    ? "bg-black text-white dark:bg-white dark:text-black font-semibold"
-                    : "bg-background text-neutral-600 dark:text-neutral-400 hover:text-foreground border border-border"
+                    ? "bg-[#7F1D1D] text-white shadow-xs"
+                    : "bg-white text-[#64748B] hover:text-[#1F2937] border border-[#E5E7EB] hover:bg-[#FFFBF5]"
                 }`}
               >
                 {diff}
@@ -84,56 +84,56 @@ export function ProblemTablePreview() {
           </div>
         </div>
 
-        {/* LeetCode-style Problem Table */}
-        <div className="rounded-md border border-border bg-card overflow-hidden">
+        {/* Problem Table */}
+        <div className="rounded-xl border border-[#E5E7EB] dark:border-border bg-white dark:bg-card overflow-hidden shadow-xs">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-border bg-neutral-50 dark:bg-neutral-900/50 text-neutral-500 font-medium">
-                <th className="py-2.5 px-4 w-10 text-center">Status</th>
-                <th className="py-2.5 px-4">Title</th>
-                <th className="py-2.5 px-4 w-32">Difficulty</th>
-                <th className="py-2.5 px-4 w-28">Acceptance</th>
-                <th className="py-2.5 px-4 w-24 text-right">Action</th>
+              <tr className="border-b border-[#E5E7EB] bg-[#FFFBF5] dark:bg-neutral-900/50 text-[#64748B] font-semibold">
+                <th className="py-3 px-4 w-12 text-center">Status</th>
+                <th className="py-3 px-4">Title</th>
+                <th className="py-3 px-4 w-32">Difficulty</th>
+                <th className="py-3 px-4 w-28">Acceptance</th>
+                <th className="py-3 px-4 w-24 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-y divide-[#E5E7EB] dark:divide-border">
               {filteredProblems.map((prob) => (
                 <tr
                   key={prob.id}
-                  className="hover:bg-neutral-50 dark:hover:bg-neutral-900/40 transition-colors"
+                  className="hover:bg-[#FFFBF5]/70 dark:hover:bg-neutral-900/40 transition-colors"
                 >
-                  <td className="py-3 px-4 text-center">
+                  <td className="py-3.5 px-4 text-center">
                     {prob.solved ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 inline-block" />
+                      <CheckCircle2 className="w-4 h-4 text-[#16A34A] inline-block" />
                     ) : (
-                      <span className="w-2 h-2 rounded-full bg-neutral-300 dark:bg-neutral-700 inline-block" />
+                      <span className="w-2 h-2 rounded-full bg-[#E5E7EB] inline-block" />
                     )}
                   </td>
-                  <td className="py-3 px-4 font-medium text-foreground">
-                    <Link href={`/problems/${prob.id}`} className="hover:underline">
+                  <td className="py-3.5 px-4 font-semibold text-[#1F2937] dark:text-foreground">
+                    <Link href={`/problems/${prob.id}`} className="hover:text-[#7F1D1D] hover:underline transition-colors">
                       {prob.title}
                     </Link>
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="py-3.5 px-4">
                     <span
-                      className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${
+                      className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
                         prob.difficulty === "Easy"
-                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                          ? "bg-[#16A34A]/10 text-[#16A34A] border border-[#16A34A]/20"
                           : prob.difficulty === "Medium"
-                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
-                          : "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20"
+                          ? "bg-[#D97706]/10 text-[#D97706] border border-[#D97706]/20"
+                          : "bg-[#7F1D1D]/10 text-[#7F1D1D] border border-[#7F1D1D]/20"
                       }`}
                     >
                       {prob.difficulty}
                     </span>
                   </td>
-                  <td className="py-3 px-4 font-mono text-neutral-600 dark:text-neutral-400">
+                  <td className="py-3.5 px-4 font-mono text-[#64748B]">
                     {prob.acceptance}
                   </td>
-                  <td className="py-3 px-4 text-right">
+                  <td className="py-3.5 px-4 text-right">
                     <Link
                       href={`/problems/${prob.id}`}
-                      className="px-2.5 py-1 rounded border border-border bg-background hover:bg-neutral-100 dark:hover:bg-neutral-800 text-[11px] font-medium text-foreground transition-colors inline-block"
+                      className="px-3 py-1 rounded-lg border border-[#E5E7EB] bg-white hover:bg-[#7F1D1D] hover:text-white hover:border-[#7F1D1D] text-[11px] font-bold text-[#1F2937] transition-all inline-block shadow-xs"
                     >
                       Solve
                     </Link>

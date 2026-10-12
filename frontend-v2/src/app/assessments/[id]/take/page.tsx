@@ -584,9 +584,9 @@ export default function TakeAssessmentPage({
           {/* Permanent Top Submit Test Button */}
           <button
             onClick={() => setShowSubmitModal(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-md bg-primary hover:bg-primary/90 active:bg-primary/80 text-white text-xs font-semibold uppercase tracking-wider transition-all shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-xl bg-[#7F1D1D] hover:bg-[#450A0A] text-white text-xs font-bold uppercase tracking-wider transition-all shadow-xs"
           >
-            <Send className="w-3.5 h-3.5" />
+            <Send className="w-3.5 h-3.5 text-[#FACC15]" />
             <span className="hidden sm:inline">Submit Test</span>
           </button>
         </div>
@@ -664,17 +664,17 @@ export default function TakeAssessmentPage({
                       <button
                         type="button"
                         onClick={() => setShowSubmitModal(true)}
-                        className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-md shadow-primary/20"
+                        className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-[#7F1D1D] hover:bg-[#450A0A] text-white text-xs font-bold transition-all shadow-xs"
                       >
-                        <Send className="w-3.5 h-3.5" /> Submit Assessment
+                        <Send className="w-3.5 h-3.5 text-[#FACC15]" /> Submit Assessment
                       </button>
                     ) : (
                       <button
                         type="button"
                         onClick={handleSaveAndNext}
-                        className="inline-flex items-center gap-1 px-4 sm:px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-sm shadow-primary/20"
+                        className="inline-flex items-center gap-1 px-4 sm:px-5 py-2 rounded-xl bg-[#7F1D1D] hover:bg-[#450A0A] text-white text-xs font-bold transition-all shadow-xs"
                       >
-                        Save & Next <ChevronRight className="w-4 h-4" />
+                        Save & Next <ChevronRight className="w-4 h-4 text-[#FACC15]" />
                       </button>
                     )}
                   </div>
@@ -953,7 +953,7 @@ export default function TakeAssessmentPage({
                       type="button"
                       onClick={() => setCurrentIndex(idx)}
                       className={`h-9 rounded-xl font-mono text-xs font-bold border transition-all flex items-center justify-center relative ${btnStyle} ${
-                        isCurrent ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
+                        isCurrent ? "ring-2 ring-[#FACC15] bg-[#FACC15]/20 text-[#854D0E] border-[#FACC15] font-bold" : ""
                       }`}
                     >
                       {idx + 1}
@@ -985,7 +985,7 @@ export default function TakeAssessmentPage({
 
               <button
                 onClick={() => setShowSubmitModal(true)}
-                className="w-full py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold rounded-xl transition-all shadow-md shadow-primary/20"
+                className="w-full py-2.5 bg-[#7F1D1D] hover:bg-[#450A0A] text-white text-xs font-bold rounded-xl transition-all shadow-sm"
               >
                 Finish & Submit Test
               </button>
@@ -1045,9 +1045,9 @@ export default function TakeAssessmentPage({
                 type="button"
                 disabled={isSubmitting}
                 onClick={() => submitExam(false)}
-                className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold rounded-xl transition-all shadow-md shadow-primary/20 disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#7F1D1D] hover:bg-[#450A0A] text-white text-xs font-bold rounded-xl transition-all shadow-sm disabled:opacity-50"
               >
-                {isSubmitting ? <Spinner className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {isSubmitting ? <Spinner className="w-4 h-4 animate-spin text-[#FACC15]" /> : <Send className="w-4 h-4 text-[#FACC15]" />}
                 Yes, Submit Now
               </button>
             </div>

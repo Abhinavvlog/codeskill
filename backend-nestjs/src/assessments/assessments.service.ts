@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Not } from 'typeorm';
@@ -13,6 +14,7 @@ import { AuditLog } from '../database/entities/audit-log.entity';
 import { CreateAssessmentDto } from './dto/create-assessment.dto';
 import { UpdateAssessmentDto } from './dto/update-assessment.dto';
 import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
+import { ExecutionService } from '../execution/execution.service';
 
 @Injectable()
 export class AssessmentsService {
@@ -25,6 +27,8 @@ export class AssessmentsService {
     private readonly questionRepo: Repository<Question>,
     @InjectRepository(AuditLog)
     private readonly auditLogRepo: Repository<AuditLog>,
+    @Optional()
+    private readonly executionService?: ExecutionService,
   ) {}
 
   // -------------------------------------------------------------
@@ -924,14 +928,21 @@ export class AssessmentsService {
       );
     }
 
+    // NEW-001: Attempt candidate ownership validation
+    if (attempt.studentId !== studentId) {
+      throw new ForbiddenException('You do not own this assessment attempt');
+    }
+
     if (dto.responses && Array.isArray(dto.responses)) {
       attempt.responses = dto.responses.map((r) => ({
         questionId: String(r.questionId),
         selectedAnswer: r.selectedAnswer ?? -1,
+        selectedAnswers: r.selectedAnswers,
         code: r.code || '',
         language: r.language || 'python',
-        testCasesPassed: r.testCasesPassed || 0,
-        totalTestCases: r.totalTestCases || 0,
+        // AUD-002: Server-controlled evaluation only; zeroed out during autosave
+        testCasesPassed: 0,
+        totalTestCases: 0,
         isCorrect: false,
         marksAwarded: 0,
         timeSpentSeconds: r.timeSpentSeconds || 0,
@@ -974,8 +985,8 @@ export class AssessmentsService {
     const studentId = String(studentUser.id || studentUser._id);
     const attempt = await this.attemptRepo.findOne({
       where: [
-        { assessmentId: assessment.id, studentId, status: 'in_progress' },
-        { assessmentId: id, studentId, status: 'in_progress' },
+        { assessmentId: assessment.id, studentId },
+        { assessmentId: id, studentId },
       ],
       order: { startedAt: 'DESC' },
     });
@@ -984,7 +995,27 @@ export class AssessmentsService {
       return this.getStudentResult(id, studentUser);
     }
 
-    // SERVER-SIDE EVALUATION
+    // NEW-001: Candidate attempt ownership validation
+    if (attempt.studentId !== studentId) {
+      throw new ForbiddenException('You do not own this assessment attempt');
+    }
+
+    // NEW-003: Idempotent submission: if already submitted, return the final scorecard
+    if (attempt.status === 'submitted' || attempt.status === 'auto_submitted') {
+      return this.getStudentResult(id, studentUser);
+    }
+
+    // NEW-002: Assessment deadline check with 5-minute grace period
+    const now = new Date();
+    if (assessment.endTime) {
+      const gracePeriodMs = 5 * 60 * 1000;
+      const deadline = new Date(new Date(assessment.endTime).getTime() + gracePeriodMs);
+      if (now > deadline) {
+        throw new BadRequestException('The examination submission deadline has expired.');
+      }
+    }
+
+    // SERVER-SIDE EVALUATION (AUD-002 & NEW-003)
     const questionIds = assessment.questions || [];
     const questions =
       questionIds.length > 0
@@ -1000,35 +1031,64 @@ export class AssessmentsService {
     let totalWrong = 0;
     let totalSkipped = 0;
 
-    const evaluatedResponses = (dto.responses || []).map((r) => {
+    const evaluatedResponses: any[] = [];
+
+    for (const r of (dto.responses || [])) {
       const q = questionMap.get(String(r.questionId));
       if (!q) {
-        return {
+        evaluatedResponses.push({
           questionId: String(r.questionId),
           selectedAnswer: r.selectedAnswer ?? -1,
           isCorrect: false,
           marksAwarded: 0,
           timeSpentSeconds: r.timeSpentSeconds || 0,
           status: 'skipped',
-        };
+        });
+        continue;
       }
 
-      const isCoding =
-        q.questionType === 'coding' || q.questionType === 'algorithmic';
+      const qType = (q.questionType || '').toLowerCase();
+      const isCoding = qType === 'coding' || qType === 'algorithmic' || qType === 'dsa';
       let isAttempted = false;
       let isCorrect = false;
       let marksAwarded = 0;
+      let testCasesPassed = 0;
+      let totalTestCases = 0;
 
       if (isCoding) {
         const hasCode = r.code && r.code.trim().length > 0;
         if (hasCode) {
           isAttempted = true;
           totalAttempted++;
-          const passed = Number(r.testCasesPassed) || 0;
-          const totalTc = Number(r.totalTestCases) || 1;
-          const ratio = Math.min(1, Math.max(0, passed / totalTc));
+
+          // Server-side code execution against verified test cases (AUD-002)
+          const testCases = Array.isArray(q.testCases) ? q.testCases : [];
+          totalTestCases = testCases.length;
+
+          if (this.executionService && totalTestCases > 0) {
+            try {
+              const tcInputs = testCases.map((tc, idx) => ({
+                id: tc.id || idx + 1,
+                input: tc.input || '',
+                expected: tc.expectedOutput || '',
+              }));
+              const results = await this.executionService.runCode(
+                r.code!,
+                r.language || 'python',
+                tcInputs,
+              );
+              testCasesPassed = results.filter((res) => res.passed).length;
+            } catch (execErr: any) {
+              testCasesPassed = 0;
+            }
+          } else {
+            testCasesPassed = 0;
+          }
+
+          const ratio = totalTestCases > 0 ? Math.min(1, Math.max(0, testCasesPassed / totalTestCases)) : 0;
           marksAwarded = Math.round(ratio * (q.marks || 5) * 10) / 10;
           isCorrect = ratio >= 0.99;
+
           if (isCorrect) totalCorrect++;
           else if (ratio > 0) totalCorrect++;
           else totalWrong++;
@@ -1036,41 +1096,74 @@ export class AssessmentsService {
           totalSkipped++;
         }
       } else {
-        isAttempted = r.selectedAnswer !== undefined && r.selectedAnswer >= 0;
-        if (isAttempted) {
-          totalAttempted++;
-          if (r.selectedAnswer === q.correctAnswer) {
-            isCorrect = true;
-            marksAwarded = q.marks || 1;
-            totalCorrect++;
+        // MCQ (single choice or multiple choice)
+        const isMulti = qType === 'multiple_choice' || (Array.isArray(q.correctAnswers) && q.correctAnswers.length > 0);
+
+        if (isMulti) {
+          const selectedList = Array.isArray(r.selectedAnswers)
+            ? r.selectedAnswers
+            : r.selectedAnswer !== undefined && r.selectedAnswer >= 0
+              ? [r.selectedAnswer]
+              : [];
+          isAttempted = selectedList.length > 0;
+          if (isAttempted) {
+            totalAttempted++;
+            const correctList = Array.isArray(q.correctAnswers)
+              ? q.correctAnswers
+              : [q.correctAnswer];
+            const sortedSelected = [...selectedList].sort((a, b) => a - b);
+            const sortedCorrect = [...correctList].sort((a, b) => a - b);
+            isCorrect =
+              sortedSelected.length === sortedCorrect.length &&
+              sortedSelected.every((val, idx) => val === sortedCorrect[idx]);
+
+            if (isCorrect) {
+              marksAwarded = q.marks || 1;
+              totalCorrect++;
+            } else {
+              const negMarks = assessment.negativeMarking ? (q.negativeMarks || 0) : 0;
+              marksAwarded = negMarks > 0 ? -negMarks : 0;
+              totalWrong++;
+            }
           } else {
-            isCorrect = false;
-            const negMarks = assessment.negativeMarking
-              ? q.negativeMarks || 0
-              : 0;
-            marksAwarded = -negMarks;
-            totalWrong++;
+            totalSkipped++;
           }
         } else {
-          totalSkipped++;
+          // Single-choice MCQ
+          isAttempted = r.selectedAnswer !== undefined && r.selectedAnswer >= 0;
+          if (isAttempted) {
+            totalAttempted++;
+            isCorrect = r.selectedAnswer === q.correctAnswer;
+            if (isCorrect) {
+              marksAwarded = q.marks || 1;
+              totalCorrect++;
+            } else {
+              const negMarks = assessment.negativeMarking ? (q.negativeMarks || 0) : 0;
+              marksAwarded = negMarks > 0 ? -negMarks : 0;
+              totalWrong++;
+            }
+          } else {
+            totalSkipped++;
+          }
         }
       }
 
       totalScore += marksAwarded;
 
-      return {
+      evaluatedResponses.push({
         questionId: q.id,
         selectedAnswer: r.selectedAnswer ?? -1,
+        selectedAnswers: r.selectedAnswers,
         code: r.code || '',
         language: r.language || 'python',
-        testCasesPassed: r.testCasesPassed || 0,
-        totalTestCases: r.totalTestCases || 0,
+        testCasesPassed,
+        totalTestCases,
         isCorrect,
         marksAwarded,
         timeSpentSeconds: r.timeSpentSeconds || 0,
         status: isAttempted ? 'answered' : 'skipped',
-      };
-    });
+      });
+    }
 
     const finalScore = Math.max(0, Math.round(totalScore * 100) / 100);
     const maxScore = assessment.totalMarks || 1;
@@ -1107,6 +1200,7 @@ export class AssessmentsService {
         : 0;
     const finalHighestScore = Math.max(finalScore, prevMax);
 
+    // State machine transition: in_progress -> submitted
     attempt.status = 'submitted';
     attempt.submittedAt = new Date();
     attempt.timeSpentSeconds = dto.timeSpentSeconds || 0;
@@ -1140,6 +1234,7 @@ export class AssessmentsService {
         totalCorrect,
         totalWrong,
         totalSkipped,
+        submittedAt: attempt.submittedAt,
         timeSpentSeconds: attempt.timeSpentSeconds,
         tabSwitchCount: tabSwitches,
       },

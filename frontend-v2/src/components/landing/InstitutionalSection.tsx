@@ -66,14 +66,14 @@ export function InstitutionalSection() {
 
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-muted/60 text-foreground text-xs font-semibold uppercase tracking-wider">
-            <GraduationCap className="w-3.5 h-3.5 text-primary" />
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#7F1D1D]/20 bg-[#7F1D1D]/5 text-[#7F1D1D] text-xs font-bold uppercase tracking-wider">
+            <GraduationCap className="w-3.5 h-3.5 text-[#FACC15]" />
             <span>Collegiate &amp; Enterprise Infrastructure</span>
           </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
-            Built for classrooms, assessments, and hiring.
+          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[#1F2937] dark:text-foreground">
+            Built for classrooms, <span className="text-[#7F1D1D]">assessments,</span> and hiring.
           </h2>
-          <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+          <p className="text-sm sm:text-base text-[#64748B] dark:text-muted-foreground leading-relaxed">
             Empower educators, departmental lab coordinators, and placement cells with a standardized platform built for massive-scale student evaluation.
           </p>
         </div>
@@ -89,14 +89,14 @@ export function InstitutionalSection() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.4, delay: idx * 0.05 }}
-                className="p-5 rounded-2xl bg-card border border-border/80 hover:border-foreground/30 hover:shadow-sm transition-all flex flex-col justify-between space-y-3"
+                className="p-5 rounded-2xl bg-white dark:bg-card border border-[#E5E7EB] dark:border-border/80 hover:border-[#7F1D1D]/30 hover:shadow-sm transition-all flex flex-col justify-between space-y-3"
               >
                 <div className="space-y-2">
-                  <div className="w-8 h-8 rounded-lg bg-foreground/5 text-foreground flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-lg bg-[#7F1D1D]/10 text-[#7F1D1D] flex items-center justify-center">
                     <Icon className="w-4 h-4" />
                   </div>
-                  <h3 className="font-bold text-sm text-foreground">{item.title}</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
+                  <h3 className="font-bold text-sm text-[#1F2937] dark:text-foreground">{item.title}</h3>
+                  <p className="text-xs text-[#64748B] dark:text-muted-foreground leading-relaxed">{item.desc}</p>
                 </div>
               </motion.div>
             );
@@ -107,10 +107,10 @@ export function InstitutionalSection() {
         <div className="text-center pt-4">
           <Link
             href="/assessments"
-            className="inline-flex items-center justify-center gap-2 h-11 px-7 rounded-lg bg-white hover:bg-neutral-100 text-black font-bold text-sm transition-all shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+            className="inline-flex items-center justify-center gap-2 h-11 px-7 rounded-lg bg-[#7F1D1D] hover:bg-[#450A0A] text-white font-bold text-sm transition-all shadow-xs hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
           >
             <span>Explore Assessments</span>
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className="w-4 h-4 text-[#FACC15]" />
           </Link>
         </div>
 

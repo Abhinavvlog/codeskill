@@ -923,9 +923,9 @@ export default function DSAAssessmentEditor({
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-bold border border-zinc-700 transition-all disabled:opacity-50"
               >
                 {isRunning ? (
-                  <Spinner className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner className="w-3.5 h-3.5 animate-spin text-[#FACC15]" />
                 ) : (
-                  <Play className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                  <Play className="w-3.5 h-3.5 text-[#FACC15] fill-[#FACC15]" />
                 )}
                 <span>Run Code</span>
               </button>
@@ -935,12 +935,12 @@ export default function DSAAssessmentEditor({
                 type="button"
                 onClick={handleSubmitSolution}
                 disabled={isRunning || isSubmitting}
-                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-md shadow-primary/20 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-[#7F1D1D] hover:bg-[#450A0A] text-white text-xs font-bold transition-all shadow-xs disabled:opacity-50"
               >
                 {isSubmitting ? (
-                  <Spinner className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner className="w-3.5 h-3.5 animate-spin text-[#FACC15]" />
                 ) : (
-                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#FACC15]" />
                 )}
                 <span>Submit Solution</span>
               </button>

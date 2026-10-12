@@ -113,3 +113,16 @@ export class ForceChangePasswordDto {
   @MinLength(8, { message: 'New password must be at least 8 characters' })
   newPassword: string;
 }
+
+export class RefreshTokenDto {
+  @IsString()
+  @IsNotEmpty()
+  refreshToken: string;
+}
+
+export class LogoutDto {
+  @IsString()
+  @IsOptional()
+  refreshToken?: string;
+}
+
