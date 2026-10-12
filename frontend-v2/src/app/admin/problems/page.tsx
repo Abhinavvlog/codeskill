@@ -99,58 +99,61 @@ export default function AdminProblemsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filteredProblems.map((problem) => (
-                  <tr key={problem._id} className="hover:bg-muted/20 transition-colors group">
-                    <td className="px-6 py-4">
-                      <div className="font-semibold text-foreground">{problem.title}</div>
-                      <div className="text-[11px] text-muted-foreground font-mono mt-0.5">/{problem.slug}</div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                          problem.difficulty?.toLowerCase() === "easy"
-                            ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                            : problem.difficulty?.toLowerCase() === "medium"
-                            ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
-                            : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
-                        }`}
-                      >
-                        {problem.difficulty || "Unknown"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-1.5 flex-wrap max-w-[200px]">
-                        {(problem.categories || []).slice(0, 2).map((cat: string, i: number) => (
-                          <span key={i} className="px-2 py-0.5 bg-muted text-muted-foreground text-[10px] rounded-md border border-border">
-                            {cat}
-                          </span>
-                        ))}
-                        {(problem.categories?.length || 0) > 2 && (
-                          <span className="text-[10px] text-muted-foreground font-medium">
-                            +{problem.categories.length - 2} more
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                        problem.visibility === 'Published' || problem.visibility === 'Public' 
-                          ? 'bg-blue-500/10 text-blue-500' 
-                          : 'bg-muted text-muted-foreground'
-                      }`}>
-                        {problem.visibility || 'Public'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <Link
-                        href={`/admin/problems/${problem._id}/edit`}
-                        className="inline-flex items-center justify-center p-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                      >
-                        <ArrowRight className="w-4 h-4" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                {filteredProblems.map((problem) => {
+                  const probId = problem._id || problem.id;
+                  return (
+                    <tr key={probId} className="hover:bg-muted/20 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="font-semibold text-foreground">{problem.title}</div>
+                        <div className="text-[11px] text-muted-foreground font-mono mt-0.5">/{problem.slug}</div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                            problem.difficulty?.toLowerCase() === "easy"
+                              ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                              : problem.difficulty?.toLowerCase() === "medium"
+                              ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                              : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+                          }`}
+                        >
+                          {problem.difficulty || "Unknown"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1.5 flex-wrap max-w-[200px]">
+                          {(problem.categories || []).slice(0, 2).map((cat: string, i: number) => (
+                            <span key={i} className="px-2 py-0.5 bg-muted text-muted-foreground text-[10px] rounded-md border border-border">
+                              {cat}
+                            </span>
+                          ))}
+                          {(problem.categories?.length || 0) > 2 && (
+                            <span className="text-[10px] text-muted-foreground font-medium">
+                              +{problem.categories.length - 2} more
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                          problem.visibility === 'Published' || problem.visibility === 'Public' 
+                            ? 'bg-blue-500/10 text-blue-500' 
+                            : 'bg-muted text-muted-foreground'
+                        }`}>
+                          {problem.visibility || 'Public'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <Link
+                          href={`/admin/problems/${probId}/edit`}
+                          className="inline-flex items-center justify-center p-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                        >
+                          <ArrowRight className="w-4 h-4" />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
