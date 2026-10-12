@@ -107,7 +107,7 @@ export function AdminSidebar() {
       <div className="flex-1 overflow-y-auto py-4 px-3">
         <nav className="space-y-0.5">
           {navItems.map((item) => {
-            const isCategoryActive = pathname.startsWith(item.href);
+            const isCategoryActive = pathname ? pathname.startsWith(item.href) : false;
             const Icon = item.icon;
             
             return (

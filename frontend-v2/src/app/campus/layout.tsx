@@ -61,7 +61,7 @@ export default function CampusLayout({ children }: { children: React.ReactNode }
 
         <nav className="flex-1 overflow-y-auto p-4 space-y-1">
           {navigation.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+            const isActive = pathname === item.href || (pathname ? pathname.startsWith(item.href + '/') : false);
             return (
               <Link
                 key={item.name}

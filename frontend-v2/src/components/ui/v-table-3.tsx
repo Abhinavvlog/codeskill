@@ -89,17 +89,20 @@ export function VTable3({
   const containerRef = useRef<HTMLDivElement>(null);
 
   useGSAP(() => {
-    if (!loading && questions.length > 0) {
-      const mm = gsap.matchMedia();
-      mm.add("(prefers-reduced-motion: no-preference)", () => {
-        gsap.from(".question-row", {
-          opacity: 0,
-          y: 8,
-          stagger: 0.03,
-          duration: 0.3
+    try {
+      if (typeof window === "undefined" || !containerRef.current) return;
+      if (!loading && questions.length > 0) {
+        const mm = gsap.matchMedia();
+        mm.add("(prefers-reduced-motion: no-preference)", () => {
+          gsap.from(".question-row", {
+            opacity: 0,
+            y: 8,
+            stagger: 0.03,
+            duration: 0.3
+          });
         });
-      });
-    }
+      }
+    } catch (_) {}
   }, { scope: containerRef, dependencies: [questions, loading] });
 
   const hasFilters = Boolean(search || selectedTopic || selectedDifficulty || selectedType || selectedStatus);

@@ -52,28 +52,34 @@ export default function QuestionsAdminPage() {
   const [inspectQuestion, setInspectQuestion] = useState<any | null>(null);
 
   useGSAP(() => {
-    const mm = gsap.matchMedia();
-    mm.add("(prefers-reduced-motion: no-preference)", () => {
-      const tl = gsap.timeline();
-      tl.from(".page-header", { opacity: 0, y: -15, duration: 0.4 })
-        .from(".tab-button", { opacity: 0, x: -10, stagger: 0.05, duration: 0.3 }, "-=0.2");
-    });
+    try {
+      if (typeof window === "undefined" || !containerRef.current) return;
+      const mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        const tl = gsap.timeline();
+        tl.from(".page-header", { opacity: 0, y: -15, duration: 0.4 })
+          .from(".tab-button", { opacity: 0, x: -10, stagger: 0.05, duration: 0.3 }, "-=0.2");
+      });
+    } catch (_) {}
   }, { scope: containerRef });
 
   useGSAP(() => {
     if (inspectQuestion) {
-      const mm = gsap.matchMedia();
-      mm.add("(prefers-reduced-motion: no-preference)", () => {
-        const tl = gsap.timeline();
-        tl.from(".modal-backdrop", { opacity: 0, duration: 0.2 })
-          .from(".modal-box", { scale: 0.96, opacity: 0, duration: 0.2, ease: "power2.out" }, "-=0.1")
-          .from(".modal-header", { y: -10, opacity: 0, duration: 0.2 }, "-=0.1")
-          .from(".modal-security", { opacity: 0, duration: 0.2 }, "-=0.1")
-          .from(".modal-question", { y: 10, opacity: 0, duration: 0.2 }, "-=0.1")
-          .from(".modal-option", { x: -10, opacity: 0, stagger: 0.05, duration: 0.2 }, "-=0.1")
-          .from(".modal-explanation", { y: 10, opacity: 0, duration: 0.2 }, "-=0.1")
-          .from(".modal-footer", { y: 10, opacity: 0, duration: 0.2 }, "-=0.1");
-      });
+      try {
+        if (typeof window === "undefined" || !containerRef.current) return;
+        const mm = gsap.matchMedia();
+        mm.add("(prefers-reduced-motion: no-preference)", () => {
+          const tl = gsap.timeline();
+          tl.from(".modal-backdrop", { opacity: 0, duration: 0.2 })
+            .from(".modal-box", { scale: 0.96, opacity: 0, duration: 0.2, ease: "power2.out" }, "-=0.1")
+            .from(".modal-header", { y: -10, opacity: 0, duration: 0.2 }, "-=0.1")
+            .from(".modal-security", { opacity: 0, duration: 0.2 }, "-=0.1")
+            .from(".modal-question", { y: 10, opacity: 0, duration: 0.2 }, "-=0.1")
+            .from(".modal-option", { x: -10, opacity: 0, stagger: 0.05, duration: 0.2 }, "-=0.1")
+            .from(".modal-explanation", { y: 10, opacity: 0, duration: 0.2 }, "-=0.1")
+            .from(".modal-footer", { y: 10, opacity: 0, duration: 0.2 }, "-=0.1");
+        });
+      } catch (_) {}
     }
   }, { scope: containerRef, dependencies: [inspectQuestion] });
 
@@ -266,8 +272,8 @@ export default function QuestionsAdminPage() {
   };
 
   // Metrics calculations
-  const pendingCount = (questions || []).filter(q => q.status === "pending_review").length;
-  const activeCount = (questions || []).filter(q => q.status === "active" || q.status === "approved").length;
+  const pendingCount = (questions || []).filter(q => q && q.status === "pending_review").length;
+  const activeCount = (questions || []).filter(q => q && (q.status === "active" || q.status === "approved")).length;
 
   return (
     <div ref={containerRef} className="p-8 font-sans max-w-7xl mx-auto space-y-6">
@@ -617,7 +623,11 @@ export default function QuestionsAdminPage() {
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 pl-1">Answer Options</h4>
                   <div className="grid gap-3">
                     {inspectQuestion.options.map((opt: any, idx: number) => {
-                      const isCorrect = Boolean(opt.isCorrect);
+                      const optionText = typeof opt === "string" ? opt : opt?.text || "";
+                      const optionExplanation = typeof opt === "object" ? opt?.explanation : null;
+                      const isCorrect = typeof opt === "object" && opt?.isCorrect !== undefined
+                        ? Boolean(opt.isCorrect)
+                        : (inspectQuestion.correctAnswer === idx || (Array.isArray(inspectQuestion.correctAnswers) && inspectQuestion.correctAnswers.includes(idx)));
                       return (
                         <div
                           key={idx}
@@ -638,11 +648,11 @@ export default function QuestionsAdminPage() {
                           </div>
                           <div className="flex-1 pt-1">
                             <div className={`text-[15px] font-medium leading-snug ${isCorrect ? 'text-emerald-950' : 'text-slate-800'}`}>
-                              {opt.text}
+                              {optionText}
                             </div>
-                            {opt.explanation && (
+                            {optionExplanation && (
                               <div className="text-xs text-slate-500 mt-2 bg-slate-50 p-2 rounded-md border border-slate-100">
-                                {opt.explanation}
+                                {optionExplanation}
                               </div>
                             )}
                           </div>

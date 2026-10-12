@@ -7,6 +7,7 @@ export function Footer() {
   const pathname = usePathname();
 
   const isHidden =
+    !pathname ||
     pathname.startsWith("/admin") ||
     pathname === "/login" ||
     pathname === "/register" ||
