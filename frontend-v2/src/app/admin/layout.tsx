@@ -214,7 +214,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     </DropdownMenuItem>
 
                     <DropdownMenuItem
-                      onClick={() => router.push("/profile#account-preferences")}
+                      onClick={() => router.push("/profile")}
                       className="cursor-pointer gap-2.5 px-3 py-2 text-xs font-medium rounded-lg hover:bg-muted focus:bg-muted text-foreground transition-colors"
                     >
                       <SlidersHorizontal className="w-4 h-4 text-muted-foreground shrink-0" />

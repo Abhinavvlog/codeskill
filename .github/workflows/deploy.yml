@@ -14,6 +14,10 @@ permissions:
   id-token: write # Required for configuring AWS Credentials via OIDC
   contents: read
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -80,8 +84,34 @@ jobs:
 
       - name: Trigger Auto Scaling Group Instance Refresh
         run: |
-          # This tells AWS to replace the existing EC2 instances with new ones,
-          # triggering the user_data script on boot which downloads the fresh latest.zip
+          # Check if an instance refresh is already running or pending
+          ACTIVE_REFRESH=$(aws autoscaling describe-instance-refreshes \
+            --auto-scaling-group-name ${{ env.ASG_NAME }} \
+            --query "InstanceRefreshes[?Status=='InProgress' || Status=='Pending'].InstanceRefreshId" \
+            --output text)
+
+          if [ -n "$ACTIVE_REFRESH" ] && [ "$ACTIVE_REFRESH" != "None" ]; then
+            echo "Instance refresh ($ACTIVE_REFRESH) is currently in progress."
+            echo "Cancelling it to deploy the latest build..."
+            aws autoscaling cancel-instance-refresh \
+              --auto-scaling-group-name ${{ env.ASG_NAME }} || true
+
+            echo "Waiting for instance refresh cancellation..."
+            for i in {1..30}; do
+              CURRENT_STATUS=$(aws autoscaling describe-instance-refreshes \
+                --auto-scaling-group-name ${{ env.ASG_NAME }} \
+                --query "InstanceRefreshes[?Status=='InProgress' || Status=='Pending' || Status=='Cancelling'].Status" \
+                --output text)
+              if [ -z "$CURRENT_STATUS" ]; then
+                echo "Previous refresh successfully cancelled or completed."
+                break
+              fi
+              echo "Waiting for previous refresh to finish cancelling (attempt $i/30)..."
+              sleep 5
+            done
+          fi
+
+          echo "Starting instance refresh for ${{ env.ASG_NAME }}..."
           aws autoscaling start-instance-refresh \
             --auto-scaling-group-name ${{ env.ASG_NAME }} \
             --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 300}'

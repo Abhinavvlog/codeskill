@@ -73,17 +73,19 @@ it("opens on mouse hover without navigation or logout", async () => {
   expect(mockLogout).not.toHaveBeenCalled();
 });
 
-it("routes selections to the existing profile and preferences field, closing each time", async () => {
+it("routes both selections to the existing profile form, closing each time", async () => {
   const trigger = await renderLayout();
   let menu = await openByClick(trigger);
   fireEvent.click(within(menu).getByRole("menuitem", { name: "Profile Settings" }));
   expect(mockPush).toHaveBeenLastCalledWith("/profile");
+  expect(mockPush).toHaveBeenCalledTimes(1);
   await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
   expect(trigger).toHaveAttribute("aria-expanded", "false");
 
   menu = await openByClick(trigger);
   fireEvent.click(within(menu).getByRole("menuitem", { name: "Account Preferences" }));
-  expect(mockPush).toHaveBeenLastCalledWith("/profile#account-preferences");
+  expect(mockPush).toHaveBeenLastCalledWith("/profile");
+  expect(mockPush).toHaveBeenCalledTimes(2);
   await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
   expect(trigger).toHaveAttribute("aria-expanded", "false");
   expect(mockLogout).not.toHaveBeenCalled();

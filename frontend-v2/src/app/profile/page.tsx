@@ -55,13 +55,6 @@ export default function ProfilePage() {
     }
   }, [user, loading, router, reset]);
 
-  // The form appears after authentication; scroll only once its anchor is mounted.
-  useEffect(() => {
-    if (mounted && !loading && window.location.hash === "#account-preferences") {
-      document.getElementById("account-preferences")?.scrollIntoView({ block: "start" });
-    }
-  }, [mounted, loading]);
-
   if (!mounted || loading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-background min-h-screen">
@@ -292,7 +285,7 @@ export default function ProfilePage() {
                     </div>
                   </div>
 
-                  <div id="account-preferences" className="space-y-2 scroll-mt-24">
+                  <div className="space-y-2">
                     <label className="text-sm font-medium flex items-center gap-2">
                       <Code2 className="w-4 h-4 text-muted-foreground" /> Preferred Language
                     </label>
