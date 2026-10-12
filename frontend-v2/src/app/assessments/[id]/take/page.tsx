@@ -30,6 +30,7 @@ import { studentAssessmentsAPI } from "@/config/api";
 import DSAAssessmentEditor from "@/components/assessment/DSAAssessmentEditor";
 import SafeExamBrowser from "@/components/assessment/SafeExamBrowser";
 import { Spinner } from "@/components/ui/spinner";
+import { useAssessmentMedia } from "@/hooks/useAssessmentMedia";
 
 interface TestCase {
   id?: string;
@@ -109,18 +110,9 @@ export default function TakeAssessmentPage({
   const [warningToast, setWarningToast] = useState<{ id: number; message: string; type: "warning" | "alert" } | null>(null);
 
   // Camera & Voice Proctoring State
-  const [cameraActive, setCameraActive] = useState(false);
-  const [micActive, setMicActive] = useState(false);
-  const [audioLevel, setAudioLevel] = useState(0);
-  const [cameraError, setCameraError] = useState<string | null>(null);
   const [isPipMinimized, setIsPipMinimized] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const voiceDetectionCooldownRef = useRef<number>(0);
 
   const responsesRef = useRef(responses);
   responsesRef.current = responses;
@@ -245,109 +237,16 @@ export default function TakeAssessmentPage({
     };
   }, [id, router]);
 
-  // 2. Camera & Microphone Proctoring Stream Setup
-  useEffect(() => {
-    let animFrameId: number;
-
-    const setupProctoringMedia = async () => {
-      try {
-        if (!navigator.mediaDevices?.getUserMedia) {
-          setCameraError("Camera/Mic not supported by this browser.");
-          recordViolation("media_unsupported", "Browser does not support getUserMedia proctoring");
-          return;
-        }
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 320 },
-            height: { ideal: 240 },
-            facingMode: "user",
-          },
-          audio: true,
-        });
-
-        mediaStreamRef.current = stream;
-        setCameraActive(true);
-        setMicActive(true);
-        setCameraError(null);
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-
-        // Setup Web Audio API for Voice / Speech Detection
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtx) {
-          const audioCtx = new AudioCtx();
-          audioContextRef.current = audioCtx;
-          const analyser = audioCtx.createAnalyser();
-          analyser.fftSize = 512;
-          analyser.smoothingTimeConstant = 0.4;
-          analyserRef.current = analyser;
-
-          const source = audioCtx.createMediaStreamSource(stream);
-          source.connect(analyser);
-
-          const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-          const detectAudio = () => {
-            if (!analyserRef.current) return;
-            analyserRef.current.getByteFrequencyData(dataArray);
-
-            let sum = 0;
-            for (let i = 0; i < dataArray.length; i++) {
-              sum += dataArray[i];
-            }
-            const average = sum / dataArray.length;
-            const normalized = Math.min(100, Math.round((average / 128) * 100));
-            setAudioLevel(normalized);
-
-            // Voice Detection Threshold (> 40 indicates active human speech or noise)
-            const now = Date.now();
-            if (normalized > 42 && now > voiceDetectionCooldownRef.current) {
-              voiceDetectionCooldownRef.current = now + 7000; // 7s cooldown
-              recordViolation(
-                "voice_detected",
-                "Voice or elevated noise detected by microphone proctor"
-              );
-            }
-
-            animFrameId = requestAnimationFrame(detectAudio);
-          };
-
-          detectAudio();
-        }
-      } catch (err: any) {
-        console.warn("Proctoring Media access denied or unavailable:", err);
-        setCameraError("Camera & Microphone access is required for proctoring verification.");
-        recordViolation("media_permission_denied", "Candidate denied or has no camera/microphone access");
-      }
-    };
-
-    setupProctoringMedia();
-
-    return () => {
-      if (animFrameId) cancelAnimationFrame(animFrameId);
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-      }
-      if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-        audioContextRef.current.close().catch(() => {});
-      }
-    };
-  }, [recordViolation]);
-
-  // Keep videoRef populated when mediaStream arrives or tab switches
-  useEffect(() => {
-    if (videoRef.current && mediaStreamRef.current && !videoRef.current.srcObject) {
-      videoRef.current.srcObject = mediaStreamRef.current;
-    }
-  }, [cameraActive]);
+  // Media starts only for a loaded, active session; stopping is permanent for this assessment.
+  const { videoRef, cameraActive, micActive, audioLevel, cameraError, stopCamera } = useAssessmentMedia(
+    id, !isLoading && !isSubmitting && timeLeftSeconds > 0, recordViolation,
+  );
 
   // 3. Submit Attempt Handler
   const submitExam = useCallback(
     async (isAuto = false) => {
       if (isSubmitting) return;
+      stopCamera();
       setIsSubmitting(true);
 
       const formattedResponses = questions.map((q) => {
@@ -376,12 +275,16 @@ export default function TakeAssessmentPage({
         router.replace(`/assessments/${id}/result`);
       }
     },
-    [id, isSubmitting, questions, startedAt, router]
+    [id, isSubmitting, questions, startedAt, router, stopCamera]
   );
 
   // 4. Countdown Clock
   useEffect(() => {
-    if (isLoading || timeLeftSeconds <= 0) return;
+    if (isLoading || isSubmitting) return;
+    if (timeLeftSeconds <= 0) {
+      void submitExam(true);
+      return;
+    }
 
     const timer = setInterval(() => {
       setTimeLeftSeconds((prev) => {
@@ -395,7 +298,7 @@ export default function TakeAssessmentPage({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isLoading, submitExam, timeLeftSeconds]);
+  }, [isLoading, isSubmitting, submitExam, timeLeftSeconds]);
 
   // 5. Autosave Progress Interval (Every 15 Seconds)
   useEffect(() => {
@@ -602,7 +505,7 @@ export default function TakeAssessmentPage({
 
   return (
     <SafeExamBrowser 
-      isEnabled={!isLoading} 
+      isEnabled={!isLoading && !isSubmitting} 
       maxWarnings={maxTabSwitches} 
       onTerminate={() => submitExam(true)}
       onViolation={recordViolation}

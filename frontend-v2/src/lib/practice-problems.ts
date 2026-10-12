@@ -48,10 +48,13 @@ const topics = (values: string[]) => [...new Set(values.map(text).filter(Boolean
 function bankVisibility(question: CodingBankRecord): string {
   const status = text(question.status).toLowerCase();
   if (["approved", "active", "published"].includes(status)) {
-    const visibility = text(question.metadata?.visibility || question.visibility).toLowerCase();
-    return visibility === "private" ? "Private" : "Published";
+    const visibility = text(question.visibility || question.metadata?.visibility).toLowerCase();
+    return ["public", "published"].includes(visibility) ? "Published" : visibility === "private" ? "Private" : "Draft";
   }
-  return ({ draft: "Draft", pending: "Pending", rejected: "Rejected", private: "Private" } as Record<string, string>)[status] || "Unknown";
+  if (status === "pending") return "Pending";
+  if (status === "rejected") return "Rejected";
+  if (status === "private") return "Private";
+  return "Draft";
 }
 
 export function mergePracticeProblems(legacy: LegacyPracticeRecord[], questions: CodingBankRecord[]): PracticeRow[] {

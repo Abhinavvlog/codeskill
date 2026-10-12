@@ -5,9 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExecutionService } from './execution.service';
 import { Submission } from '../database/entities/submission.entity';
-import { ProblemMetadata } from '../database/entities/problem-metadata.entity';
-import { ProblemTestCase } from '../database/entities/problem-testcase.entity';
-import { Problem } from '../database/entities/problem.entity';
+import { ProblemsService } from '../problems/problems.service';
 import { User } from '../database/entities/user.entity';
 import { AppGateway } from '../gateway/app.gateway';
 import { RedisService } from '../redis/redis.service';
@@ -39,10 +37,7 @@ export class JudgeProcessor extends WorkerHost {
     private readonly executionService: ExecutionService,
     @InjectRepository(Submission)
     private readonly submissionRepo: Repository<Submission>,
-    @InjectRepository(ProblemMetadata)
-    private readonly problemModel: Repository<ProblemMetadata>,
-    @InjectRepository(ProblemTestCase)
-    private readonly testCaseModel: Repository<ProblemTestCase>,
+    private readonly problemsService: ProblemsService,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly appGateway: AppGateway,
@@ -101,13 +96,18 @@ export class JudgeProcessor extends WorkerHost {
     }
 
     if (job.name === 'evaluate-code') {
-      const { submissionId, problemId, code, language, userId } = job.data;
+      const { submissionId } = job.data;
+      let userId: string | undefined;
 
       try {
         // 1. Mark as running in DB
         const submission = await this.submissionRepo.findOne({
           where: [{ id: submissionId }, { mongoId: submissionId }],
         });
+
+        if (!submission) throw new Error('Submission not found');
+        const { problemId, code, language } = submission;
+        userId = submission.userId;
 
         if (submission) {
           submission.status = SubmissionStatus.RUNNING;
@@ -121,20 +121,17 @@ export class JudgeProcessor extends WorkerHost {
           message: `Worker picked up submission on ${this.runnerId}`,
         });
 
-        // 2. Fetch actual test cases from DB
-        let testCases: any[] = [];
-        const testCaseDoc = await this.testCaseModel.findOne({
-          where: [{ id: problemId }, { metadata_id: problemId }],
-        });
-
-        if (testCaseDoc?.cases && Array.isArray(testCaseDoc.cases)) {
-          testCases = testCaseDoc.cases.map((tc: any, i: number) => ({
-            id: i + 1,
-            input: tc.input || '',
-            expected: tc.output || '',
-            isHidden: tc.isHidden === true,
-          }));
-        }
+        // 2. Resolve the persisted source and authoritative judge data.
+        const problem = await this.problemsService.getExecutionProblem(
+          problemId,
+          submission.problemSource || 'problem',
+        );
+        const testCases = problem.testCases.map((tc, i) => ({
+          id: i + 1,
+          input: tc.input || '',
+          expected: tc.output || '',
+          isHidden: tc.isHidden === true,
+        }));
 
         if (testCases.length === 0) {
           this.logger.warn(
@@ -142,7 +139,8 @@ export class JudgeProcessor extends WorkerHost {
           );
           if (submission) {
             submission.status = SubmissionStatus.SYSTEM_ERROR;
-            submission.compileOutput = 'No test cases configured for this problem';
+            submission.compileOutput =
+              'No test cases configured for this problem';
             submission.completedAt = new Date();
             await this.submissionRepo.save(submission);
           }
@@ -163,7 +161,7 @@ export class JudgeProcessor extends WorkerHost {
         });
 
         // 4. Build execution config
-        const config: any = {};
+        const config = problem.config;
 
         // 5. Execute code in sandbox
         const start = Date.now();
@@ -230,7 +228,6 @@ export class JudgeProcessor extends WorkerHost {
                   testId: String(result.id),
                   passed: result.passed,
                   executionTime: result.executionTime,
-                  error: result.error,
                 }
               : {
                   testId: String(result.id),
@@ -305,11 +302,13 @@ export class JudgeProcessor extends WorkerHost {
           await this.submissionRepo.save(sub);
         }
 
-        this.appGateway.emitToUser(userId, 'execution_error', {
-          submissionId,
-          status: SubmissionStatus.SYSTEM_ERROR,
-          error: 'An internal error occurred during execution.',
-        });
+        if (userId) {
+          this.appGateway.emitToUser(userId, 'execution_error', {
+            submissionId,
+            status: SubmissionStatus.SYSTEM_ERROR,
+            error: 'An internal error occurred during execution.',
+          });
+        }
 
         throw err;
       } finally {

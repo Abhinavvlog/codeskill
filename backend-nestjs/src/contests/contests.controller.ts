@@ -15,6 +15,50 @@ export class ContestsController {
     return this.contestsService.getContests();
   }
 
+  @Get(':slug/leaderboard')
+  async leaderboard(@Param('slug') slug: string) {
+    return this.contestsService.leaderboard(slug);
+  }
+
+  @Get(':id/registration')
+  @UseGuards(JwtAuthGuard)
+  async registration(
+    @Param('id') id: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.contestsService.registration(id, userId);
+  }
+
+  @Post(':id/start')
+  @UseGuards(JwtAuthGuard)
+  async startAttempt(
+    @Param('id') id: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.contestsService.startAttempt(id, userId);
+  }
+
+  @Post(':id/submit')
+  @UseGuards(JwtAuthGuard)
+  async submitAttempt(
+    @Param('id') id: string,
+    @CurrentUser('id') userId: string,
+    @Body('sessionId') sessionId: string,
+  ) {
+    return this.contestsService.submitAttempt(id, userId, sessionId);
+  }
+
+  @Post(':id/violations')
+  @UseGuards(JwtAuthGuard)
+  async recordViolation(
+    @Param('id') id: string,
+    @CurrentUser('id') userId: string,
+    @Body('sessionId') sessionId: string,
+    @Body('type') type: string,
+  ) {
+    return this.contestsService.recordViolation(id, userId, sessionId, type);
+  }
+
   @Get(':slug')
   @ApiOperation({ summary: 'Get contest details' })
   async getContest(@Param('slug') slug: string) {

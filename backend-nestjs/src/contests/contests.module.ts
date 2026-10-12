@@ -4,9 +4,11 @@ import { ContestsController } from './contests.controller';
 import { ContestsService } from './contests.service';
 import { Contest } from '../database/entities/contest.entity';
 import { ContestAttempt } from '../database/entities/contest-attempt.entity';
+import { ProblemsModule } from '../problems/problems.module';
 
 @Module({
   imports: [
+    ProblemsModule,
     TypeOrmModule.forFeature([Contest, ContestAttempt]),
   ],
   controllers: [ContestsController],

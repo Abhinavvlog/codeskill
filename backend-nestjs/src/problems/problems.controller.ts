@@ -1,6 +1,6 @@
 import { Controller, Get, Query, Param } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { ProblemsService } from './problems.service';
+import { ProblemsService, type PublicProblemsQuery } from './problems.service';
 
 @ApiTags('Problems')
 @Controller('problems')
@@ -9,7 +9,7 @@ export class ProblemsController {
 
   @Get()
   @ApiOperation({ summary: 'Get paginated problems list' })
-  async getProblems(@Query() query: any) {
+  async getProblems(@Query() query: PublicProblemsQuery) {
     return this.problemsService.getProblems(query);
   }
 

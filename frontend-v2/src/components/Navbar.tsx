@@ -78,14 +78,15 @@ export function Navbar() {
   const navLinks = [
     { name: "Problems", href: "/problems", icon: Code2 },
     { name: "Assessments", href: "/assessments", icon: ClipboardList },
-    { name: "Contests", href: "/leaderboard", icon: Trophy },
+    { name: "Contests", href: "/contests", icon: Trophy },
+    { name: "Contests Leaderboard", href: "/contests/leaderboard", icon: BarChart3 },
     { name: "Leaderboard", href: "/leaderboard", icon: BarChart3 },
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   ];
 
   return (
     <>
-      <header className="fixed top-2.5 sm:top-3 left-0 right-0 z-50 px-3 sm:px-6 max-w-7xl mx-auto transition-all duration-200">
+      <header className="fixed top-2.5 sm:top-3 left-0 right-0 z-50 px-3 sm:px-6 max-w-[1440px] mx-auto transition-all duration-200">
         <div
           className={`w-full bg-background/95 dark:bg-[#121212]/96 backdrop-blur-md border border-black/8 dark:border-white/10 rounded-2xl shadow-[0_6px_24px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.30)] px-3 sm:px-5 h-[56px] flex items-center justify-between transition-all duration-200 ${
             scrolled
@@ -136,16 +137,16 @@ export function Navbar() {
           </Link>
 
           {/* 3. CENTER — NAVIGATION */}
-          <nav className="hidden lg:flex items-center gap-1 shrink-0">
+          <nav className="hidden 2xl:flex items-center gap-1 shrink-0">
             {navLinks.map((item) => {
               const Icon = item.icon;
               const isActive =
-                pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+                pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`) && !(item.href === "/contests" && pathname === "/contests/leaderboard"));
               return (
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`relative flex items-center gap-2 px-3.5 py-2 rounded-lg text-[15px] whitespace-nowrap shrink-0 transition-all duration-150 ${
+                  className={`relative flex items-center gap-2 px-2.5 py-2 rounded-lg text-[14px] whitespace-nowrap shrink-0 transition-all duration-150 ${
                     isActive
                       ? "text-foreground bg-black/[0.04] border border-black/8 dark:text-white dark:bg-white/[0.08] font-bold dark:border-white/10 shadow-xs"
                       : "text-muted-foreground hover:text-foreground hover:bg-black/[0.03] dark:text-muted-foreground dark:hover:text-white dark:hover:bg-white/[0.04] font-medium border border-transparent"
@@ -222,12 +223,13 @@ export function Navbar() {
           </div>
 
           {/* Mobile Right Controls: Theme + Hamburger */}
-          <div className="lg:hidden flex items-center gap-1.5">
-            <ThemeToggle className="w-8.5 h-8.5" />
+          <div className="2xl:hidden flex items-center gap-1.5">
+            <ThemeToggle className="w-8.5 h-8.5 sm:hidden" />
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="flex items-center justify-center w-8.5 h-8.5 rounded-lg text-neutral-800 dark:text-background hover:bg-neutral-100 dark:hover:bg-white/[0.08] border border-neutral-200 dark:border-white/10"
               aria-label="Toggle menu"
+              aria-expanded={mobileMenuOpen}
             >
               {mobileMenuOpen ? <X className="w-4.5 h-4.5" /> : <Menu className="w-4.5 h-4.5" />}
             </button>
@@ -242,13 +244,13 @@ export function Navbar() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="fixed top-18 left-3 right-3 z-40 bg-white/95 dark:bg-[#121212]/98 backdrop-blur-xl border border-neutral-200 dark:border-white/10 rounded-2xl p-5 shadow-[0_16px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_16px_40px_rgba(0,0,0,0.5)] flex flex-col gap-4 lg:hidden"
+            className="fixed top-18 left-3 right-3 z-40 bg-white/95 dark:bg-[#121212]/98 backdrop-blur-xl border border-neutral-200 dark:border-white/10 rounded-2xl p-5 shadow-[0_16px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_16px_40px_rgba(0,0,0,0.5)] flex flex-col gap-4 2xl:hidden"
           >
             <div className="flex flex-col gap-1">
               {navLinks.map((item) => {
                 const Icon = item.icon;
                 const isActive =
-                  pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+                  pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`) && !(item.href === "/contests" && pathname === "/contests/leaderboard"));
                 return (
                   <Link
                     key={item.name}

@@ -104,8 +104,11 @@ NODE_ENV=production
 ENVFILE
 chown ec2-user:ec2-user /opt/codeskill/backend-nestjs/.env
 
-# Sync database schema with RDS PostgreSQL
+# Run database migrations
 cd /opt/codeskill/backend-nestjs
+NODE_ENV=production node dist/database/run-practice-submission-source.js || true
+
+# Sync database schema with RDS PostgreSQL
 npm run typeorm:sync
 
 pm2 start dist/main.js --name "codeskill-backend"

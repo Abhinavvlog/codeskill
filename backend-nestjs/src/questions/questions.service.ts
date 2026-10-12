@@ -12,6 +12,7 @@ import { CreateQuestionDto } from './dto/create-question.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
 import { QueryQuestionsDto } from './dto/query-questions.dto';
 import { CreateQuestionBankDto } from './dto/create-question-bank.dto';
+import { CacheService } from '../redis/cache.service';
 import * as XLSX from 'xlsx';
 
 @Injectable()
@@ -23,6 +24,7 @@ export class QuestionsService {
     private readonly questionBankRepository: Repository<QuestionBankEntity>,
     @InjectRepository(AuditLogEntity)
     private readonly auditLogRepository: Repository<AuditLogEntity>,
+    private readonly cacheService: CacheService,
   ) {}
 
   private normalizeCategories(categories: string[]): string[] {
@@ -190,7 +192,13 @@ export class QuestionsService {
     ip = '',
     userAgent = '',
   ) {
-    const { options: rawOptions, categories, ...rest } = dto;
+    const {
+      options: rawOptions,
+      categories,
+      visibility,
+      contestOnly,
+      ...rest
+    } = dto;
     const type = String(dto.questionType || 'single_choice');
     const isChoice = [
       'single_choice',
@@ -314,25 +322,39 @@ export class QuestionsService {
       throw new BadRequestException('Marks must be greater than 0');
     }
 
+    const status = dto.status ?? 'approved';
+    const metadata = {
+      ...(categories !== undefined
+        ? { categories: this.normalizeCategories(categories) }
+        : {}),
+      ...(visibility !== undefined ? { visibility } : {}),
+      ...(contestOnly !== undefined ? { contestOnly } : {}),
+    };
+    const isApproved = ['approved', 'active', 'published'].includes(status);
     const newQuestion = this.questionRepository.create({
       ...rest,
       ...(categories !== undefined
         ? {
             topic: this.normalizeCategories(categories)[0] || 'General',
-            metadata: { categories: this.normalizeCategories(categories) },
           }
         : {}),
+      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       question: dto.question || dto.title,
       options,
       correctAnswer,
       correctAnswers,
       created_by_id: adminUser.id || adminUser._id,
-      status: 'approved',
-      approved_by_id: adminUser.id || adminUser._id,
-      approvedAt: new Date(),
+      status,
+      ...(isApproved
+        ? {
+            approved_by_id: adminUser.id || adminUser._id,
+            approvedAt: new Date(),
+          }
+        : {}),
     } as any) as unknown as QuestionEntity;
 
     const question = await this.questionRepository.save(newQuestion);
+    await this.cacheService.invalidatePrefix('problems:');
 
     const auditLog = this.auditLogRepository.create({
       actorId: adminUser.id || adminUser._id,
@@ -509,7 +531,7 @@ export class QuestionsService {
       dto.question = dto.title;
     }
 
-    const { categories, ...updates } = dto;
+    const { categories, visibility, contestOnly, ...updates } = dto;
     const existingCategories: unknown = question.metadata?.categories;
     if (categories !== undefined) {
       const topics = this.normalizeCategories(categories);
@@ -532,8 +554,15 @@ export class QuestionsService {
         ]),
       };
     }
+    if (visibility !== undefined) {
+      question.metadata = { ...question.metadata, visibility };
+    }
+    if (contestOnly !== undefined) {
+      question.metadata = { ...question.metadata, contestOnly };
+    }
     Object.assign(question, updates);
     await this.questionRepository.save(question);
+    await this.cacheService.invalidatePrefix('problems:');
 
     const auditLog = this.auditLogRepository.create({
       actorId: adminUser.id || adminUser._id,
@@ -556,6 +585,7 @@ export class QuestionsService {
 
     question.status = 'archived';
     await this.questionRepository.save(question);
+    await this.cacheService.invalidatePrefix('problems:');
 
     const auditLog = this.auditLogRepository.create({
       actorId: adminUser.id || adminUser._id,
@@ -593,6 +623,7 @@ export class QuestionsService {
     }
 
     await this.questionRepository.save(question);
+    await this.cacheService.invalidatePrefix('problems:');
 
     const auditLog = this.auditLogRepository.create({
       actorId: adminUser.id || adminUser._id,
@@ -1271,6 +1302,7 @@ export class QuestionsService {
       }
     }
 
+    await this.cacheService.invalidatePrefix('problems:');
     const totalProcessed = docs.length;
 
     const auditLog = this.auditLogRepository.create({

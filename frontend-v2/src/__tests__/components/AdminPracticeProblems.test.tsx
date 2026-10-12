@@ -16,7 +16,7 @@ const legacyResponse = { data: { problems: [{
   categories: ["Arrays"], visibility: "Public",
 }], pages: 1 } };
 const bankResponse = { data: { questions: [
-  { id: "bank-1", title: "Graph Paths", slug: "graph-paths", questionType: "DSA", status: "approved", difficulty: "hard", metadata: { categories: ["Graphs", "Traversal"] } },
+  { id: "bank-1", title: "Graph Paths", slug: "graph-paths", questionType: "DSA", status: "approved", difficulty: "hard", metadata: { categories: ["Graphs", "Traversal"], visibility: "Published" } },
   { id: "bank-draft", question: "Draft Tree Question", questionType: "coding", status: "draft", difficulty: "medium", topic: "Trees" },
   { id: "bank-private", title: "Private Coding Question", questionType: "algorithmic", status: "approved", metadata: { visibility: "Private", categories: ["Strings"] } },
   { id: "bank-duplicate", title: "Duplicate Two Sum", slug: "two-sum", questionType: "DSA", status: "approved" },

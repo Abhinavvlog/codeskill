@@ -1,20 +1,11 @@
 import axios from "axios";
+import { getBrowserApiBaseURL } from "@/lib/api-base-url";
+import { normalizeProblemQuery } from "@/lib/public-problems";
 
 // Dynamically determine the correct API base URL
 const getDynamicBaseURL = (): string => {
   if (typeof window !== "undefined") {
-    const envUrl = process.env.NEXT_PUBLIC_API_URL;
-    // In browser: if envUrl is missing or points to localhost/127.0.0.1 on a non-local domain, use relative /api
-    if (
-      !envUrl ||
-      envUrl === "/api" ||
-      (envUrl.includes("localhost") &&
-        window.location.hostname !== "localhost" &&
-        window.location.hostname !== "127.0.0.1")
-    ) {
-      return "/api";
-    }
-    return envUrl;
+    return getBrowserApiBaseURL(process.env.NEXT_PUBLIC_API_URL, window.location);
   }
   return process.env.INTERNAL_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5001/api";
 };
@@ -144,11 +135,13 @@ export const usersAPI = {
 
 // ── Public Problems ──
 export const problemsAPI = {
-  getAll: (page = 1, limit = 20, search = "", category = "All Topics") => {
-    let url = `/problems?page=${page}&limit=${limit}`;
-    if (search) url += `&search=${encodeURIComponent(search)}`;
-    if (category && category !== "All Topics") url += `&category=${encodeURIComponent(category)}`;
-    return api.get(url);
+  getAll: (page = 1, limit = 20, search = "", category = "All Topics", signal?: AbortSignal) => {
+    const params: { page: number; limit: number; search?: string; category?: string } = { page, limit };
+    const query = normalizeProblemQuery(search);
+    const topic = normalizeProblemQuery(category, true);
+    if (query) params.search = query;
+    if (topic) params.category = topic;
+    return api.get("/problems", { params, signal });
   },
   getBySlug: (slug: string) => api.get(`/problems/${slug}`),
 };
@@ -381,7 +374,7 @@ export const adminAssessmentsAPI = {
 };
 
 export const studentAssessmentsAPI = {
-  getMyAssessments: () => api.get("/assessments/my-assessments"),
+  getMyAssessments: (signal?: AbortSignal) => api.get("/assessments/my-assessments", { signal }),
   getOverview: (id: string) => api.get(`/assessments/${id}/overview`),
   startAttempt: (id: string) => api.post(`/assessments/${id}/start`),
   saveProgress: (id: string, data: any) => api.post(`/assessments/${id}/save-progress`, data),

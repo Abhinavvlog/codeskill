@@ -7,6 +7,7 @@ import { Submission } from '../database/entities/submission.entity';
 import { User } from '../database/entities/user.entity';
 import { GatewayModule } from '../gateway/gateway.module';
 import { RedisModule } from '../redis/redis.module';
+import { ProblemsModule } from '../problems/problems.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { RedisModule } from '../redis/redis.module';
     }),
     GatewayModule,
     RedisModule,
+    ProblemsModule,
   ],
   controllers: [SubmissionsController],
   providers: [SubmissionsService],

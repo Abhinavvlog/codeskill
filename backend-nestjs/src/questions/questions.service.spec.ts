@@ -36,6 +36,7 @@ describe('QuestionsService - True/False Questions Handling', () => {
       mockQuestionRepo,
       mockQuestionBankRepo,
       mockAuditLogRepo,
+      { invalidatePrefix: jest.fn().mockResolvedValue(undefined) } as never,
     );
   });
 

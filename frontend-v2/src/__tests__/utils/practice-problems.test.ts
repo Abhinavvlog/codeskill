@@ -28,7 +28,7 @@ const bankQuestion = {
   question: "Legacy question title",
   difficulty: "medium",
   topic: "Arrays",
-  metadata: { categories: ["Trees", "Graphs"] },
+  metadata: { categories: ["Trees", "Graphs"], visibility: "Published" },
   status: "approved",
 };
 
@@ -95,6 +95,19 @@ describe("Question Bank practice eligibility and actions", () => {
     ["draft", "Draft"], ["pending", "Pending"], ["rejected", "Rejected"],
   ])("reflects persisted %s status as %s without changing publication", (status, visibility) => {
     expect(mergePracticeProblems([], [{ ...bankQuestion, status }])[0].visibility).toBe(visibility);
+  });
+
+  it.each(["approved", "active", "published"])("does not infer publication from legacy %s status", status => {
+    expect(mergePracticeProblems([], [{ ...bankQuestion, status, metadata: { categories: ["Trees"] } }])[0].visibility).toBe("Draft");
+  });
+
+  it.each(["Public", "Published", " public ", "PUBLISHED"])("uses explicit metadata visibility %s for publication", visibility => {
+    expect(mergePracticeProblems([], [{ ...bankQuestion, metadata: { visibility } }])[0].visibility).toBe("Published");
+  });
+
+  it("supports explicit top-level visibility and respects an explicit nonpublic value", () => {
+    expect(mergePracticeProblems([], [{ ...bankQuestion, visibility: "Public", metadata: {} }])[0].visibility).toBe("Published");
+    expect(mergePracticeProblems([], [{ ...bankQuestion, visibility: "Draft" }])[0].visibility).toBe("Draft");
   });
 
   it("retains explicit Private visibility and does not present a draft as public", () => {

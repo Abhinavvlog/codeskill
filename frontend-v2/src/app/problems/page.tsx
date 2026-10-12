@@ -2,44 +2,55 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { fadeUp, staggerContainer } from "@/lib/animations";
-import { Search, Filter, Play, CheckCircle2, Circle } from "lucide-react";
+import { Search, Filter, CheckCircle2, Circle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { problemsAPI } from "@/config/api";
 import { Spinner } from "@/components/ui/spinner";
+import { parsePublicProblemList, type PublicProblemList } from "@/lib/public-problems";
+
+const ITEMS_PER_PAGE = 20;
 
 export default function ProblemsPage() {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All Topics");
-  const [problems, setProblems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  
-  const ITEMS_PER_PAGE = 20;
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalItems, setTotalItems] = useState(0);
-
-  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [retry, setRetry] = useState(0);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [result, setResult] = useState<{ key: string; data: PublicProblemList; error: string | null } | null>(null);
+  const requestKey = JSON.stringify([currentPage, debouncedSearch, activeCategory, retry]);
+  const loading = result?.key !== requestKey;
+  const error = loading ? null : result?.error;
+  const problems = result?.data.problems ?? [];
+  const totalPages = result?.data.totalPages ?? 1;
+  const totalItems = result?.data.total ?? 0;
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    const query = search.trim();
+    if (query === debouncedSearch) return;
+    const timer = setTimeout(() => {
+      setDebouncedSearch(query);
+      setCurrentPage(1);
+    }, 300);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, debouncedSearch]);
 
   useEffect(() => {
-    setLoading(true);
-    problemsAPI.getAll(currentPage, ITEMS_PER_PAGE, debouncedSearch, activeCategory).then(res => {
-      setProblems(res.data?.data || []);
-      setTotalPages(res.data?.totalPages || 1);
-      setTotalItems(res.data?.total || 0);
-      setLoading(false);
-    }).catch(err => {
-      console.error(err);
-      setLoading(false);
-    });
-  }, [currentPage, debouncedSearch, activeCategory]);
+    const controller = new AbortController();
+    problemsAPI.getAll(currentPage, ITEMS_PER_PAGE, debouncedSearch, activeCategory, controller.signal)
+      .then(response => {
+        if (controller.signal.aborted) return;
+        const data = parsePublicProblemList(response.data, ITEMS_PER_PAGE);
+        setResult({ key: requestKey, data, error: null });
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setResult({ key: requestKey, data: { problems: [], total: 0, totalPages: 1 }, error: "Problems could not be loaded. Please try again." });
+      });
+    return () => controller.abort();
+  }, [currentPage, debouncedSearch, activeCategory, requestKey]);
 
   const categories = ["All Topics", "Arrays", "Strings", "Dynamic Programming", "Trees", "Graphs", "Math"];
 
@@ -76,7 +87,8 @@ export default function ProblemsPage() {
             <div className="relative w-full md:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
-                placeholder="Search problems..." 
+                placeholder="Search problems..."
+                aria-label="Search problems"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="pl-9 h-10 bg-transparent border-border text-foreground rounded-md focus-visible:ring-1 focus-visible:ring-ring focus-visible:border-ring placeholder:text-muted-foreground shadow-sm"
@@ -94,7 +106,8 @@ export default function ProblemsPage() {
           {categories.map((cat) => (
             <button 
               key={cat}
-              onClick={() => setActiveCategory(cat)}
+              onClick={() => { setActiveCategory(cat); setCurrentPage(1); }}
+              aria-pressed={activeCategory === cat}
               className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all border ${
                 activeCategory === cat 
                   ? "bg-foreground text-background border-foreground" 
@@ -124,7 +137,14 @@ export default function ProblemsPage() {
                   {loading ? (
                     <tr>
                       <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground">
-                        <Spinner className="w-6 h-6 animate-spin mx-auto text-foreground" />
+                        <span role="status" aria-label="Loading problems"><Spinner className="w-6 h-6 animate-spin mx-auto text-foreground" /></span>
+                      </td>
+                    </tr>
+                  ) : error ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center">
+                        <div role="alert" className="text-destructive mb-3">{error}</div>
+                        <Button variant="outline" size="sm" onClick={() => setRetry(value => value + 1)}>Try again</Button>
                       </td>
                     </tr>
                   ) : filtered.length === 0 ? (
@@ -141,7 +161,7 @@ export default function ProblemsPage() {
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.98 }}
                         transition={{ duration: 0.2 }}
-                        key={problem._id} 
+                        key={problem.id}
                         className="group hover:bg-muted/50 transition-colors cursor-pointer"
                       >
                         <td className="px-6 py-4 text-center">
@@ -150,15 +170,17 @@ export default function ProblemsPage() {
                           {(!problem.status || problem.status === "unsolved") && <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 mx-auto group-hover:border-foreground/50 transition-colors" />}
                         </td>
                         <td className="px-6 py-4">
-                          <Link href={`/problems/${problem.slug}`} className="font-semibold text-foreground group-hover:underline transition-colors flex items-center gap-2">
-                            {problem.title}
-                          </Link>
+                          {problem.slug ? (
+                            <Link href={`/problems/${encodeURIComponent(problem.slug)}`} className="font-semibold text-foreground group-hover:underline transition-colors flex items-center gap-2">
+                              {problem.title}
+                            </Link>
+                          ) : <span className="font-semibold text-foreground">{problem.title}</span>}
                         </td>
                         <td className="px-6 py-4">
                           <span className={`text-xs font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full ${
                             problem.difficulty === 'Easy' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' :
                             problem.difficulty === 'Medium' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' :
-                            'bg-destructive/10 text-destructive'
+                            problem.difficulty === 'Hard' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground'
                           }`}>
                             {problem.difficulty}
                           </span>
@@ -180,7 +202,7 @@ export default function ProblemsPage() {
           </div>
           
           {/* Sticky Pagination Controls */}
-          {totalPages > 1 && (
+          {!error && totalPages > 1 && (
             <div className="flex flex-col lg:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-border bg-card sticky bottom-0 z-10 w-full shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)]">
               <div className="text-sm text-muted-foreground whitespace-nowrap text-center lg:text-left w-full lg:w-auto">
                 Showing <span className="font-medium text-foreground">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span> to <span className="font-medium text-foreground">{Math.min(currentPage * ITEMS_PER_PAGE, totalItems)}</span> of <span className="font-medium text-foreground">{totalItems}</span> questions
@@ -207,6 +229,7 @@ export default function ProblemsPage() {
                         variant={currentPage === pageNum ? "default" : "outline"}
                         size="sm"
                         className={`shrink-0 ${currentPage === pageNum ? "bg-foreground text-background hover:bg-foreground/90" : "bg-transparent border-border text-foreground hover:bg-muted"}`}
+                        aria-current={currentPage === pageNum ? "page" : undefined}
                         onClick={() => setCurrentPage(pageNum as number)}
                         disabled={loading}
                       >

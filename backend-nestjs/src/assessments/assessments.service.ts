@@ -562,6 +562,12 @@ export class AssessmentsService {
       order: { score: 'DESC', createdAt: 'DESC' },
     });
 
+    const questionIds = [...new Set(filteredAssessments.flatMap(a => a.questions || []))];
+    const questionMetadata = questionIds.length ? await this.questionRepo.find({
+      where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
+      select: { id: true, mongoId: true, questionType: true, difficulty: true },
+    }) : [];
+
     const items = filteredAssessments.map((a) => {
       const allForAssessment = existingAttempts.filter(
         (att) => att.assessmentId === a.id || att.assessmentId === a.mongoId,
@@ -596,6 +602,8 @@ export class AssessmentsService {
         allowedAttempts,
         completedAttemptsCount: completedCount,
         questionCount: a.questions?.length || 0,
+        questionTypes: [...new Set(questionMetadata.filter(q => a.questions?.includes(q.id) || (!!q.mongoId && a.questions?.includes(q.mongoId))).map(q => q.questionType))],
+        difficulties: [...new Set(questionMetadata.filter(q => a.questions?.includes(q.id) || (!!q.mongoId && a.questions?.includes(q.mongoId))).map(q => q.difficulty))],
         attemptStatus: isCompleted
           ? 'submitted'
           : inProgressAttempt

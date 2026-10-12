@@ -2,11 +2,11 @@ import {
   IsString,
   IsNotEmpty,
   IsArray,
-  ArrayMinSize,
   IsNumber,
   IsOptional,
   IsIn,
-  ArrayUnique,
+  IsBoolean,
+  ValidateIf,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -23,7 +23,9 @@ export class CreateQuestionDto {
   })
   @IsOptional()
   @IsArray()
-  options?: Array<string | { text: string; isCorrect?: boolean; explanation?: string }>;
+  options?: Array<
+    string | { text: string; isCorrect?: boolean; explanation?: string }
+  >;
 
   @ApiPropertyOptional({
     example: 1,
@@ -109,10 +111,39 @@ export class CreateQuestionDto {
   ])
   questionType?: string = 'single_choice';
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    enum: [
+      'pending',
+      'approved',
+      'rejected',
+      'archived',
+      'active',
+      'draft',
+      'published',
+    ],
+  })
   @IsOptional()
-  @IsString()
+  @IsIn([
+    'pending',
+    'approved',
+    'rejected',
+    'archived',
+    'active',
+    'draft',
+    'published',
+  ])
   status?: string;
+
+  @ApiPropertyOptional({ enum: ['Draft', 'Private', 'Published', 'Public'] })
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @IsIn(['Draft', 'Private', 'Published', 'Public'])
+  visibility?: 'Draft' | 'Private' | 'Published' | 'Public';
+
+  @ApiPropertyOptional()
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @Transform(({ obj, key }) => (obj as Record<string, unknown>)[key])
+  @IsBoolean()
+  contestOnly?: boolean;
 
   @ApiPropertyOptional({
     type: [String],
@@ -163,7 +194,7 @@ export class CreateQuestionDto {
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
-  @Transform(({ value }) => {
+  @Transform(({ value }: { value: unknown }) => {
     if (typeof value === 'string') {
       return value
         .split('\n')
