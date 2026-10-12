@@ -150,6 +150,16 @@ function UnifiedQuestionForm() {
         return false;
       }
     }
+
+    if (questionType === "TRUE_FALSE") {
+      const isTrue = !!store.mcqOptions[0]?.isCorrect;
+      const isFalse = !!store.mcqOptions[1]?.isCorrect;
+      if (!isTrue && !isFalse) {
+        addToast("error", "Validation Failed", "Please select either True or False as the correct answer.");
+        scrollToSection("mcq-options");
+        return false;
+      }
+    }
     
     if (questionType === "CODE_OUTPUT" && !store.codeOutput.expectedOutput.trim()) {
        addToast("error", "Validation Failed", "Expected Output is required.");
@@ -180,12 +190,23 @@ function UnifiedQuestionForm() {
         questionType: questionType,
       };
 
-      if (["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType)) {
+      if (questionType === "TRUE_FALSE") {
+        const isFalse = !!store.mcqOptions[1]?.isCorrect;
+        payload.options = [
+          { text: "True", isCorrect: !isFalse, explanation: store.mcqOptions[0]?.explanation || "" },
+          { text: "False", isCorrect: isFalse, explanation: store.mcqOptions[1]?.explanation || "" },
+        ];
+        payload.correctAnswer = isFalse ? 1 : 0;
+        payload.correctAnswers = [isFalse ? 1 : 0];
+      } else if (["MCQ", "MULTIPLE_CHOICE"].includes(questionType)) {
         payload.options = store.mcqOptions.map(opt => ({
           text: opt.text,
           isCorrect: opt.isCorrect,
           explanation: opt.explanation,
         }));
+        const correctIdx = store.mcqOptions.findIndex(o => o.isCorrect);
+        payload.correctAnswer = correctIdx >= 0 ? correctIdx : 0;
+        payload.correctAnswers = store.mcqOptions.map((o, idx) => o.isCorrect ? idx : -1).filter(idx => idx >= 0);
       } else if (questionType === "CODE_OUTPUT") {
         payload.language = store.codeOutput.language;
         payload.codeSnippet = store.codeOutput.code;

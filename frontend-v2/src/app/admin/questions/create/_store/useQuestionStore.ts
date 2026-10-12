@@ -293,18 +293,74 @@ const initialState = {
   activeSection: 'basic-info',
 };
 
+export function normalizeTrueFalseOptions(existing?: any[], correctAnswer?: number): MCQOption[] {
+  let isFalse = false;
+  if (correctAnswer === 1) {
+    isFalse = true;
+  } else if (Array.isArray(existing) && existing.length > 0) {
+    const falseIndex = existing.findIndex(
+      (o: any) => (typeof o === 'string' ? o : o?.text || '').trim().toLowerCase() === 'false'
+    );
+    if (falseIndex >= 0) {
+      if (typeof existing[falseIndex] === 'object' && existing[falseIndex]?.isCorrect) {
+        isFalse = true;
+      } else if (correctAnswer === falseIndex) {
+        isFalse = true;
+      }
+    } else if (existing.length >= 2 && existing[1]?.isCorrect && !existing[0]?.isCorrect) {
+      isFalse = true;
+    }
+  }
+
+  let trueExp = '';
+  let falseExp = '';
+  if (Array.isArray(existing)) {
+    existing.forEach((o, i) => {
+      if (typeof o === 'object') {
+        const text = (o?.text || '').toLowerCase();
+        if (text === 'true' || i === 0) trueExp = o?.explanation || trueExp;
+        if (text === 'false' || i === 1) falseExp = o?.explanation || falseExp;
+      }
+    });
+  }
+
+  return [
+    { text: 'True', isCorrect: !isFalse, explanation: trueExp },
+    { text: 'False', isCorrect: isFalse, explanation: falseExp },
+  ];
+}
+
 export const useQuestionStore = create<QuestionState>((set, get) => ({
   ...initialState,
 
   updateMetadata: (updates) =>
-    set((s) => ({
-      metadata: { ...s.metadata, ...updates },
-      seo: {
-        ...s.seo,
-        slug: updates.slug ?? s.seo.slug,
-        metaTitle: updates.title && !s.seo.metaTitle ? updates.title : s.seo.metaTitle,
-      },
-    })),
+    set((s) => {
+      let newMcqOptions = s.mcqOptions;
+      if (updates.questionType && updates.questionType !== s.metadata.questionType) {
+        if (updates.questionType === 'TRUE_FALSE') {
+          newMcqOptions = normalizeTrueFalseOptions(s.mcqOptions);
+        } else if (s.metadata.questionType === 'TRUE_FALSE' && ['MCQ', 'MULTIPLE_CHOICE'].includes(updates.questionType)) {
+          if (s.mcqOptions.length < 4) {
+            newMcqOptions = [
+              { text: '', isCorrect: true, explanation: '' },
+              { text: '', isCorrect: false, explanation: '' },
+              { text: '', isCorrect: false, explanation: '' },
+              { text: '', isCorrect: false, explanation: '' },
+            ];
+          }
+        }
+      }
+
+      return {
+        metadata: { ...s.metadata, ...updates },
+        mcqOptions: newMcqOptions,
+        seo: {
+          ...s.seo,
+          slug: updates.slug ?? s.seo.slug,
+          metaTitle: updates.title && !s.seo.metaTitle ? updates.title : s.seo.metaTitle,
+        },
+      };
+    }),
 
   updateLanguages: (updates) =>
     set((s) => ({ languages: { ...s.languages, ...updates } })),
@@ -396,7 +452,13 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
   updatePublishing: (updates) =>
     set((s) => ({ publishing: { ...s.publishing, ...updates } })),
 
-  updateMCQOptions: (options) => set({ mcqOptions: options }),
+  updateMCQOptions: (options) =>
+    set((s) => {
+      if (s.metadata.questionType === 'TRUE_FALSE') {
+        return { mcqOptions: normalizeTrueFalseOptions(options) };
+      }
+      return { mcqOptions: options };
+    }),
   updateCodeOutput: (updates) => set((s) => ({ codeOutput: { ...s.codeOutput, ...updates } })),
 
   setDarkMode: (dark) => set({ isDarkMode: dark }),
@@ -463,8 +525,30 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
 
   resetStore: () => set({ ...initialState, metadata: { ...initialState.metadata, questionId: `QID-${Date.now().toString(36).toUpperCase()}` } }),
   setAllData: (data) => set((state) => {
+    const rawQType = data.metadata?.questionType || (data as any).questionType || state.metadata.questionType;
+    const isTF = rawQType === 'TRUE_FALSE' || rawQType === 'true_false';
+
+    let nextMcqOptions = state.mcqOptions;
+    if (isTF) {
+      nextMcqOptions = normalizeTrueFalseOptions(
+        data.mcqOptions || (data as any).options,
+        (data as any).correctAnswer !== undefined ? (data as any).correctAnswer : (data.mcqOptions?.findIndex((o: any) => o.isCorrect))
+      );
+    } else if (data.mcqOptions) {
+      nextMcqOptions = data.mcqOptions;
+    } else if (Array.isArray((data as any).options) && (data as any).options.length > 0) {
+      const opts = (data as any).options;
+      const cAns = (data as any).correctAnswer ?? 0;
+      const cAnss = (data as any).correctAnswers || [cAns];
+      nextMcqOptions = opts.map((opt: any, i: number) => ({
+        text: typeof opt === 'string' ? opt : opt.text || '',
+        isCorrect: typeof opt === 'object' && opt.isCorrect !== undefined ? opt.isCorrect : cAnss.includes(i),
+        explanation: typeof opt === 'object' ? opt.explanation || '' : '',
+      }));
+    }
+
     return {
-      metadata: { ...state.metadata, ...data.metadata },
+      metadata: { ...state.metadata, ...data.metadata, questionType: isTF ? 'TRUE_FALSE' : (data.metadata?.questionType || state.metadata.questionType) },
       languages: { ...state.languages, ...data.languages },
       execution: { ...state.execution, ...data.execution },
       statement: {
@@ -476,6 +560,7 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
           ? data.statement.constraints
           : state.statement.constraints,
       },
+      mcqOptions: nextMcqOptions,
       sampleExamples: data.sampleExamples || state.sampleExamples,
       starterCode: { ...state.starterCode, ...data.starterCode },
       referenceSolution: { ...state.referenceSolution, ...data.referenceSolution },

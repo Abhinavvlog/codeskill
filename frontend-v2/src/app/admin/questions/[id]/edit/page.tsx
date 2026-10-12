@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { adminProblemsAPI, adminQuestionsAPI } from "@/config/api";
 import { useQuestionStore } from "../../create/_store/useQuestionStore";
 import { formatConstraints } from "@/lib/utils";
 import Link from "next/link";
-import { ArrowLeft, Save, Settings, FileText, Code2, Database, BarChart3, Rocket, LayoutTemplate, Shield, Moon, Sun, Search, Cpu, AlertTriangle, ArrowRightLeft, Lightbulb, BookOpen, Sparkles, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Save, Settings, FileText, Code2, Database, BarChart3, Rocket, LayoutTemplate, Shield, Moon, Sun, Search, Cpu, AlertTriangle, ArrowRightLeft, Lightbulb, BookOpen, Sparkles, CheckCircle2, ListChecks } from "lucide-react";
 import { motion } from "framer-motion";
 import { ToastProvider, useToast } from "../../create/_components/Toast";
 import ProgressBar from "../../create/_components/ProgressBar";
 
 import BasicInfo from "../../create/_components/BasicInfo";
+import MCQEditor from "../../create/_components/MCQEditor";
+import CodeOutputEditor from "../../create/_components/CodeOutputEditor";
 import ProgrammingLanguages from "../../create/_components/ProgrammingLanguages";
 import ExecutionSettings from "../../create/_components/ExecutionSettings";
 import ProblemStatement from "../../create/_components/ProblemStatement";
@@ -29,25 +31,6 @@ import AnalyticsSection from "../../create/_components/AnalyticsSection";
 import PublishingSection from "../../create/_components/PublishingSection";
 import { Spinner } from "@/components/ui/spinner";
 
-const NAV_ITEMS = [
-  { id: "basic-info", label: "Basic Info", icon: Settings },
-  { id: "languages", label: "Languages", icon: Code2 },
-  { id: "execution-settings", label: "Execution", icon: Cpu },
-  { id: "statement", label: "Statement", icon: FileText },
-  { id: "constraints", label: "Constraints", icon: AlertTriangle },
-  { id: "io-format", label: "I/O Format", icon: ArrowRightLeft },
-  { id: "sample-test-cases", label: "Sample Cases", icon: Lightbulb },
-  { id: "starter-code", label: "Starter Code", icon: LayoutTemplate },
-  { id: "reference-solution", label: "Reference", icon: Shield },
-  { id: "test-cases", label: "Test Cases", icon: Database },
-  { id: "custom-checker", label: "Checker", icon: Shield },
-  { id: "solution-explanation", label: "Editorial", icon: BookOpen },
-  { id: "ai-assistance", label: "AI Tools", icon: Sparkles },
-  { id: "seo", label: "SEO", icon: Search },
-  { id: "analytics", label: "Analytics", icon: BarChart3 },
-  { id: "publishing", label: "Publishing", icon: Rocket },
-];
-
 function EditQuestionContent() {
   const router = useRouter();
   const params = useParams();
@@ -57,6 +40,39 @@ function EditQuestionContent() {
   
   const store = useQuestionStore();
   const { isDarkMode, setDarkMode, lastSaved, markSaved, getProgress, activeSection, setActiveSection, setAllData, resetStore } = store;
+  const questionType = store.metadata.questionType;
+
+  const navItems = useMemo(() => {
+    const baseItems = [{ id: "basic-info", label: "Basic Info", icon: Settings }];
+
+    if (["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType)) {
+      baseItems.push({ id: "mcq-options", label: "Options", icon: ListChecks });
+      baseItems.push({ id: "solution-explanation", label: "Explanation", icon: BookOpen });
+    } else if (questionType === "CODE_OUTPUT") {
+      baseItems.push({ id: "code-output", label: "Code Snippet", icon: Code2 });
+      baseItems.push({ id: "solution-explanation", label: "Explanation", icon: BookOpen });
+    } else {
+      baseItems.push(
+        { id: "languages", label: "Languages", icon: Code2 },
+        { id: "execution-settings", label: "Execution", icon: Cpu },
+        { id: "statement", label: "Statement", icon: FileText },
+        { id: "constraints", label: "Constraints", icon: AlertTriangle },
+        { id: "io-format", label: "I/O Format", icon: ArrowRightLeft },
+        { id: "sample-test-cases", label: "Sample Cases", icon: Lightbulb },
+        { id: "starter-code", label: "Starter Code", icon: LayoutTemplate },
+        { id: "reference-solution", label: "Reference", icon: Shield },
+        { id: "test-cases", label: "Test Cases", icon: Database },
+        { id: "custom-checker", label: "Checker", icon: Shield },
+        { id: "solution-explanation", label: "Editorial", icon: BookOpen },
+        { id: "ai-assistance", label: "AI Tools", icon: Sparkles },
+        { id: "seo", label: "SEO", icon: Search },
+        { id: "analytics", label: "Analytics", icon: BarChart3 }
+      );
+    }
+
+    baseItems.push({ id: "publishing", label: "Publishing", icon: Rocket });
+    return baseItems;
+  }, [questionType]);
 
   // Fetch the existing problem
   useEffect(() => {
@@ -70,6 +86,14 @@ function EditQuestionContent() {
           const res = await adminProblemsAPI.getById(params.id as string);
           data = res.data.data ? res.data.data : res.data;
         }
+
+        const rawType = data.questionType || (Array.isArray(data.options) && data.options.length ? "MCQ" : "DSA");
+        let qType: 'MCQ' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'CODE_OUTPUT' | 'DSA' = "DSA";
+        if (["TRUE_FALSE", "true_false"].includes(rawType)) qType = "TRUE_FALSE";
+        else if (["MULTIPLE_CHOICE", "multiple_choice"].includes(rawType)) qType = "MULTIPLE_CHOICE";
+        else if (["MCQ", "single_choice"].includes(rawType)) qType = "MCQ";
+        else if (["CODE_OUTPUT", "code_output"].includes(rawType)) qType = "CODE_OUTPUT";
+        else if (["DSA", "coding", "algorithmic"].includes(rawType)) qType = "DSA";
 
         const rawConstraints = data.constraints || data.statement?.constraints;
         const constraintsString = Array.isArray(rawConstraints)
@@ -89,7 +113,12 @@ function EditQuestionContent() {
             author: data.author || "",
             questionId: data._id || data.id || "",
             estimatedSolveTime: 30, // Default if not in backend
+            points: data.marks || 1,
+            questionType: qType,
           },
+          options: data.options,
+          correctAnswer: data.correctAnswer,
+          correctAnswers: data.correctAnswers,
           seo: {
             metaTitle: data.metaTitle || "",
             metaDescription: data.metaDescription || "",
@@ -100,6 +129,11 @@ function EditQuestionContent() {
             inputFormat: data.inputFormat || data.statement?.inputFormat || "",
             outputFormat: data.outputFormat || data.statement?.outputFormat || "",
             constraints: constraintsString,
+          },
+          solutionExplanation: {
+            content: data.explanation || "",
+            timeComplexity: "",
+            spaceComplexity: "",
           },
           sampleExamples: data.examples || data.statement?.samples || [],
           languages: {
@@ -179,13 +213,13 @@ function EditQuestionContent() {
       { rootMargin: "-20% 0px -80% 0px" }
     );
 
-    NAV_ITEMS.forEach((item) => {
+    navItems.forEach((item) => {
       const el = document.getElementById(item.id);
       if (el) observer.observe(el);
     });
 
     return () => observer.disconnect();
-  }, [setActiveSection, fetching]);
+  }, [setActiveSection, fetching, navItems]);
 
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
@@ -209,10 +243,26 @@ function EditQuestionContent() {
       scrollToSection("basic-info");
       return false;
     }
-    if (store.languages.supported.length === 0) {
+    if (questionType === "DSA" && store.languages.supported.length === 0) {
       addToast("error", "Validation Failed", "Please select at least one programming language.");
       scrollToSection("languages");
       return false;
+    }
+    if (questionType === "TRUE_FALSE") {
+      const isTrue = !!store.mcqOptions[0]?.isCorrect;
+      const isFalse = !!store.mcqOptions[1]?.isCorrect;
+      if (!isTrue && !isFalse) {
+        addToast("error", "Validation Failed", "Please select either True or False as the correct answer.");
+        scrollToSection("mcq-options");
+        return false;
+      }
+    }
+    if (["MCQ", "MULTIPLE_CHOICE"].includes(questionType)) {
+      if (!store.mcqOptions.some((o) => o.isCorrect)) {
+        addToast("error", "Validation Failed", "Select at least one correct option.");
+        scrollToSection("mcq-options");
+        return false;
+      }
     }
     addToast("success", "Validation Passed", "All required fields look good.");
     return true;
@@ -241,6 +291,7 @@ function EditQuestionContent() {
         status: visibility === "Published" ? "approved" : "draft",
         tags: store.metadata.tags,
         explanation: store.solutionExplanation?.content || "",
+        questionType: questionType,
         problemStatement: store.statement.description,
         constraints: formattedConstraints,
         inputFormat: store.statement.inputFormat,
@@ -274,6 +325,27 @@ function EditQuestionContent() {
           visibility,
         },
       };
+
+      if (questionType === "TRUE_FALSE") {
+        const isFalse = !!store.mcqOptions[1]?.isCorrect;
+        payload.options = [
+          { text: "True", isCorrect: !isFalse, explanation: store.mcqOptions[0]?.explanation || "" },
+          { text: "False", isCorrect: isFalse, explanation: store.mcqOptions[1]?.explanation || "" },
+        ];
+        payload.correctAnswer = isFalse ? 1 : 0;
+        payload.correctAnswers = [isFalse ? 1 : 0];
+      } else if (["MCQ", "MULTIPLE_CHOICE"].includes(questionType)) {
+        payload.options = store.mcqOptions.map((opt) => ({
+          text: opt.text,
+          isCorrect: opt.isCorrect,
+          explanation: opt.explanation,
+        }));
+        const correctIdx = store.mcqOptions.findIndex((o) => o.isCorrect);
+        payload.correctAnswer = correctIdx >= 0 ? correctIdx : 0;
+        payload.correctAnswers = store.mcqOptions
+          .map((o, idx) => (o.isCorrect ? idx : -1))
+          .filter((idx) => idx >= 0);
+      }
 
       try {
         await adminQuestionsAPI.update(params.id as string, payload);
@@ -361,7 +433,7 @@ function EditQuestionContent() {
           <div className="hidden lg:block w-64 flex-shrink-0 sticky top-32">
             <nav className="space-y-1">
               <p className="text-[10px] font-bold text-gray-400 dark:text-muted-foreground uppercase tracking-widest mb-4 px-3">Navigation</p>
-              {NAV_ITEMS.map(item => (
+              {navItems.map(item => (
                 <button
                   key={item.id}
                   type="button"
@@ -383,16 +455,30 @@ function EditQuestionContent() {
           <div className="flex-1 w-full min-w-0">
             <form id="question-form" onSubmit={handleSubmit} className="space-y-8 max-w-4xl">
               <BasicInfo />
-              <ProgrammingLanguages />
-              <ExecutionSettings />
-              <ProblemStatement />
-              <Constraints />
-              <InputOutputFormat />
-              <SampleTestCases />
-              <StarterCode />
-              <ReferenceSolution />
-              <TestCases />
-              <CustomChecker />
+              {["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType) && (
+                <div id="mcq-options">
+                  <MCQEditor />
+                </div>
+              )}
+              {questionType === "CODE_OUTPUT" && (
+                <div id="code-output">
+                  <CodeOutputEditor />
+                </div>
+              )}
+              {questionType === "DSA" && (
+                <>
+                  <ProgrammingLanguages />
+                  <ExecutionSettings />
+                  <ProblemStatement />
+                  <Constraints />
+                  <InputOutputFormat />
+                  <SampleTestCases />
+                  <StarterCode />
+                  <ReferenceSolution />
+                  <TestCases />
+                  <CustomChecker />
+                </>
+              )}
               <SolutionExplanation />
               <AIAssistance />
               <SEOSection />

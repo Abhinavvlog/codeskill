@@ -72,6 +72,23 @@ export class QuestionsService {
       .take(limit)
       .getManyAndCount();
 
+    questions.forEach((q) => {
+      if (q.questionType === 'TRUE_FALSE') {
+        let isFalse = q.correctAnswer === 1;
+        if (Array.isArray(q.options) && q.correctAnswer !== undefined) {
+          const chosen = String(q.options[q.correctAnswer] || '').trim().toLowerCase();
+          if (chosen === 'false') {
+            isFalse = true;
+          } else if (chosen === 'true') {
+            isFalse = false;
+          }
+        }
+        q.options = ['True', 'False'];
+        q.correctAnswer = isFalse ? 1 : 0;
+        q.correctAnswers = [q.correctAnswer];
+      }
+    });
+
     const pendingCount = await this.questionRepository.count({ where: { status: 'pending' } });
     const approvedCount = await this.questionRepository.count({ where: { status: 'approved' } });
 
@@ -100,6 +117,21 @@ export class QuestionsService {
     const question = await this.questionRepository.findOne({ where: { id } });
     if (!question || question.status === 'archived') {
       throw new NotFoundException('Question not found');
+    }
+
+    if (question.questionType === 'TRUE_FALSE') {
+      let isFalse = question.correctAnswer === 1;
+      if (Array.isArray(question.options) && question.correctAnswer !== undefined) {
+        const chosen = String(question.options[question.correctAnswer] || '').trim().toLowerCase();
+        if (chosen === 'false') {
+          isFalse = true;
+        } else if (chosen === 'true') {
+          isFalse = false;
+        }
+      }
+      question.options = ['True', 'False'];
+      question.correctAnswer = isFalse ? 1 : 0;
+      question.correctAnswers = [question.correctAnswer];
     }
 
     // Question Leakage Prevention: NEVER send answers or hidden data to students
@@ -146,13 +178,89 @@ export class QuestionsService {
     let correctAnswers: number[] = dto.correctAnswers || [];
     let correctAnswer = dto.correctAnswer ?? 0;
 
-    if (isChoice) {
+    if (type === 'TRUE_FALSE') {
       const source =
         Array.isArray(rawOptions) && rawOptions.length > 0
           ? rawOptions
-          : type === 'TRUE_FALSE'
-            ? ['True', 'False']
-            : [];
+          : ['True', 'False'];
+
+      if (source.length !== 2) {
+        throw new BadRequestException(
+          'True/False questions must contain exactly two options: True and False',
+        );
+      }
+
+      const optTexts = source.map((o: any) =>
+        (typeof o === 'string' ? o : o?.text || '').trim(),
+      );
+      const lowerTexts = optTexts.map((t) => t.toLowerCase());
+
+      if (lowerTexts[0] === lowerTexts[1]) {
+        throw new BadRequestException(
+          'True/False questions cannot have duplicate options',
+        );
+      }
+
+      if (
+        !lowerTexts.includes('true') ||
+        !lowerTexts.includes('false')
+      ) {
+        throw new BadRequestException(
+          'True/False questions must contain True and False options',
+        );
+      }
+
+      options = ['True', 'False'];
+
+      let selectedAnswer: number | null = null;
+      const flagged = source
+        .map((o: any, i: number) => {
+          if (typeof o === 'object' && o?.isCorrect) {
+            return lowerTexts[i] === 'false' ? 1 : 0;
+          }
+          return -1;
+        })
+        .filter((i: number) => i >= 0);
+
+      if (flagged.length > 1) {
+        throw new BadRequestException(
+          'True/False questions cannot have more than one correct answer',
+        );
+      } else if (flagged.length === 1) {
+        selectedAnswer = flagged[0];
+      }
+
+      if (dto.correctAnswer !== undefined) {
+        if (dto.correctAnswer !== 0 && dto.correctAnswer !== 1) {
+          throw new BadRequestException(
+            'correctAnswer for True/False must be 0 (True) or 1 (False)',
+          );
+        }
+        selectedAnswer = dto.correctAnswer;
+      }
+
+      if (dto.correctAnswers !== undefined && dto.correctAnswers.length > 0) {
+        if (dto.correctAnswers.length > 1) {
+          throw new BadRequestException(
+            'True/False questions cannot have more than one correct answer',
+          );
+        }
+        if (dto.correctAnswers[0] !== 0 && dto.correctAnswers[0] !== 1) {
+          throw new BadRequestException(
+            'correctAnswers for True/False must contain 0 (True) or 1 (False)',
+          );
+        }
+        selectedAnswer = dto.correctAnswers[0];
+      }
+
+      if (selectedAnswer === null) {
+        selectedAnswer = 0;
+      }
+
+      correctAnswer = selectedAnswer;
+      correctAnswers = [selectedAnswer];
+    } else if (isChoice) {
+      const source = Array.isArray(rawOptions) ? rawOptions : [];
       options = source.map((o: any) => (typeof o === 'string' ? o : o?.text || ''));
       const flagged = source
         .map((o: any, i: number) => (typeof o === 'object' && o?.isCorrect ? i : -1))
@@ -233,20 +341,135 @@ export class QuestionsService {
       'TRUE_FALSE',
     ].includes(type);
 
-    if (isChoice) {
-      const rawOptions = dto.options || question.options;
-      const options = Array.isArray(rawOptions)
-        ? rawOptions.map((o: any) => (typeof o === 'string' ? o : o?.text || ''))
-        : [];
-      const correctAnswer =
-        dto.correctAnswer !== undefined
-          ? dto.correctAnswer
-          : question.correctAnswer;
+    if (type === 'TRUE_FALSE') {
+      const rawOptions = dto.options !== undefined ? dto.options : question.options;
+      const source =
+        Array.isArray(rawOptions) && rawOptions.length > 0
+          ? rawOptions
+          : ['True', 'False'];
 
-      if (options.length > 0 && (correctAnswer < 0 || correctAnswer >= options.length)) {
+      if (source.length !== 2) {
         throw new BadRequestException(
-          `correctAnswer must be a valid index between 0 and ${options.length - 1}`,
+          'True/False questions must contain exactly two options: True and False',
         );
+      }
+
+      const optTexts = source.map((o: any) =>
+        (typeof o === 'string' ? o : o?.text || '').trim(),
+      );
+      const lowerTexts = optTexts.map((t) => t.toLowerCase());
+
+      if (lowerTexts[0] === lowerTexts[1]) {
+        throw new BadRequestException(
+          'True/False questions cannot have duplicate options',
+        );
+      }
+
+      if (
+        !lowerTexts.includes('true') ||
+        !lowerTexts.includes('false')
+      ) {
+        throw new BadRequestException(
+          'True/False questions must contain True and False options',
+        );
+      }
+
+      dto.options = ['True', 'False'];
+
+      let selectedAnswer: number | null = null;
+      if (dto.options !== undefined && Array.isArray(rawOptions)) {
+        const flagged = rawOptions
+          .map((o: any, i: number) => {
+            if (typeof o === 'object' && o?.isCorrect) {
+              return lowerTexts[i] === 'false' ? 1 : 0;
+            }
+            return -1;
+          })
+          .filter((i: number) => i >= 0);
+
+        if (flagged.length > 1) {
+          throw new BadRequestException(
+            'True/False questions cannot have more than one correct answer',
+          );
+        } else if (flagged.length === 1) {
+          selectedAnswer = flagged[0];
+        }
+      }
+
+      if (dto.correctAnswer !== undefined) {
+        if (dto.correctAnswer !== 0 && dto.correctAnswer !== 1) {
+          throw new BadRequestException(
+            'correctAnswer for True/False must be 0 (True) or 1 (False)',
+          );
+        }
+        selectedAnswer = dto.correctAnswer;
+      }
+
+      if (dto.correctAnswers !== undefined && dto.correctAnswers.length > 0) {
+        if (dto.correctAnswers.length > 1) {
+          throw new BadRequestException(
+            'True/False questions cannot have more than one correct answer',
+          );
+        }
+        if (dto.correctAnswers[0] !== 0 && dto.correctAnswers[0] !== 1) {
+          throw new BadRequestException(
+            'correctAnswers for True/False must contain 0 (True) or 1 (False)',
+          );
+        }
+        selectedAnswer = dto.correctAnswers[0];
+      }
+
+      if (selectedAnswer !== null) {
+        dto.correctAnswer = selectedAnswer;
+        dto.correctAnswers = [selectedAnswer];
+      } else {
+        const existingAns = question.correctAnswer === 1 ? 1 : 0;
+        dto.correctAnswer = existingAns;
+        dto.correctAnswers = [existingAns];
+      }
+    } else if (isChoice) {
+      if (dto.options !== undefined) {
+        const rawOptions = dto.options;
+        const source = Array.isArray(rawOptions) ? rawOptions : [];
+        const options = source.map((o: any) =>
+          typeof o === 'string' ? o : o?.text || '',
+        );
+        const flagged = source
+          .map((o: any, i: number) => (typeof o === 'object' && o?.isCorrect ? i : -1))
+          .filter((i: number) => i >= 0);
+
+        if (flagged.length > 0 && dto.correctAnswer === undefined) {
+          dto.correctAnswers = flagged;
+          dto.correctAnswer = flagged[0];
+        }
+
+        if (options.length < 2 || options.some((o) => !o.trim())) {
+          throw new BadRequestException(
+            'Choice questions need at least 2 non-empty options',
+          );
+        }
+
+        const effectiveCorrectAnswer =
+          dto.correctAnswer !== undefined ? dto.correctAnswer : question.correctAnswer;
+        if (
+          effectiveCorrectAnswer !== undefined &&
+          (effectiveCorrectAnswer < 0 || effectiveCorrectAnswer >= options.length)
+        ) {
+          throw new BadRequestException(
+            `correctAnswer must be a valid zero-based index between 0 and ${options.length - 1}`,
+          );
+        }
+        dto.options = options;
+      } else if (dto.correctAnswer !== undefined) {
+        const currentOptions = question.options || [];
+        if (
+          currentOptions.length > 0 &&
+          (dto.correctAnswer < 0 || dto.correctAnswer >= currentOptions.length)
+        ) {
+          throw new BadRequestException(
+            `correctAnswer must be a valid index between 0 and ${currentOptions.length - 1}`,
+          );
+        }
       }
     }
 
