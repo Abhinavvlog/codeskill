@@ -12,6 +12,7 @@ import { Spinner } from "@/components/ui/spinner";
 interface Contest {
   id: string;
   title: string;
+  slug: string;
   description: string;
   startTime: string;
   endTime: string;
@@ -108,17 +109,27 @@ export default function ContestDetailsPage() {
         <h2 className="text-lg font-bold text-foreground">About this contest</h2>
         <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{contest.description}</p>
       </section>
-      <ContestRegistration key={contest.id} contest={contest} ended={ended} />
+      {!contest.isPrivate && <Link href={`/contests/leaderboard?contest=${encodeURIComponent(slug)}`} className="inline-block text-sm text-primary font-semibold hover:underline">View Contest Leaderboard</Link>}
+      <ContestRegistration key={contest.id} contest={contest} ended={ended} upcoming={upcoming} />
     </div>
   );
 }
 
 
-function ContestRegistration({ contest, ended }: { contest: Contest; ended: boolean }) {
+function ContestRegistration({ contest, ended, upcoming }: { contest: Contest; ended: boolean; upcoming: boolean }) {
   const { user, loading: authLoading } = useAuth();
   const [password, setPassword] = useState("");
   const [registering, setRegistering] = useState(false);
   const [registeredId, setRegisteredId] = useState<string>();
+  const [attemptEnded, setAttemptEnded] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    const controller = new AbortController();
+    api.get(`/contests/${encodeURIComponent(contest.id)}/registration`, { signal: controller.signal }).then(({ data }) => {
+      if (!controller.signal.aborted && data.registered) { setRegisteredId(contest.id); setAttemptEnded(!!data.attemptStatus && data.attemptStatus !== "InProgress"); }
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [contest.id, user]);
   const [registrationError, setRegistrationError] = useState("");
   const registrationRequest = useRef<AbortController | null>(null);
   useEffect(() => () => registrationRequest.current?.abort(), []);
@@ -154,7 +165,7 @@ function ContestRegistration({ contest, ended }: { contest: Contest; ended: bool
       <section className="p-6 rounded-2xl border border-border bg-card space-y-4">
         <h2 className="text-lg font-bold text-foreground">Registration</h2>
         {ended ? <p className="text-sm text-muted-foreground">This contest has ended.</p>
-          : registered ? <p className="text-sm text-emerald-600 dark:text-emerald-400" role="status">You are registered for this contest.</p>
+          : registered ? <div className="space-y-3"><p className="text-sm text-emerald-600 dark:text-emerald-400" role="status">You are registered for this contest.</p>{attemptEnded ? <Link href={`/contests/leaderboard?contest=${encodeURIComponent(contest.slug)}`} className="text-primary font-semibold text-sm">View your contest rankings</Link> : !upcoming && <Link href={`/contests/${encodeURIComponent(contest.id)}/attempt`} className="inline-block px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm">Enter Contest</Link>}</div>
           : authLoading ? <p className="text-sm text-muted-foreground" role="status">Checking your account...</p>
           : !user ? <p className="text-sm text-muted-foreground"><Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> to register for this contest.</p>
           : <form onSubmit={register} className="space-y-4">

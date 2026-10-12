@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import Page from "@/app/contests/page";
 import Leaderboard from "@/app/contests/leaderboard/page";
 import api from "@/config/api";
+jest.mock("@/context/AuthContext", () => ({ useAuth: () => ({ user: null }) }));
 jest.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
 jest.mock("@/config/api", () => ({ __esModule: true, default: { get: jest.fn() } }));
 const get = jest.mocked(api.get);
@@ -32,4 +33,10 @@ it("loads real contest rankings separately and switches the selected contest", a
   fireEvent.change(screen.getByRole("combobox", { name: "Contest" }), { target: { value: "contest-1" } });
   await waitFor(() => expect(get).toHaveBeenCalledWith("/contests/contest-1/leaderboard", expect.any(Object)));
   expect(await screen.findByText("2 / 2")).toBeInTheDocument();
+});
+
+it('refreshes after an admin mutation event without a hard reload', async () => {
+  render(<Page />); await screen.findByRole('heading', { name: 'Live Contest' });
+  fireEvent(window, new Event('codeskill-contests-changed'));
+  await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
 });

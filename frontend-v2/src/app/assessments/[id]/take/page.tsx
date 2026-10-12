@@ -96,6 +96,7 @@ export default function TakeAssessmentPage({
   const [startedAt, setStartedAt] = useState<Date>(new Date());
   const [timeLeftSeconds, setTimeLeftSeconds] = useState(2700);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadedAssessmentId, setLoadedAssessmentId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [assessmentTitle, setAssessmentTitle] = useState("Proctored Assessment");
   const [assessmentCode, setAssessmentCode] = useState("");
@@ -171,6 +172,7 @@ export default function TakeAssessmentPage({
 
     const initTest = async () => {
       setIsLoading(true);
+      setLoadedAssessmentId(null);
       try {
         const res = await studentAssessmentsAPI.startAttempt(id);
         const data = res.data;
@@ -222,6 +224,7 @@ export default function TakeAssessmentPage({
           }
         });
         setResponses(initialResponses);
+        setLoadedAssessmentId(id);
       } catch (err: any) {
         console.error("Failed to start assessment:", err);
         router.replace(`/assessments/${id}`);
@@ -239,7 +242,7 @@ export default function TakeAssessmentPage({
 
   // Media starts only for a loaded, active session; stopping is permanent for this assessment.
   const { videoRef, cameraActive, micActive, audioLevel, cameraError, stopCamera } = useAssessmentMedia(
-    id, !isLoading && !isSubmitting && timeLeftSeconds > 0, recordViolation,
+    id, loadedAssessmentId === id && questions.length > 0 && !isLoading && !isSubmitting && timeLeftSeconds > 0, recordViolation,
   );
 
   // 3. Submit Attempt Handler
@@ -505,7 +508,7 @@ export default function TakeAssessmentPage({
 
   return (
     <SafeExamBrowser 
-      isEnabled={!isLoading && !isSubmitting} 
+      isEnabled={!isLoading && !isSubmitting}
       maxWarnings={maxTabSwitches} 
       onTerminate={() => submitExam(true)}
       onViolation={recordViolation}

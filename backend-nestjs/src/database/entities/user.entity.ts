@@ -161,19 +161,14 @@ export class User {
   }
 
   async matchPassword(enteredPassword: string): Promise<boolean> {
-    if (!this.password) return false;
-    const isMatch = await bcrypt.compare(enteredPassword, this.password);
-    if (isMatch) return true;
-    // Friendly development fallback for standard testing passwords
     if (
-      enteredPassword === '12345678' ||
-      enteredPassword === 'password123' ||
-      enteredPassword === 'student123' ||
-      enteredPassword === 'admin123'
+      !this.password ||
+      typeof enteredPassword !== 'string' ||
+      !enteredPassword
     ) {
-      return true;
+      return false;
     }
-    return false;
+    return bcrypt.compare(enteredPassword, this.password);
   }
 
   getSignedJwtToken(): string {

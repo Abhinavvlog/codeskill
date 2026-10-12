@@ -138,7 +138,10 @@ it('persists registration and ignores repeated registration', async () => {
 });
 it('returns only the authenticated student registration state', async () => {
   const { service } = setup();
-  expect(await service.registration(id, userId)).toEqual({ registered: true });
+  expect(await service.registration(id, userId)).toEqual({
+    registered: true,
+    attemptStatus: 'InProgress',
+  });
   expect(await service.registration(id, 'other')).toEqual({
     registered: false,
   });
@@ -229,9 +232,22 @@ it('ranks actual accepted submissions, using parameters and excluding unpublishe
     contest.startTime,
     contest.endTime,
     [userId],
+    id,
   ]);
   contests.findOne.mockResolvedValueOnce(null);
   await expect(service.leaderboard('private')).rejects.toBeInstanceOf(
     NotFoundException,
+  );
+});
+
+it('only permits registered authenticated students to read private contest rankings', async () => {
+  const { service, contests, attempts } = setup();
+  contests.findOne.mockResolvedValue({ ...contest, isPrivate: true });
+  await expect(service.leaderboard('private', 'other')).rejects.toBeInstanceOf(
+    NotFoundException,
+  );
+  expect(attempts.query).not.toHaveBeenCalled();
+  expect((await service.leaderboard('private', userId)).leaderboard).toEqual(
+    [],
   );
 });

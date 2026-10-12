@@ -3,6 +3,11 @@ import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
 import { Footer } from '@/components/Footer';
 
+jest.mock('framer-motion', () => ({
+  useReducedMotion: () => true,
+  motion: { div: ({ children, className }: { children: React.ReactNode; className?: string }) => <div className={className}>{children}</div> },
+}));
+
 // Mock Next.js routing
 jest.mock('next/navigation', () => ({
   usePathname: jest.fn(),
@@ -18,7 +23,7 @@ describe('Footer Component', () => {
     
     // Check for logo text or trademark
     expect(screen.getByText(/© 2026/i)).toBeInTheDocument();
-    expect(screen.getByText('Privacy')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Privacy Policy', exact: true })).toBeInTheDocument();
   });
 
   it('hides the footer on workspace/editor pages', () => {
@@ -30,4 +35,10 @@ describe('Footer Component', () => {
     // It should render null (nothing)
     expect(container.firstChild).toBeNull();
   });
+});
+
+it('hides the footer on the contest attempt workspace', () => {
+  jest.mocked(usePathname).mockReturnValue('/contests/contest-id/attempt');
+  const { container } = render(<Footer />);
+  expect(container.firstChild).toBeNull();
 });

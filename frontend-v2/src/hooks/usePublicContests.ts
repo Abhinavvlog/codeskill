@@ -26,9 +26,12 @@ export function usePublicContests() {
     const timer = setInterval(refreshVisible, 30000);
     window.addEventListener("focus", refreshVisible);
     document.addEventListener("visibilitychange", refreshVisible);
+    window.addEventListener("codeskill-contests-changed", refreshVisible);
+    const channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("codeskill-contests") : null;
+    if (channel) channel.onmessage = refreshVisible;
     return () => {
       clearInterval(timer); window.removeEventListener("focus", refreshVisible);
-      document.removeEventListener("visibilitychange", refreshVisible); request.current?.abort();
+      document.removeEventListener("visibilitychange", refreshVisible); window.removeEventListener("codeskill-contests-changed", refreshVisible); channel?.close(); request.current?.abort();
     };
   }, [refresh]);
   return { contests, loading, error, refresh };

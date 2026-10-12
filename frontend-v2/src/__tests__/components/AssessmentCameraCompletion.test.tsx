@@ -57,3 +57,11 @@ it("auto-submits an already-expired restored session without requesting camera p
   await waitFor(() => expect(studentAssessmentsAPI.submitAttempt).toHaveBeenCalledTimes(1));
   expect(getUserMedia).not.toHaveBeenCalled();
 });
+
+it('never requests camera permission when the server rejects an ended or missing session', async () => {
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+  jest.mocked(studentAssessmentsAPI.startAttempt).mockRejectedValueOnce(new Error('Assessment already submitted'));
+  render(<Page params={Promise.resolve({ id: 'exam' })} />);
+  await waitFor(() => expect(replace).toHaveBeenCalledWith('/assessments/exam'));
+  expect(getUserMedia).not.toHaveBeenCalled();
+});

@@ -477,25 +477,22 @@ export class AuthService implements OnModuleInit {
         { name: ILike(raw) },
         { email: ILike(`${raw}@%`) },
       ],
-      select: { id: true, name: true, email: true, password: true, role: true, isAdmin: true, uid: true, isAssessmentStudent: true, forcePasswordChange: true, studentProfile: true, avatar: true, bio: true, profile: true, stats: true, authProvider: true }
+      select: { id: true, name: true, email: true, password: true, role: true, isAdmin: true, uid: true, isAssessmentStudent: true, forcePasswordChange: true, studentProfile: true, avatar: true, bio: true, profile: true, stats: true, authProvider: true, isActive: true }
     });
-    if (!user) {
-      throw new UnauthorizedException('User not found with this email or ID');
-    }
-    if (!user.isAdmin) {
-      throw new UnauthorizedException('Access denied. Admin privileges required.');
+    if (
+      !user ||
+      !user.isAdmin ||
+      user.isActive !== true ||
+      !user.password ||
+      typeof dto.password !== 'string' ||
+      !dto.password
+    ) {
+      throw new UnauthorizedException('Invalid credentials');
     }
 
-    if (user.password) {
-      if (!dto.password) {
-        throw new BadRequestException(
-          'Password is required for this admin account',
-        );
-      }
-      const isMatch = await user.matchPassword(dto.password);
-      if (!isMatch) {
-        throw new UnauthorizedException('Invalid credentials');
-      }
+    const isMatch = await user.matchPassword(dto.password);
+    if (!isMatch) {
+      throw new UnauthorizedException('Invalid credentials');
     }
 
     return this.authResponse(user);
@@ -506,7 +503,7 @@ export class AuthService implements OnModuleInit {
     await this.otpService.verifyOTP(normalizedEmail, dto.otp);
 
     const user = await this.userRepository.findOne({ where: { email: normalizedEmail } });
-    if (!user || !user.isAdmin) {
+    if (!user || !user.isAdmin || user.isActive !== true) {
       throw new UnauthorizedException('Access denied');
     }
 

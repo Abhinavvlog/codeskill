@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useFullscreen } from "./useFullscreen";
 import { useTabVisibility } from "./useTabVisibility";
 import { useKeyboardBlocker } from "./useKeyboardBlocker";
 import { useCopyPasteProtect } from "./useCopyPasteProtect";
 import { useDevToolsDetect } from "./useDevToolsDetect";
 import api from "@/config/api"; // Assuming axios instance is here
-import { io, Socket } from "socket.io-client";
+import { io } from "socket.io-client";
 
 interface AntiCheatConfig {
   enableFullscreen: boolean;
@@ -16,6 +16,7 @@ interface AntiCheatConfig {
   enableDevToolsDetect: boolean;
   enableTabSwitchDetect: boolean;
   warningLimit: number;
+  autoSubmitOnViolation?: boolean;
 }
 
 export function useAntiCheatMaster(
@@ -23,15 +24,17 @@ export function useAntiCheatMaster(
   userId: string,
   sessionId: string,
   config: AntiCheatConfig,
-  onAutoSubmit: () => void
+  onAutoSubmit: () => void,
+  enabled = true
 ) {
   const [warnings, setWarnings] = useState(0);
   const [lastViolation, setLastViolation] = useState<string | null>(null);
   const [isWarningDialogOpen, setIsWarningDialogOpen] = useState(false);
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const warningCount = useRef(0);
 
   // Initialize WebSocket
   useEffect(() => {
+    if (!enabled || !userId || !sessionId) return;
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:5001");
     const newSocket = io(wsUrl, {
       path: "/socket.io",
@@ -42,45 +45,37 @@ export function useAntiCheatMaster(
       newSocket.emit("join_contest", { contestId, userId, sessionId });
     });
 
-    newSocket.on("force_submit", (data) => {
+    newSocket.on("force_submit", () => {
       onAutoSubmit();
     });
 
-    setSocket(newSocket);
 
     return () => {
       newSocket.disconnect();
     };
-  }, [contestId, userId, sessionId, onAutoSubmit]);
+  }, [contestId, userId, sessionId, onAutoSubmit, enabled]);
 
   // Central Violation Handler
   const handleViolation = useCallback(
-    async (type: string, metadata: any = {}) => {
-      let isLocked = false;
-      setWarnings((prev) => {
-        const newWarnings = prev + 1;
-        if (newWarnings >= config.warningLimit) {
-          isLocked = true;
-          onAutoSubmit();
-        }
-        return newWarnings;
-      });
-
-      if (!isLocked) {
-        setLastViolation(type);
-        setIsWarningDialogOpen(true);
-      }
+    async (type: string, metadata: Record<string, unknown> = {}) => {
+      if (!enabled) return;
+      const newWarnings = warningCount.current + 1;
+      warningCount.current = newWarnings;
+      setWarnings(newWarnings);
+      const isLocked = config.autoSubmitOnViolation !== false && newWarnings >= config.warningLimit;
+      if (isLocked) onAutoSubmit();
+      else { setLastViolation(type); setIsWarningDialogOpen(true); }
 
       try {
-        const res = await api.post("/contest-attempts/violation", {
-          contestId,
+        const res = await api.post(`/contests/${encodeURIComponent(contestId)}/violations`, {
+          sessionId,
           type,
           metadata,
         });
 
         // Backend may override warnings if we choose to sync
         if (res.data?.success) {
-          if (res.data.warnings !== undefined) setWarnings(res.data.warnings);
+          if (typeof res.data.warnings === "number") { warningCount.current = Math.max(warningCount.current, res.data.warnings); setWarnings(warningCount.current); }
           if (res.data.forceSubmit) {
             onAutoSubmit();
           }
@@ -90,33 +85,33 @@ export function useAntiCheatMaster(
         console.warn("Failed to report violation to backend, using local state.", err);
       }
     },
-    [contestId, config.warningLimit, onAutoSubmit]
+    [contestId, sessionId, config.warningLimit, config.autoSubmitOnViolation, onAutoSubmit, enabled]
   );
 
   // Initialize individual hooks
   const { isFullscreen, requestFullscreen, hasRequested } = useFullscreen({
-    enabled: config.enableFullscreen,
+    enabled: enabled && config.enableFullscreen,
     onViolation: () => handleViolation("Fullscreen_Exit"),
   });
 
   useTabVisibility({
-    enabled: config.enableTabSwitchDetect,
+    enabled: enabled && config.enableTabSwitchDetect,
     onViolation: handleViolation,
   });
 
   useKeyboardBlocker({
-    enabled: true, // Always block dangerous keys
+    enabled, // Only during an active contest
     onViolation: handleViolation,
   });
 
   useCopyPasteProtect({
-    enableCopyProtect: config.enableCopyProtect,
-    enablePasteProtect: config.enablePasteProtect,
+    enableCopyProtect: enabled && config.enableCopyProtect,
+    enablePasteProtect: enabled && config.enablePasteProtect,
     onViolation: handleViolation,
   });
 
   useDevToolsDetect({
-    enabled: config.enableDevToolsDetect,
+    enabled: enabled && config.enableDevToolsDetect,
     onViolation: handleViolation,
   });
 

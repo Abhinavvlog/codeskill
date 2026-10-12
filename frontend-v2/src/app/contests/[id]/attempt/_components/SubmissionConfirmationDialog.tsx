@@ -11,6 +11,7 @@ interface SubmissionConfirmationDialogProps {
   username: string;
   contestName: string;
   warnings: number;
+  elapsedSeconds?: number;
 }
 
 export function SubmissionConfirmationDialog({
@@ -21,6 +22,7 @@ export function SubmissionConfirmationDialog({
   username,
   contestName,
   warnings,
+  elapsedSeconds = 0,
 }: SubmissionConfirmationDialogProps) {
   if (!isOpen) return null;
 
@@ -53,7 +55,7 @@ export function SubmissionConfirmationDialog({
             </div>
             <div className="flex justify-between">
               <span>Time Used:</span>
-              <span className="text-white font-medium">02:05:12</span> {/* Demo time */}
+              <span className="text-white font-medium">{Math.floor(elapsedSeconds / 3600).toString().padStart(2, "0")}:{Math.floor(elapsedSeconds / 60 % 60).toString().padStart(2, "0")}:{(elapsedSeconds % 60).toString().padStart(2, "0")}</span>
             </div>
             <div className="flex justify-between">
               <span>Warnings Logged:</span>

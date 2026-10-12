@@ -200,12 +200,22 @@ export const adminProblemsAPI = {
   delete: (id: string) => api.delete(`/admin/problems/${id}`),
 };
 
+function notifyContestChange<T>(response: T): T {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("codeskill-contests-changed"));
+    if (typeof BroadcastChannel !== "undefined") {
+      const channel = new BroadcastChannel("codeskill-contests"); channel.postMessage("refresh"); channel.close();
+    }
+  }
+  return response;
+}
+
 export const adminContestsAPI = {
   getAll: () => api.get("/admin/contests"),
   getById: (id: string) => api.get(`/admin/contests/${id}`),
-  create: (data: any) => api.post("/admin/contests", data),
-  update: (id: string, data: any) => api.put(`/admin/contests/${id}`, data),
-  delete: (id: string) => api.delete(`/admin/contests/${id}`),
+  create: (data: any) => api.post("/admin/contests", data).then(notifyContestChange),
+  update: (id: string, data: any) => api.put(`/admin/contests/${id}`, data).then(notifyContestChange),
+  delete: (id: string) => api.delete(`/admin/contests/${id}`).then(notifyContestChange),
 };
 
 export const adminUsersAPI = {

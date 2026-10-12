@@ -20,6 +20,15 @@ export class ContestsController {
     return this.contestsService.leaderboard(slug);
   }
 
+  @Get(':slug/member-leaderboard')
+  @UseGuards(JwtAuthGuard)
+  async memberLeaderboard(
+    @Param('slug') slug: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.contestsService.leaderboard(slug, userId);
+  }
+
   @Get(':id/registration')
   @UseGuards(JwtAuthGuard)
   async registration(

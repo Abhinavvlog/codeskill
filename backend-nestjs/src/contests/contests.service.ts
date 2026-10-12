@@ -92,32 +92,59 @@ export class ContestsService {
     });
     if (!contest || !contest.isPublished)
       throw new NotFoundException('Contest not found');
-    return { registered: !!contest.participants?.includes(userId) };
+    const registered = !!contest.participants?.includes(userId);
+    const attempt = registered
+      ? await this.attemptRepo.findOne({
+          where: { contest_id: contest.id, user_id: userId },
+        })
+      : null;
+    return {
+      registered,
+      ...(attempt ? { attemptStatus: attempt.status } : {}),
+    };
   }
 
-  async leaderboard(slug: string) {
+  async leaderboard(slug: string, userId?: string) {
     const contest = await this.contestRepo.findOne({
-      where: { slug, isPublished: true, isPrivate: false },
+      where: {
+        slug,
+        isPublished: true,
+        ...(userId ? {} : { isPrivate: false }),
+      },
     });
-    if (!contest) throw new NotFoundException('Contest leaderboard not found');
+    if (
+      !contest ||
+      !contest.isPublished ||
+      (contest.isPrivate && !contest.participants?.includes(userId || ''))
+    )
+      throw new NotFoundException('Contest leaderboard not found');
     const problemIds = (contest.problems || []).filter((id) =>
-      /^[0-9a-f-]{36}$/i.test(id),
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        id,
+      ),
     );
     const rows: Array<{ name: string; username: string; solved: string }> =
       await this.attemptRepo.query(
-        `SELECT u.name, u.username, count(DISTINCT s."problemId") AS solved
-       FROM users u LEFT JOIN submissions s ON s."userId" = u.id
-         AND s."problemId" = ANY($1::uuid[]) AND lower(s.status) = 'accepted'
-         AND s."createdAt" >= $2::timestamp AND s."createdAt" <= $3::timestamp
-       WHERE u.id::text = ANY($4::text[])
-       GROUP BY u.id, u.name, u.username
-       ORDER BY count(DISTINCT s."problemId") DESC, max(s."createdAt") ASC NULLS LAST, u.id ASC
-       LIMIT 100`,
+        `WITH accepted AS (
+          SELECT a.user_id, s."problemId", min(s."createdAt") AS solved_at
+          FROM contest_attempts a JOIN submissions s ON s."userId"::text = a.user_id::text
+          WHERE a.contest_id = $5 AND s."problemId" = ANY($1::uuid[]) AND lower(s.status) = 'accepted'
+            AND s."createdAt" >= greatest(a."startedAt", $2::timestamp)
+            AND s."createdAt" <= least(coalesce(a."submittedAt", $3::timestamp), $3::timestamp)
+          GROUP BY a.user_id, s."problemId"
+        )
+        SELECT u.name, u.username, count(accepted."problemId") AS solved
+        FROM users u LEFT JOIN accepted ON accepted.user_id::text = u.id::text
+        WHERE u.id::text = ANY($4::text[])
+        GROUP BY u.id, u.name, u.username
+        ORDER BY count(accepted."problemId") DESC, max(accepted.solved_at) ASC NULLS LAST, u.id ASC
+        LIMIT 100`,
         [
           problemIds,
           contest.startTime,
           contest.endTime,
           contest.participants || [],
+          contest.id,
         ],
       );
     return {
