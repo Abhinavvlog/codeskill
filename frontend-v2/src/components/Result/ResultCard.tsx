@@ -9,7 +9,6 @@ import ResultHeader from './ResultHeader';
 import TestCaseSidebar, { TestCase } from './TestCaseSidebar';
 import OutputPanel from './OutputPanel';
 import SubmissionSummary from './SubmissionSummary';
-import AIAssistantPanel from './AIAssistantPanel';
 import { StatusType } from './StatusBadge';
 import { cn } from '@/lib/utils';
 
@@ -134,8 +133,6 @@ export default function ResultCard({
           />
         )}
 
-        {/* AI Assistant */}
-        <AIAssistantPanel />
       </motion.div>
     </AnimatePresence>
   );

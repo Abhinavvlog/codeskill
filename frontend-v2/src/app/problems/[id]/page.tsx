@@ -8,8 +8,9 @@ import {
   List, MessageSquare, Lightbulb, Sparkles, StickyNote, Tag, BarChart3,
   Trophy, Flame, Copy, RotateCcw, History, Eye, EyeOff, Plus, Trash2,
   ThumbsUp, ThumbsDown, ArrowLeft, Hash, Zap, Target, Award, TrendingUp,
-  Code2, FileText, Brain, User, SendHorizontal, Bot, Check, ArrowRight
+  Code2, FileText, User, Check, ArrowRight
 } from "lucide-react";
+import PracticePet from "@/components/pet/PracticePet";
 import { ProgrammingLanguageIcon } from "@/components/ui/ProgrammingLanguageIcon";
 import Link from "next/link";
 import { useState, useEffect, useCallback, use, useRef } from "react";
@@ -64,7 +65,6 @@ const SIDEBAR_TABS = [
   { id: "hints", icon: Lightbulb, label: "Hints", shortcut: "⌘H" },
   { id: "notes", icon: StickyNote, label: "Notes", shortcut: "⌘N" },
   { id: "discussion", icon: MessageSquare, label: "Discussion", shortcut: "⌘/" },
-  { id: "ai_tutor", icon: Brain, label: "AI Tutor", shortcut: "⌘I" },
 ];
 
 export default function ProblemWorkspace({ params }: { params: Promise<{ id: string }> }) {
@@ -130,10 +130,6 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
   const [replySubmitting, setReplySubmitting] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   
-  // Ask Me Anything State
-  const [askQuery, setAskQuery] = useState("");
-  const [askLoading, setAskLoading] = useState(false);
-
   useEffect(() => {
     setLoading(true);
     problemsAPI.getBySlug(problemId)
@@ -1129,64 +1125,10 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
                       </div>
                     )}
 
-                    {/* ──────────── AI TUTOR TAB ──────────── */}
-                    {activeSidebarTab === "ai_tutor" && (
-                      <div className="p-5">
-                        <div className="rounded-xl border border-primary/30 bg-secondary p-5 shadow-sm">
-                          <div className="flex items-center gap-2.5 mb-3">
-                            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-md shadow-primary/20 text-white">
-                              <Brain className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <h3 className="text-sm font-bold text-foreground">AI Learning Tutor</h3>
-                              <p className="text-[10px] text-muted-foreground">Personalized guided assistance</p>
-                            </div>
-                          </div>
-                          <p className="text-xs text-foreground/80 leading-relaxed mb-4">
-                            Get guidance on algorithms and edge cases without spoilers. Ask questions directly or pick a starter prompt below:
-                          </p>
-                          <div className="space-y-2">
-                            {["Explain this problem in simpler terms", "What data structure should I consider?", "Give me a hint about the time complexity", "Help me debug my approach"].map((prompt, i) => (
-                              <button key={i} onClick={() => setAskQuery(prompt)} className="w-full text-left px-3 py-2 rounded-lg border border-border bg-card text-xs text-foreground/80 hover:bg-accent hover:border-[#111111]/40 transition-all group">
-                                <span className="text-primary mr-1.5 group-hover:text-primary">→</span> {prompt}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </motion.div>
                 </AnimatePresence>
               </div>
 
-              {/* Sticky Ask Me Anything Assistant Bar */}
-              <div className="p-3 border-t border-border bg-card/95 backdrop-blur-sm shrink-0">
-                <form 
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!askQuery.trim()) return;
-                    setActiveSidebarTab("ai_tutor");
-                  }}
-                  className="flex items-center gap-2 bg-secondary border border-white/[0.15] rounded-xl px-3 py-1.5 focus-within:border-[#111111]/70 focus-within:ring-1 focus-within:ring-[#111111]/40 transition-all"
-                >
-                  <Bot className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <input
-                    type="text"
-                    value={askQuery}
-                    onChange={(e) => setAskQuery(e.target.value)}
-                    placeholder="Ask me anything about this lesson..."
-                    className="bg-transparent text-xs text-foreground/90 placeholder:text-muted-foreground outline-none flex-1 min-w-0"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!askQuery.trim()}
-                    className="p-1.5 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:hover:bg-primary text-white transition-all shrink-0"
-                    title="Ask AI Tutor"
-                  >
-                    <SendHorizontal className="w-3.5 h-3.5" />
-                  </button>
-                </form>
-              </div>
             </Panel>
 
             <PanelResizeHandle className="w-1.5 rounded-full bg-accent hover:bg-indigo-500/50 transition-colors cursor-col-resize" />
@@ -1469,6 +1411,15 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
           </div>
       </footer>
 
+
+      <PracticePet
+        key={problem.slug}
+        problemSlug={problem.slug}
+        problemTitle={problem.title}
+        code={code}
+        language={language}
+        workspace
+      />
 
       {/* Login Prompt Modal */}
       <AnimatePresence>

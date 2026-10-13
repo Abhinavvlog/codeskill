@@ -73,6 +73,7 @@ export class ProblemsService {
 
     const mappedProblems = problems.map(p => ({
       ...p,
+      _id: p.id,
       categories: p.tags // Mapping tags to categories for frontend compatibility
     }));
 
@@ -126,18 +127,22 @@ export class ProblemsService {
     // Mapping to legacy payload structure for frontend compatibility
     const mappedProblem = {
       ...problem,
+      _id: problem.id,
+      categories: problem.tags,
       statement: {
         description: problem.description,
         inputFormat: problem.inputFormat,
         outputFormat: problem.outputFormat,
         constraints: problem.constraints,
         examples: problem.examples,
+        samples: problem.examples,
         hints: problem.hints,
       },
       config: {
         timeLimit: problem.timeLimit,
         memoryLimit: problem.memoryLimit,
         supportedLanguages: problem.supportedLanguages,
+        starterCode: problem.starterCode,
         difficulty: problem.difficulty,
       },
       testCases: {

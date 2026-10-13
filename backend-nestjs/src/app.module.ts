@@ -1,5 +1,6 @@
 import { S3Module } from './s3/s3.module';
 import { ReportsModule } from './reports/reports.module';
+import { PetModule } from './pet/pet.module';
 import { Cluster } from 'ioredis';
 import { AnalyticsModule } from './analytics/analytics.module';
 
@@ -124,6 +125,7 @@ import { ExamSecurityModule } from './exam-security/exam-security.module';
     ExamSecurityModule,
     AnalyticsModule,
     ReportsModule,
+    PetModule,
   ],
   controllers: [AppController],
   providers: [
