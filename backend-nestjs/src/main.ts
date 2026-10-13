@@ -20,34 +20,9 @@ async function bootstrap() {
   app.use(helmet());
   app.use(compression());
 
-  // Trust reverse proxy (ALB + Nginx) so req.ip reflects actual client IP (AUD-005)
-  const expressApp = app.getHttpAdapter().getInstance();
-  if (typeof expressApp?.set === 'function') {
-    expressApp.set('trust proxy', 1);
-  }
-
-  // CORS with explicit allowlist (AUD-012)
-  const allowedOrigins = (
-    process.env.CORS_ORIGIN ||
-    process.env.FRONTEND_URL ||
-    process.env.CLIENT_URL ||
-    'http://localhost:3000,http://localhost:3001,https://codeskill.novaserve.cloud'
-  )
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-
+  // CORS
   app.enableCors({
-    origin: (
-      origin: string | undefined,
-      callback: (err: Error | null, allow?: boolean) => void,
-    ) => {
-      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
-        callback(null, true);
-      } else {
-        callback(new Error('Blocked by CORS policy'));
-      }
-    },
+    origin: true,
     credentials: true,
   });
 

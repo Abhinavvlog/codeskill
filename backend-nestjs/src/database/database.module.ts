@@ -2,7 +2,6 @@ import { parseSubmissionShardingConfig } from './sharding/sharding.config';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import * as fs from 'fs';
 
 import { User } from './entities/user.entity';
 import { Problem } from './entities/problem.entity';
@@ -33,12 +32,10 @@ import { EmailJob } from './entities/email-job.entity';
 import { ExamSession } from './entities/exam-session.entity';
 import { ExamSecurityEvent } from './entities/exam-security-event.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
-import { Subject } from './entities/subject.entity';
 
 const entities = [
   User,
   RefreshToken,
-  Subject,
   Problem,
   ProblemMetadata,
   ProblemStatement,
@@ -79,23 +76,6 @@ const entities = [
           throw new Error('DB_SYNCHRONIZE must be disabled when using submission shards');
         }
 
-        const sslCaPath =
-          process.env.DATABASE_SSL_CA || process.env.DATABASE_SSL_CA_PATH;
-        const resolveSsl = (wantsSsl: boolean) => {
-          if (!wantsSsl) return false;
-          if (sslCaPath && fs.existsSync(sslCaPath)) {
-            try {
-              return {
-                rejectUnauthorized: true,
-                ca: fs.readFileSync(sslCaPath).toString(),
-              };
-            } catch {
-              return { rejectUnauthorized: false };
-            }
-          }
-          return { rejectUnauthorized: false };
-        };
-
         const url = configService.get<string>('database.postgres.url');
         if (url) {
           const usesSsl =
@@ -105,7 +85,7 @@ const entities = [
           return {
             type: 'postgres',
             url,
-            ssl: resolveSsl(!!usesSsl),
+            ssl: usesSsl ? { rejectUnauthorized: false } : false,
             autoLoadEntities: true,
             synchronize: isSyncAllowed,
             invalidWhereValuesBehavior: {
@@ -120,7 +100,9 @@ const entities = [
           username: configService.get<string>('database.postgres.username'),
           password: configService.get<string>('database.postgres.password'),
           database: configService.get<string>('database.postgres.database'),
-          ssl: resolveSsl(!!configService.get<boolean>('database.postgres.ssl')),
+          ssl: configService.get<boolean>('database.postgres.ssl')
+            ? { rejectUnauthorized: false }
+            : false,
           autoLoadEntities: true,
           synchronize: isSyncAllowed,
           invalidWhereValuesBehavior: {

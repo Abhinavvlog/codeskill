@@ -85,34 +85,13 @@ export class CompaniesService {
     };
   }
 
-  async getCompanyById(
-    companyId: string,
-    actor?: { id?: string; role?: string; isAdmin?: boolean },
-  ) {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(companyId);
-    const whereConditions: any[] = isUuid
-      ? [{ id: companyId }, { mongoId: companyId }]
-      : [{ username: companyId.toLowerCase() }, { mongoId: companyId }];
-
+  async getCompanyById(companyId: string) {
     const company = await this.companyRepo.findOne({
-      where: whereConditions,
+      where: [{ id: companyId }, { mongoId: companyId }],
     });
     if (!company) {
       throw new NotFoundException('Company not found');
     }
-
-    if (!company.isVerified && actor?.id) {
-      const isPlatformAdmin = actor.isAdmin || actor.role === 'admin' || actor.role === 'super_admin';
-      if (!isPlatformAdmin) {
-        const membership = await this.companyUserRepo.findOne({
-          where: { company: { id: company.id }, user: { id: actor.id }, isActive: true },
-        });
-        if (!membership) {
-          throw new ForbiddenException('Access denied to unverified company');
-        }
-      }
-    }
-
     return { success: true, company: { ...company, _id: company.id } };
   }
 

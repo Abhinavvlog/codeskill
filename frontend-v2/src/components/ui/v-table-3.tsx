@@ -32,9 +32,7 @@ import {
   Code,
   Sparkles,
   BookOpen,
-  Plus,
-  Trash2,
-  Calendar
+  Plus
 } from "lucide-react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
@@ -65,7 +63,6 @@ interface VTable3Props {
   onEdit: (id: string) => void;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
-  onDelete?: (id: string) => void;
 }
 
 export function VTable3({
@@ -91,7 +88,6 @@ export function VTable3({
   onEdit,
   onApprove,
   onReject,
-  onDelete,
 }: VTable3Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -101,18 +97,12 @@ export function VTable3({
       if (!loading && questions.length > 0) {
         const mm = gsap.matchMedia();
         mm.add("(prefers-reduced-motion: no-preference)", () => {
-          gsap.fromTo(
-            ".question-row",
-            { opacity: 0, y: 6 },
-            {
-              opacity: 1,
-              y: 0,
-              stagger: 0.02,
-              duration: 0.25,
-              ease: "power1.out",
-              clearProps: "all",
-            }
-          );
+          gsap.from(".question-row", {
+            opacity: 0,
+            y: 8,
+            stagger: 0.03,
+            duration: 0.3
+          });
         });
       }
     } catch (_) {}
@@ -122,32 +112,21 @@ export function VTable3({
 
   const getDifficultyColor = (diff: string) => {
     switch (diff?.toLowerCase()) {
-      case "easy":
-        return "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700/60 font-semibold";
-      case "medium":
-        return "bg-amber-50 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 font-semibold";
-      case "hard":
-        return "bg-rose-50 text-rose-900 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300 dark:border-rose-700/60 font-semibold";
-      default:
-        return "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 border-slate-300 font-semibold";
+      case "easy": return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
+      case "medium": return "bg-amber-500/10 text-amber-600 border-amber-500/20";
+      case "hard": return "bg-rose-500/10 text-rose-600 border-rose-500/20";
+      default: return "bg-muted text-muted-foreground border-border";
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
-      case "active":
-      case "approved":
-        return "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700/60 font-semibold";
-      case "pending_review":
-        return "bg-amber-50 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 font-semibold";
-      case "draft":
-        return "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 border-slate-300 font-semibold";
-      case "rejected":
-        return "bg-rose-50 text-rose-900 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300 dark:border-rose-700/60 font-semibold";
-      case "archived":
-        return "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300 border-zinc-300 font-semibold";
-      default:
-        return "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 border-slate-300 font-semibold";
+      case "active": return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
+      case "pending_review": return "bg-amber-500/10 text-amber-600 border-amber-500/20";
+      case "draft": return "bg-slate-500/10 text-slate-600 border-slate-500/20";
+      case "rejected": return "bg-rose-500/10 text-rose-600 border-rose-500/20";
+      case "archived": return "bg-zinc-500/10 text-zinc-600 border-zinc-500/20";
+      default: return "bg-muted text-muted-foreground border-border";
     }
   };
 
@@ -318,26 +297,22 @@ export function VTable3({
                 const statusStr = (q.status || "active").replace("_", " ");
 
                 return (
-                  <TableRow key={qId || Math.random()} className="question-row group hover:bg-slate-50/80 dark:hover:bg-slate-900/40 border-b border-border">
-                    <TableCell className="max-w-[320px] py-3.5">
+                  <TableRow key={qId || Math.random()} className="question-row group hover:bg-muted/20">
+                    <TableCell className="max-w-[300px]">
                       <div className="flex flex-col gap-1">
-                        <button
-                          onClick={() => onView(q)}
-                          className="text-left font-semibold text-slate-900 dark:text-slate-100 hover:text-primary dark:hover:text-primary transition-colors text-sm line-clamp-2 leading-snug cursor-pointer"
-                          title={q.question || q.title}
-                        >
+                        <div className="font-medium text-foreground truncate" title={q.question || q.title}>
                           {q.question || q.title}
-                        </button>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono font-medium">Q-{shortId}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground font-mono">Q-{shortId}</span>
                           {q.codeSnippet && (
-                            <span className="inline-flex items-center gap-1 text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300 font-mono border border-slate-200 dark:border-slate-700">
+                            <span className="inline-flex items-center gap-1 text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground font-mono">
                               <Code className="w-2.5 h-2.5 text-amber-500" />
                               {q.language || "code"}
                             </span>
                           )}
                           {q.aiGenerated && (
-                            <span className="inline-flex items-center gap-1 text-[10px] bg-purple-500/10 px-1.5 py-0.5 rounded text-purple-600 dark:text-purple-400 border border-purple-500/20 font-medium">
+                            <span className="inline-flex items-center gap-1 text-[10px] bg-purple-500/10 px-1.5 py-0.5 rounded text-purple-500 border border-purple-500/20">
                               <Sparkles className="w-2.5 h-2.5" />
                               AI
                             </span>
@@ -346,117 +321,81 @@ export function VTable3({
                       </div>
                     </TableCell>
                     
-                    <TableCell className="py-3.5">
-                      <Badge variant="outline" className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 rounded-md">
+                    <TableCell>
+                      <Badge variant="outline" className="text-[11px] font-medium bg-background text-muted-foreground border-border rounded-md">
                         {getQuestionTypeLabel(q.questionType)}
                       </Badge>
                     </TableCell>
                     
-                    <TableCell className="py-3.5">
+                    <TableCell>
                       <div className="flex flex-col">
-                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{getTopicCategories(q).join(", ") || "General"}</span>
-                        {q.subtopic && <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400 truncate max-w-[130px]">{q.subtopic}</span>}
+                        <span className="text-xs font-medium text-foreground">{getTopicCategories(q).join(", ") || "General"}</span>
+                        {q.subtopic && <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{q.subtopic}</span>}
                       </div>
                     </TableCell>
                     
-                    <TableCell className="py-3.5">
-                      <Badge variant="outline" className={`text-[11px] capitalize rounded-md border ${getDifficultyColor(q.difficulty)}`}>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[11px] font-medium capitalize rounded-md ${getDifficultyColor(q.difficulty)}`}>
                         {q.difficulty || "medium"}
                       </Badge>
                     </TableCell>
                     
-                    <TableCell className="py-3.5">
+                    <TableCell>
                       <div className="flex items-center gap-1 text-xs font-mono">
-                        <span className="text-emerald-700 dark:text-emerald-400 font-bold">+{q.marks || 1}</span>
-                        {q.negativeMarks > 0 && <span className="text-rose-600 dark:text-rose-400 font-bold">-{q.negativeMarks}</span>}
+                        <span className="text-emerald-500 font-semibold">+{q.marks || 1}</span>
+                        {q.negativeMarks > 0 && <span className="text-rose-500">-{q.negativeMarks}</span>}
                       </div>
                     </TableCell>
                     
-                    <TableCell className="py-3.5">
-                      <Badge variant="outline" className={`text-[11px] capitalize rounded-md border ${getStatusColor(q.status)}`}>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[11px] font-medium capitalize rounded-md ${getStatusColor(q.status)}`}>
                         {statusStr}
                       </Badge>
                     </TableCell>
                     
-                    <TableCell className="py-3.5">
-                      <div className="flex flex-col text-xs font-medium">
-                        <span className="text-slate-900 dark:text-slate-200 whitespace-nowrap">
-                          {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "-"}
-                        </span>
-                        {q.updatedAt && (
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                            {new Date(q.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          </span>
-                        )}
-                      </div>
+                    <TableCell>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString() : "-"}
+                      </span>
                     </TableCell>
                     
-                    <TableCell className="text-right py-3.5">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => onView(q)}
-                          className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors"
-                          title="Preview Question"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        {onDelete && (
-                          <button
-                            onClick={() => onDelete(qId)}
-                            className="p-1.5 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
-                            title="Delete Question"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-600 dark:text-slate-300">
-                            <MoreVertical className="w-4 h-4" />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48 bg-card border-border shadow-lg">
-                            <DropdownMenuGroup>
-                              <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">Actions</DropdownMenuLabel>
-                              <DropdownMenuItem onClick={() => onView(q)} className="cursor-pointer gap-2 text-sm focus:bg-muted font-medium">
-                                <Eye className="w-4 h-4 text-muted-foreground" />
-                                View Preview
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => onEdit(qId)} className="cursor-pointer gap-2 text-sm focus:bg-muted font-medium">
-                                <Plus className="w-4 h-4 text-muted-foreground" />
-                                Edit Question
-                              </DropdownMenuItem>
-                            </DropdownMenuGroup>
-                            {q.status === "pending_review" && (
-                              <>
-                                <DropdownMenuSeparator className="bg-border" />
-                                <DropdownMenuGroup>
-                                  <DropdownMenuItem onClick={() => onApprove(qId)} className="cursor-pointer gap-2 text-sm focus:bg-emerald-500/10 focus:text-emerald-500 text-emerald-600 font-medium">
-                                    <CheckCircle2 className="w-4 h-4" />
-                                    Approve
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => onReject(qId)} className="cursor-pointer gap-2 text-sm focus:bg-rose-500/10 focus:text-rose-500 text-rose-600 font-medium">
-                                    <XCircle className="w-4 h-4" />
-                                    Reject
-                                  </DropdownMenuItem>
-                                </DropdownMenuGroup>
-                              </>
-                            )}
-                            {onDelete && (
-                              <>
-                                <DropdownMenuSeparator className="bg-border" />
-                                <DropdownMenuGroup>
-                                  <DropdownMenuItem 
-                                    onClick={() => onDelete(qId)} 
-                                    className="cursor-pointer gap-2 text-sm text-rose-600 dark:text-rose-400 hover:!bg-rose-50 dark:hover:!bg-rose-950/40 hover:!text-rose-600 font-medium"
-                                  >
-                                    <Trash2 className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-                                    Delete Question
-                                  </DropdownMenuItem>
-                                </DropdownMenuGroup>
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger className="p-2 hover:bg-muted rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/20">
+                          <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48 bg-card border-border">
+                          <DropdownMenuGroup>
+                            <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">Actions</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => onView(q)} className="cursor-pointer gap-2 text-sm focus:bg-muted">
+                              <Eye className="w-4 h-4 text-muted-foreground" />
+                              View Preview
+                            </DropdownMenuItem>
+                          </DropdownMenuGroup>
+                          <DropdownMenuSeparator className="bg-border" />
+                          {q.status === "pending_review" && (
+                            <>
+                              <DropdownMenuGroup>
+                                <DropdownMenuItem onClick={() => onApprove(qId)} className="cursor-pointer gap-2 text-sm focus:bg-emerald-500/10 focus:text-emerald-500 text-emerald-600">
+                                  <CheckCircle2 className="w-4 h-4" />
+                                  Approve
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onReject(qId)} className="cursor-pointer gap-2 text-sm focus:bg-rose-500/10 focus:text-rose-500 text-rose-600">
+                                  <XCircle className="w-4 h-4" />
+                                  Reject
+                                </DropdownMenuItem>
+                              </DropdownMenuGroup>
+                              <DropdownMenuSeparator className="bg-border" />
+                            </>
+                          )}
+                          <DropdownMenuGroup>
+                            <DropdownMenuItem onClick={() => onEdit(qId)} className="cursor-pointer gap-2 text-sm focus:bg-muted">
+                              <Plus className="w-4 h-4 text-muted-foreground" />
+                              Edit Question
+                            </DropdownMenuItem>
+                          </DropdownMenuGroup>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 );

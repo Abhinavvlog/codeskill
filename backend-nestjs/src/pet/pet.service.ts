@@ -202,15 +202,6 @@ export class PetService {
 
   private checkRateLimit(userId: string) {
     const now = Date.now();
-    if (this.requests.size > 1000) {
-      for (const [key, timestamps] of this.requests.entries()) {
-        const valid = timestamps.filter((t) => now - t < 60_000);
-        if (valid.length === 0) this.requests.delete(key);
-        else this.requests.set(key, valid);
-      }
-      if (this.requests.size > 1000) this.requests.clear();
-    }
-
     const recent = (this.requests.get(userId) || []).filter(
       (time) => now - time < 60_000,
     );
