@@ -41,6 +41,47 @@
   --radius-2xl: 1rem;
 }
 
+/* Keep the CodeSkill green accent consistent across the landing page. */
+.codeskill-home {
+  --primary: 142 72% 29%;
+  --primary-foreground: 0 0% 100%;
+}
+
+/* Give restored homepage panels a light glass finish without changing app routes. */
+.codeskill-home > section:not(:first-child) {
+  background-color: transparent;
+}
+
+.codeskill-home :is([class*="rounded-2xl"][class*="border"], [class*="rounded-xl"][class*="border"], [class*="rounded-lg"][class*="border"]) {
+  border-color: rgb(203 213 225 / 0.65);
+  box-shadow: 0 14px 36px -28px rgb(15 23 42 / 0.25);
+  backdrop-filter: blur(12px);
+}
+
+.dark .codeskill-home :is([class*="rounded-2xl"][class*="border"], [class*="rounded-xl"][class*="border"], [class*="rounded-lg"][class*="border"]) {
+  border-color: rgb(71 85 105 / 0.58);
+}
+
+@keyframes codeskill-aurora-float {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(28px, -18px, 0) scale(1.08); }
+}
+
+.codeskill-aurora-blob {
+  animation: codeskill-aurora-float 14s ease-in-out infinite;
+}
+
+.codeskill-aurora-blob-delay {
+  animation-delay: -7s;
+  animation-duration: 18s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .codeskill-aurora-blob {
+    animation: none;
+  }
+}
+
 /* Compact HackerRank-inspired coding workspace styling. */
 .codeskill-problem-workspace {
   font-family: var(--font-roboto), Roboto, "Helvetica Neue", Arial, sans-serif;
