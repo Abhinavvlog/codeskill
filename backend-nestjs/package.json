@@ -20,7 +20,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "admin:bootstrap": "ts-node -r tsconfig-paths/register src/create-admins.ts"
+    "admin:bootstrap": "ts-node -r tsconfig-paths/register src/create-admins.ts",
+    "seed:os-test1": "node -r dotenv/config -r ts-node/register -r tsconfig-paths/register src/seeds/seed-os-test1.ts"
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",
