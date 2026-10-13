@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { isAxiosError } from "axios";
-import { Calendar, Clock, Code2, Trophy } from "lucide-react";
+import { Calendar, Clock, Code2, Trophy, ShieldAlert, RotateCcw } from "lucide-react";
 import api from "@/config/api";
 import { useAuth } from "@/context/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
@@ -19,6 +19,14 @@ interface Contest {
   problems: string[];
   isPrivate: boolean;
   participants?: string[];
+  antiCheatConfig?: {
+    maxTabSwitchViolations?: number;
+    warningLimit?: number;
+    actionOnMaxViolations?: string;
+    enableFullscreenCheck?: boolean;
+    enableTabSwitchDetection?: boolean;
+  };
+  resultsPublished?: boolean;
 }
 
 type ContestResult = {
@@ -109,6 +117,36 @@ export default function ContestDetailsPage() {
         <h2 className="text-lg font-bold text-foreground">About this contest</h2>
         <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{contest.description}</p>
       </section>
+
+      {/* Contest Rules & Exam Security */}
+      <section className="p-6 rounded-2xl border border-border bg-card space-y-3">
+        <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+          <ShieldAlert className="w-5 h-5 text-amber-500" />
+          Contest Rules & Exam Security
+        </h2>
+        <ul className="list-disc pl-5 space-y-1.5 text-sm text-muted-foreground">
+          <li>
+            <strong className="text-foreground">Fullscreen Enforcement:</strong> You must enter and remain in fullscreen mode for the entire duration of your attempt. Exiting fullscreen is recorded as a violation.
+          </li>
+          <li>
+            <strong className="text-foreground">Tab-Switch Limit:</strong> A maximum of{" "}
+            <strong className="text-foreground">
+              {contest.antiCheatConfig?.maxTabSwitchViolations || 3} violations
+            </strong>{" "}
+            (switching tabs or losing focus) is allowed before the contest action (
+            {contest.antiCheatConfig?.actionOnMaxViolations === "lock_attempt"
+              ? "session lock"
+              : contest.antiCheatConfig?.actionOnMaxViolations === "flag_review"
+              ? "administrative review flag"
+              : "automatic submission"}
+            ) is triggered.
+          </li>
+          <li>
+            <strong className="text-foreground">Single Authorized Session:</strong> Only one active session is permitted. Extra attempts require administrator authorization.
+          </li>
+        </ul>
+      </section>
+
       {!contest.isPrivate && <Link href={`/contests/leaderboard?contest=${encodeURIComponent(slug)}`} className="inline-block text-sm text-primary font-semibold hover:underline">View Contest Leaderboard</Link>}
       <ContestRegistration key={contest.id} contest={contest} ended={ended} upcoming={upcoming} />
     </div>
@@ -122,11 +160,19 @@ function ContestRegistration({ contest, ended, upcoming }: { contest: Contest; e
   const [registering, setRegistering] = useState(false);
   const [registeredId, setRegisteredId] = useState<string>();
   const [attemptEnded, setAttemptEnded] = useState(false);
+  const [canReattempt, setCanReattempt] = useState(false);
+  const [reattemptDetails, setReattemptDetails] = useState<any>(null);
+
   useEffect(() => {
     if (!user) return;
     const controller = new AbortController();
     api.get(`/contests/${encodeURIComponent(contest.id)}/registration`, { signal: controller.signal }).then(({ data }) => {
-      if (!controller.signal.aborted && data.registered) { setRegisteredId(contest.id); setAttemptEnded(!!data.attemptStatus && data.attemptStatus !== "InProgress"); }
+      if (!controller.signal.aborted && data.registered) {
+        setRegisteredId(contest.id);
+        setAttemptEnded(!!data.attemptStatus && data.attemptStatus !== "InProgress");
+        setCanReattempt(!!data.canReattempt);
+        setReattemptDetails(data.reattemptDetails || null);
+      }
     }).catch(() => {});
     return () => controller.abort();
   }, [contest.id, user]);
@@ -165,7 +211,53 @@ function ContestRegistration({ contest, ended, upcoming }: { contest: Contest; e
       <section className="p-6 rounded-2xl border border-border bg-card space-y-4">
         <h2 className="text-lg font-bold text-foreground">Registration</h2>
         {ended ? <p className="text-sm text-muted-foreground">This contest has ended.</p>
-          : registered ? <div className="space-y-3"><p className="text-sm text-emerald-600 dark:text-emerald-400" role="status">You are registered for this contest.</p>{attemptEnded ? <Link href={`/contests/leaderboard?contest=${encodeURIComponent(contest.slug)}`} className="text-primary font-semibold text-sm">View your contest rankings</Link> : !upcoming && <Link href={`/contests/${encodeURIComponent(contest.id)}/attempt`} className="inline-block px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm">Enter Contest</Link>}</div>
+          : registered ? (
+            <div className="space-y-4">
+              <p className="text-sm text-emerald-600 dark:text-emerald-400" role="status">
+                You are registered for this contest.
+              </p>
+
+              {canReattempt && (
+                <div className="p-4 bg-sky-500/10 border border-sky-500/20 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2 text-sky-600 dark:text-sky-400 font-semibold text-sm">
+                    <RotateCcw className="w-4 h-4" />
+                    Administrative Reattempt Authorized
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    You have been granted access to reattempt this contest ({reattemptDetails?.usedAttempts || 0} of {reattemptDetails?.allowedAttempts || 1} used).
+                    {reattemptDetails?.expiresAt && ` Window valid until: ${new Date(reattemptDetails.expiresAt).toLocaleString()}`}
+                  </p>
+                  {reattemptDetails?.reason && (
+                    <p className="text-xs text-muted-foreground italic">Reason: {reattemptDetails.reason}</p>
+                  )}
+                  <Link
+                    href={`/contests/${encodeURIComponent(contest.id)}/attempt`}
+                    className="inline-block px-4 py-2 rounded-xl bg-sky-600 text-white font-semibold text-xs hover:bg-sky-500 transition-colors shadow-xs"
+                  >
+                    Start Authorized Reattempt
+                  </Link>
+                </div>
+              )}
+
+              {attemptEnded && !canReattempt ? (
+                <Link
+                  href={`/contests/leaderboard?contest=${encodeURIComponent(contest.slug)}`}
+                  className="text-primary font-semibold text-sm hover:underline"
+                >
+                  View your contest rankings
+                </Link>
+              ) : (
+                !upcoming && !canReattempt && (
+                  <Link
+                    href={`/contests/${encodeURIComponent(contest.id)}/attempt`}
+                    className="inline-block px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm"
+                  >
+                    Enter Contest
+                  </Link>
+                )
+              )}
+            </div>
+          )
           : authLoading ? <p className="text-sm text-muted-foreground" role="status">Checking your account...</p>
           : !user ? <p className="text-sm text-muted-foreground"><Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> to register for this contest.</p>
           : <form onSubmit={register} className="space-y-4">

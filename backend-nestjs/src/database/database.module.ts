@@ -16,6 +16,7 @@ import { AssessmentAttempt } from './entities/assessment-attempt.entity';
 import { Submission } from './entities/submission.entity';
 import { Contest } from './entities/contest.entity';
 import { ContestAttempt } from './entities/contest-attempt.entity';
+import { ContestReattemptGrant } from './entities/contest-reattempt-grant.entity';
 import { Company } from './entities/company.entity';
 import { CompanyUser } from './entities/company-user.entity';
 import { Job } from './entities/job.entity';
@@ -47,6 +48,7 @@ const entities = [
   Submission,
   Contest,
   ContestAttempt,
+  ContestReattemptGrant,
   Company,
   CompanyUser,
   Job,

@@ -12,6 +12,7 @@ import { ProblemsService } from '../problems/problems.service';
 import { Contest } from '../database/entities/contest.entity';
 import { ContestAttempt } from '../database/entities/contest-attempt.entity';
 import { SubmissionStore } from '../database/sharding/submission-store';
+import { ContestReattemptGrant } from '../database/entities/contest-reattempt-grant.entity';
 
 @Injectable()
 export class ContestsService {
@@ -22,6 +23,9 @@ export class ContestsService {
     private readonly attemptRepo: Repository<ContestAttempt>,
     private readonly problemsService: ProblemsService,
     @Optional() private readonly submissions?: SubmissionStore,
+    @Optional()
+    @InjectRepository(ContestReattemptGrant)
+    private readonly reattemptGrantRepo?: Repository<ContestReattemptGrant>,
   ) {}
 
   async getContests() {
@@ -96,16 +100,45 @@ export class ContestsService {
     if (!contest || !contest.isPublished)
       throw new NotFoundException('Contest not found');
     const registered = !!contest.participants?.includes(userId);
-    const attempt = registered
+
+    const latestAttempt = registered
       ? await this.attemptRepo.findOne({
           where: { contest_id: contest.id, user_id: userId },
+          order: { attemptNumber: 'DESC', createdAt: 'DESC' },
         })
       : null;
-    return {
-      registered,
-      ...(attempt ? { attemptStatus: attempt.status } : {}),
-    };
+
+    const res: any = { registered };
+    if (latestAttempt) {
+      res.attemptStatus = latestAttempt.status;
+      if (latestAttempt.attemptNumber !== undefined) {
+        res.attemptNumber = latestAttempt.attemptNumber;
+      }
+    }
+
+    if (this.reattemptGrantRepo && registered) {
+      const activeGrant = await this.reattemptGrantRepo.findOne({
+        where: { contest_id: contest.id, user_id: userId, status: 'ACTIVE' },
+      });
+      const isGrantValid =
+        activeGrant &&
+        (!activeGrant.expiresAt || new Date() < new Date(activeGrant.expiresAt)) &&
+        activeGrant.usedAttempts < activeGrant.allowedAttempts;
+
+      if (isGrantValid) {
+        res.canReattempt = true;
+        res.reattemptDetails = {
+          allowedAttempts: activeGrant.allowedAttempts,
+          usedAttempts: activeGrant.usedAttempts,
+          expiresAt: activeGrant.expiresAt,
+          reason: activeGrant.reason,
+        };
+      }
+    }
+
+    return res;
   }
+
 
   async leaderboard(slug: string, userId?: string) {
     const contest = await this.contestRepo.findOne({
@@ -155,6 +188,7 @@ export class ContestsService {
       );
     return {
       contest: this.safeContest(contest),
+      resultsPublished: !!contest.resultsPublished,
       leaderboard: rows.map((row, index) => ({
         rank: index + 1,
         name: row.name,
@@ -271,6 +305,8 @@ export class ContestsService {
         return { id: problem.id, title: problem.title, slug: problem.slug };
       }),
     );
+
+    // Create first attempt or ignore if row exists
     await this.attemptRepo
       .createQueryBuilder()
       .insert()
@@ -278,40 +314,117 @@ export class ContestsService {
         contest_id: contest.id,
         user_id: userId,
         sessionId: randomUUID(),
+        attemptNumber: 1,
       })
       .orIgnore()
       .execute();
-    const attempt = await this.attemptRepo.findOne({
+
+    let attempt = await this.attemptRepo.findOne({
       where: { contest_id: contest.id, user_id: userId },
+      order: { attemptNumber: 'DESC', createdAt: 'DESC' },
     });
-    if (!attempt || attempt.status !== 'InProgress')
+
+    if (!attempt) {
       throw new BadRequestException('Your contest attempt has ended');
+    }
+
+    if (attempt.status !== 'InProgress') {
+      // Completed or ended attempt. Check if student has active reattempt grant.
+      const grant = this.reattemptGrantRepo
+        ? await this.reattemptGrantRepo.findOne({
+            where: { contest_id: contest.id, user_id: userId, status: 'ACTIVE' },
+          })
+        : null;
+
+      const isValid =
+        grant &&
+        (!grant.expiresAt || new Date() < new Date(grant.expiresAt)) &&
+        grant.usedAttempts < grant.allowedAttempts;
+
+      if (!isValid) {
+        throw new BadRequestException('Your contest attempt has ended');
+      }
+
+      // Consume one attempt from the authorized grant
+      grant.usedAttempts += 1;
+      if (grant.usedAttempts >= grant.allowedAttempts) {
+        grant.status = 'USED';
+      }
+      await this.reattemptGrantRepo.save(grant);
+
+      // Create new reattempt
+      const nextAttemptNumber = (attempt.attemptNumber || 1) + 1;
+      const newAttempt = this.attemptRepo.create({
+        contest_id: contest.id,
+        user_id: userId,
+        sessionId: randomUUID(),
+        attemptNumber: nextAttemptNumber,
+        status: 'InProgress',
+        startedAt: new Date(),
+        warnings: 0,
+        violations: [],
+        score: 0,
+        problemsSolved: 0,
+      });
+      attempt = await this.attemptRepo.save(newAttempt);
+    }
+
     return {
       contest: this.safeContest(contest),
       problems,
       sessionId: attempt.sessionId,
       startedAt: attempt.startedAt,
       antiCheatConfig: contest.antiCheatConfig as Record<string, unknown>,
+      attemptNumber: attempt.attemptNumber || 1,
     };
   }
 
   async submitAttempt(id: string, userId: string, sessionId: string) {
     const contest = await this.eligibleContest(id, userId);
     const attempt = await this.attemptRepo.findOne({
-      where: { contest_id: contest.id, user_id: userId },
+      where: { contest_id: contest.id, user_id: userId, sessionId },
     });
     if (!attempt || attempt.sessionId !== sessionId)
       throw new ForbiddenException('Invalid contest session');
+
+    // Calculate score & problemsSolved from submissions
+    const problemIds = (contest.problems || []).filter((pid) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pid),
+    );
+    let problemsSolved = 0;
+    if (problemIds.length > 0) {
+      try {
+        const solved = await this.attemptRepo.query(
+          `SELECT count(DISTINCT "problemId") as count 
+           FROM submissions 
+           WHERE "userId"::text = $1 AND "problemId" = ANY($2::uuid[]) AND lower(status) = 'accepted'
+             AND "createdAt" >= $3`,
+          [userId, problemIds, attempt.startedAt],
+        );
+        problemsSolved = Number(solved[0]?.count || 0);
+      } catch {
+        problemsSolved = 0;
+      }
+    }
+
+    const score = problemsSolved * 100;
+
     await this.attemptRepo
       .createQueryBuilder()
       .update()
-      .set({ status: 'Submitted', submittedAt: new Date() })
+      .set({
+        status: 'Submitted',
+        submittedAt: new Date(),
+        problemsSolved,
+        score,
+      })
       .where('id = :id AND status = :status', {
         id: attempt.id,
         status: 'InProgress',
       })
       .execute();
-    return { success: true, slug: contest.slug };
+
+    return { success: true, slug: contest.slug, score, problemsSolved };
   }
 
   async recordViolation(
@@ -319,12 +432,28 @@ export class ContestsService {
     userId: string,
     sessionId: string,
     type: string,
+    metadata?: any,
   ) {
     const contest = await this.eligibleContest(id, userId);
     if (typeof type !== 'string' || !type || type.length > 100)
       throw new BadRequestException('Invalid violation');
-    const config = contest.antiCheatConfig as Record<string, unknown>;
-    const limit = Math.max(1, Number(config?.warningLimit) || 5);
+
+    const config = (contest.antiCheatConfig || {}) as Record<string, unknown>;
+    const limit = Math.max(1, Number(config.maxTabSwitchViolations ?? config.warningLimit ?? 3));
+    const action =
+      (config.actionOnMaxViolations as string) ||
+      (config.autoSubmitOnViolation !== false ? 'auto_submit' : 'flag_review');
+
+    const nextStatus =
+      action === 'auto_submit'
+        ? 'Terminated'
+        : action === 'lock_attempt'
+          ? 'Locked'
+          : 'InProgress';
+
+    const autoSubmit =
+      action !== 'flag_review' && config?.autoSubmitOnViolation !== false;
+
     const rows: Array<{ warnings: number; status: string }> =
       await this.attemptRepo.query(
         `UPDATE contest_attempts SET warnings = warnings + 1,
@@ -338,16 +467,30 @@ export class ContestsService {
           userId,
           sessionId,
           type,
-          config?.autoSubmitOnViolation !== false,
+          autoSubmit,
           limit,
         ],
       );
+
     if (!rows[0])
       throw new ForbiddenException('Invalid or ended contest session');
-    return {
+
+    const currentWarnings = rows[0].warnings;
+    const forceSubmit = rows[0].status === 'Terminated' || rows[0].status === 'Locked';
+
+    const result: any = {
       success: true,
-      warnings: rows[0].warnings,
-      forceSubmit: rows[0].status === 'Terminated',
+      warnings: currentWarnings,
+      forceSubmit,
     };
+
+    if (config.maxTabSwitchViolations !== undefined || metadata !== undefined) {
+      result.warningLimit = limit;
+      result.remaining = Math.max(0, limit - currentWarnings);
+      result.status = rows[0].status;
+      result.actionApplied = currentWarnings >= limit ? action : undefined;
+    }
+
+    return result;
   }
 }
