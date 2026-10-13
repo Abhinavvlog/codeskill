@@ -467,7 +467,7 @@ export class AdminService {
     if (existing) {
       throw new ConflictException(`Slug '${data.slug}' is already in use`);
     }
-    const contest = this.contestModel.create(data);
+    const contest = this.contestModel.create(data as Partial<Contest>) as Contest;
     await this.contestModel.save(contest);
     return {
       success: true,

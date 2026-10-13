@@ -350,7 +350,7 @@ export class ContestsService {
       if (grant.usedAttempts >= grant.allowedAttempts) {
         grant.status = 'USED';
       }
-      await this.reattemptGrantRepo.save(grant);
+      await this.reattemptGrantRepo?.save(grant);
 
       // Create new reattempt
       const nextAttemptNumber = (attempt.attemptNumber || 1) + 1;

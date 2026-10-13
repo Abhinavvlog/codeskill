@@ -6,13 +6,10 @@ import { databaseConfig } from '../config';
 import { applyPracticeSubmissionSourceMigration } from './migrations/practice-submission-source';
 import { applyAuthTokensSchemaMigration } from './migrations/auth-tokens-schema';
 import { applyDeclarativePartitioningMigration } from './migrations/declarative-partitioning';
-<<<<<<< HEAD
 import { readShardingState } from './sharding/sharding-state';
 import { parseSubmissionShardingConfig } from './sharding/sharding.config';
 import { validateShardingState } from './sharding/sharding-state';
-=======
 import { applyContestSecurityReattemptMigration } from './migrations/contest-security-reattempt';
->>>>>>> 0037a3c (feat: contest security, contest results portal and admin-controlled reattempts)
 
 export function practiceSubmissionMigrationOptions(): DataSourceOptions {
   const postgres = databaseConfig().postgres;
