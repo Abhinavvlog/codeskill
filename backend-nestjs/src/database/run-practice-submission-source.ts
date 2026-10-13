@@ -1,3 +1,6 @@
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { databaseConfig } from '../config';
 import { applyPracticeSubmissionSourceMigration } from './migrations/practice-submission-source';
@@ -60,11 +63,12 @@ if (require.main === module) {
     .then(() => {
       console.log('Practice submission source migration completed.');
     })
-    .catch(() => {
-      // Connection errors can contain credentials; keep CLI output generic.
+    .catch((error) => {
       console.error(
-        'Practice submission source migration failed. Check database connectivity and the submissions schema.',
+        'Practice submission source migration failed:',
+        error instanceof Error ? error.message : error,
       );
       process.exitCode = 1;
     });
 }
+

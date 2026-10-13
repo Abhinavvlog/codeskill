@@ -49,8 +49,23 @@ export async function partitionTableIfRegular(
   // Create partition-wide indices
   await queryRunner.query(indexesSql);
 
-  // Migrate existing records from legacy table into partitioned table
-  await queryRunner.query(`INSERT INTO "${tableName}" SELECT * FROM "${legacyTable}"`);
+  // Find common column names between legacyTable and new tableName
+  const commonCols: { column_name: string }[] = await queryRunner.query(
+    `SELECT a.column_name 
+     FROM information_schema.columns a
+     INNER JOIN information_schema.columns b 
+       ON a.column_name = b.column_name AND b.table_name = $1
+     WHERE a.table_name = $2
+     ORDER BY a.ordinal_position`,
+    [tableName, legacyTable],
+  );
+
+  if (commonCols && commonCols.length > 0) {
+    const colList = commonCols.map((c) => `"${c.column_name}"`).join(', ');
+    await queryRunner.query(
+      `INSERT INTO "${tableName}" (${colList}) SELECT ${colList} FROM "${legacyTable}"`,
+    );
+  }
 
   // Clean up legacy table
   await queryRunner.query(`DROP TABLE "${legacyTable}" CASCADE`);

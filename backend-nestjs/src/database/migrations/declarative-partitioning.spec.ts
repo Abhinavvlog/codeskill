@@ -39,6 +39,7 @@ describe('applyDeclarativePartitioningMigration', () => {
       .mockResolvedValueOnce([]) // CREATE PARTITIONED
       .mockResolvedValueOnce([]) // CREATE PARTITIONS
       .mockResolvedValueOnce([]) // CREATE INDEXES
+      .mockResolvedValueOnce([{ column_name: 'id' }, { column_name: 'createdAt' }]) // commonCols
       .mockResolvedValueOnce([]) // INSERT
       .mockResolvedValueOnce([]); // DROP legacy
 
@@ -54,7 +55,7 @@ describe('applyDeclarativePartitioningMigration', () => {
       'ALTER TABLE "submissions" RENAME TO "submissions_legacy"',
     );
     expect(mockQueryRunner.query).toHaveBeenCalledWith(
-      'INSERT INTO "submissions" SELECT * FROM "submissions_legacy"',
+      'INSERT INTO "submissions" ("id", "createdAt") SELECT "id", "createdAt" FROM "submissions_legacy"',
     );
     expect(mockQueryRunner.query).toHaveBeenCalledWith(
       'DROP TABLE "submissions_legacy" CASCADE',
