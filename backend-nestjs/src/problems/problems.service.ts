@@ -348,6 +348,7 @@ export class ProblemsService {
             executionMode: config?.executionMode || 'standard',
             functionSignature: config?.functionSignature as unknown,
             exactOutput: config?.exactOutput ?? false,
+            hasCustomChecker: config?.hasCustomChecker ?? false,
           },
           testCases: {
             cases: cases(metadata.testCases?.cases).filter(

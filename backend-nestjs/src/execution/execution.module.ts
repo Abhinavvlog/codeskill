@@ -1,3 +1,5 @@
+import { PistonService } from './piston/piston.service';
+import { SubmissionShardingModule } from '../database/sharding/sharding.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
@@ -23,6 +25,7 @@ const judgeProviders = shouldRegisterJudge ? [JudgeProcessor] : [];
 
 @Module({
   imports: [
+    SubmissionShardingModule,
     TypeOrmModule.forFeature([Submission, User]),
     BullModule.registerQueue({
       name: 'submissions',
@@ -34,6 +37,7 @@ const judgeProviders = shouldRegisterJudge ? [JudgeProcessor] : [];
   controllers: [ExecutionController],
   providers: [
     ExecutionService,
+    PistonService,
     AzureExecutionService,
     SubmissionRateLimitGuard,
     ...judgeProviders,

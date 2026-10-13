@@ -35,6 +35,9 @@ export interface ExecutionConfig {
   functionSignature?: FunctionSignature;
   /** Set only for problems whose output whitespace is significant. */
   exactOutput?: boolean;
+  trimTrailingWhitespace?: boolean;
+  floatTolerance?: number;
+  floatRelativeTolerance?: number;
   /** Per-problem image override for a pre-approved judge image. */
   sandboxImage?: string;
   executionProfiles?: Record<string, { timeLimitMultiplier?: number }>;

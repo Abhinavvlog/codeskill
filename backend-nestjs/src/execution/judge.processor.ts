@@ -1,11 +1,13 @@
+import { PistonUnavailableError } from './piston/piston.types';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExecutionService } from './execution.service';
-import { Submission } from '../database/entities/submission.entity';
+import { SubmissionStore } from '../database/sharding/submission-store';
 import { ProblemsService } from '../problems/problems.service';
+import { Submission } from '../database/entities/submission.entity';
 import { User } from '../database/entities/user.entity';
 import { AppGateway } from '../gateway/app.gateway';
 import { RedisService } from '../redis/redis.service';
@@ -35,8 +37,7 @@ export class JudgeProcessor extends WorkerHost {
 
   constructor(
     private readonly executionService: ExecutionService,
-    @InjectRepository(Submission)
-    private readonly submissionRepo: Repository<Submission>,
+    private readonly submissionRepo: SubmissionStore,
     private readonly problemsService: ProblemsService,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
@@ -77,10 +78,9 @@ export class JudgeProcessor extends WorkerHost {
         success: true,
         status,
         results,
-        runtime: results.reduce(
-          (total, result) => total + (result.executionTime || 0),
-          0,
-        ),
+        runtime: results.every((result) => result.executionTime !== undefined)
+          ? results.reduce((total, result) => total + result.executionTime!, 0)
+          : undefined,
         passedCount,
         totalCount: results.length,
       };
@@ -98,22 +98,40 @@ export class JudgeProcessor extends WorkerHost {
     if (job.name === 'evaluate-code') {
       const { submissionId } = job.data;
       let userId: string | undefined;
+      let finalizedHere = false;
 
       try {
         // 1. Mark as running in DB
         const submission = await this.submissionRepo.findOne({
-          where: [{ id: submissionId }, { mongoId: submissionId }],
+          where: this.submissionLookup(submissionId, job.data.userId),
         });
 
         if (!submission) throw new Error('Submission not found');
+        if (submission.completedAt || submission.status === 'cancelled')
+          return { status: submission.status };
         const { problemId, code, language } = submission;
         userId = submission.userId;
 
-        if (submission) {
-          submission.status = SubmissionStatus.RUNNING;
-          submission.startedAt = new Date();
-          await this.submissionRepo.save(submission);
-        }
+        const claimed = await this.submissionRepo.transaction(
+          submission.userId,
+          async (manager) => {
+            const current = await manager.findOne(Submission, {
+              where: { id: submission.id },
+              lock: { mode: 'pessimistic_write' },
+            });
+            if (
+              !current ||
+              current.completedAt ||
+              current.status === 'cancelled'
+            )
+              return false;
+            submission.status = SubmissionStatus.RUNNING;
+            submission.startedAt = new Date();
+            await manager.save(Submission, submission);
+            return true;
+          },
+        );
+        if (!claimed) return { status: 'already_processed' };
 
         this.appGateway.emitToUser(userId, 'submission_status', {
           submissionId,
@@ -143,6 +161,7 @@ export class JudgeProcessor extends WorkerHost {
               'No test cases configured for this problem';
             submission.completedAt = new Date();
             await this.submissionRepo.save(submission);
+            finalizedHere = true;
           }
           this.appGateway.emitToUser(userId, 'execution_error', {
             submissionId,
@@ -171,7 +190,10 @@ export class JudgeProcessor extends WorkerHost {
           testCases,
           config,
         );
-        const runtime = Date.now() - start;
+        const processingLatencyMs = Date.now() - start;
+        const runtime = results.every((r) => r.executionTime !== undefined)
+          ? results.reduce((sum, r) => sum + r.executionTime!, 0)
+          : undefined;
 
         // 6. Evaluate results
         let passedCount = 0;
@@ -199,6 +221,8 @@ export class JudgeProcessor extends WorkerHost {
         let status: string;
         if (allPassed) {
           status = SubmissionStatus.ACCEPTED;
+        } else if (results.some((r) => r.status === Status.SYSTEM_ERROR)) {
+          status = SubmissionStatus.SYSTEM_ERROR;
         } else if (hasCompileError) {
           status = SubmissionStatus.COMPILATION_ERROR;
         } else if (hasMemoryLimit) {
@@ -216,6 +240,11 @@ export class JudgeProcessor extends WorkerHost {
           submission.status = status;
           submission.runtime = runtime;
           submission.executionTime = runtime;
+          const memory = results.every((r) => r.memoryUsed !== undefined)
+            ? Math.max(...results.map((r) => r.memoryUsed!))
+            : undefined;
+          submission.memory = memory;
+          submission.memoryUsed = memory;
           submission.testCasesPassed = passedCount;
           submission.testsPassed = passedCount;
           submission.totalTestCases = testCases.length;
@@ -228,27 +257,53 @@ export class JudgeProcessor extends WorkerHost {
                   testId: String(result.id),
                   passed: result.passed,
                   executionTime: result.executionTime,
+                  memoryUsed: result.memoryUsed,
                 }
               : {
                   testId: String(result.id),
                   passed: result.passed,
                   executionTime: result.executionTime,
+                  memoryUsed: result.memoryUsed,
                   error: result.error,
                 },
           );
-          await this.submissionRepo.save(submission);
-        }
-
-        if (status === SubmissionStatus.ACCEPTED && userId) {
-          const user = await this.userRepo.findOne({ where: { id: userId } });
-          if (user) {
-            const stats = user.stats || {};
-            user.stats = {
-              ...stats,
-              acceptedSubmissions: (stats.acceptedSubmissions || 0) + 1,
-            };
-            await this.userRepo.save(user);
+          // Commit verdict and counters under a row lock. Concurrent/stalled replays
+          // may execute twice, but only one verdict changes scoring/counters.
+          const committed = await this.submissionRepo.transaction(
+            submission.userId,
+            async (manager) => {
+              const locked = await manager.findOne(Submission, {
+                where: { id: submission.id },
+                lock: { mode: 'pessimistic_write' },
+              });
+              if (
+                !locked ||
+                locked.completedAt ||
+                locked.status === 'cancelled'
+              )
+                return false;
+              await manager.save(Submission, submission);
+              return true;
+            },
+          );
+          if (!committed) return { status: 'already_processed' };
+          if (status === SubmissionStatus.ACCEPTED && userId) {
+            await this.userRepo.manager.transaction(async (manager) => {
+              const user = await manager.findOne(User, {
+                where: { id: userId },
+                lock: { mode: 'pessimistic_write' },
+              });
+              if (user) {
+                user.stats = {
+                  ...(user.stats || {}),
+                  acceptedSubmissions:
+                    (user.stats?.acceptedSubmissions || 0) + 1,
+                };
+                await manager.save(User, user);
+              }
+            });
           }
+          finalizedHere = true;
         }
 
         // 8. Notify user of completion
@@ -265,6 +320,7 @@ export class JudgeProcessor extends WorkerHost {
                   passed: result.passed,
                   status: result.status,
                   executionTime: result.executionTime,
+                  memoryUsed: result.memoryUsed,
                 }
               : result,
           ),
@@ -282,7 +338,7 @@ export class JudgeProcessor extends WorkerHost {
         );
 
         this.logger.log(
-          `[Judge] Submission ${submissionId}: ${status} (${passedCount}/${testCases.length}) in ${runtime}ms`,
+          `[Judge] Submission ${submissionId}: ${status} (${passedCount}/${testCases.length}) processingLatency=${processingLatencyMs}ms`,
         );
 
         return { status, passedCount, totalCount: testCases.length };
@@ -292,17 +348,27 @@ export class JudgeProcessor extends WorkerHost {
           err.stack,
         );
 
+        const willRetry =
+          err instanceof PistonUnavailableError &&
+          job.attemptsMade + 1 < (job.opts?.attempts || 1);
         const sub = await this.submissionRepo.findOne({
-          where: [{ id: submissionId }, { mongoId: submissionId }],
+          where: this.submissionLookup(submissionId, userId || job.data.userId),
         });
+        if (sub?.completedAt || sub?.status === 'cancelled')
+          return { status: sub.status };
         if (sub) {
-          sub.status = SubmissionStatus.SYSTEM_ERROR;
-          sub.compileOutput = `Internal error: ${err.message}`;
-          sub.completedAt = new Date();
+          sub.status = willRetry
+            ? SubmissionStatus.QUEUED
+            : SubmissionStatus.SYSTEM_ERROR;
+          sub.compileOutput = willRetry
+            ? undefined
+            : 'Code execution is temporarily unavailable.';
+          sub.completedAt = willRetry ? undefined : new Date();
           await this.submissionRepo.save(sub);
+          finalizedHere = !willRetry;
         }
 
-        if (userId) {
+        if (userId && !willRetry) {
           this.appGateway.emitToUser(userId, 'execution_error', {
             submissionId,
             status: SubmissionStatus.SYSTEM_ERROR,
@@ -313,9 +379,13 @@ export class JudgeProcessor extends WorkerHost {
         throw err;
       } finally {
         const client = this.redisService.getClient();
-        if (client && userId) {
+        if (client && userId && finalizedHere) {
           try {
-            await client.decr(`active:submissions:${userId}`);
+            const latest = await this.submissionRepo.findOne({
+              where: { id: submissionId },
+            });
+            if (latest?.completedAt)
+              await client.eval("local n = tonumber(redis.call('GET', KEYS[1]) or '0'); if n > 0 then return redis.call('DECR', KEYS[1]) end; return 0", 1, `active:submissions:${userId}`);
           } catch (e) {
             // Ignore redis cleanup error
           }
@@ -324,9 +394,26 @@ export class JudgeProcessor extends WorkerHost {
     }
   }
 
+  private submissionLookup(id: string, userId?: string) {
+    const scope = this.submissionRepo.isSharded && userId ? { userId } : {};
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      id,
+    )
+      ? [
+          { id, ...scope },
+          { mongoId: id, ...scope },
+        ]
+      : [{ mongoId: id, ...scope }];
+  }
+
   private overallStatus(
     results: Array<{ passed: boolean; status: string }>,
   ): string {
+    if (
+      !results.length ||
+      results.some((result) => result.status === Status.SYSTEM_ERROR)
+    )
+      return Status.SYSTEM_ERROR;
     if (results.every((result) => result.passed)) return Status.ACCEPTED;
     if (results.some((result) => result.status === Status.COMPILATION_ERROR)) {
       return Status.COMPILATION_ERROR;

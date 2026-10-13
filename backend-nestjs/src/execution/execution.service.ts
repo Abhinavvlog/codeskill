@@ -1,10 +1,19 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Optional,
+  BadRequestException,
+} from '@nestjs/common';
 import { execFile, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { randomUUID as uuidv4 } from 'crypto';
 import { commandBasename, getLanguageAdapter } from './language-adapters';
+
+import { PistonService } from './piston/piston.service';
+import { PistonUnavailableError } from './piston/piston.types';
+import { compareOutput } from './output-comparison';
 
 // ── Result Status Constants ──────────────────────────────────────────────────
 export const Status = {
@@ -31,6 +40,7 @@ export interface TestCaseResult {
   expected: string;
   error?: string;
   executionTime?: number;
+  memoryUsed?: number;
 }
 
 interface RunOptions {
@@ -238,6 +248,61 @@ const MAX_OUTPUT_BYTES = 256 * 1024; // 256 KB max output
 export class ExecutionService {
   private readonly logger = new Logger(ExecutionService.name);
 
+  constructor(@Optional() private readonly piston?: PistonService) {}
+
+  get provider(): string {
+    const provider = process.env.CODE_EXECUTION_PROVIDER || 'legacy';
+    if (!['legacy', 'piston'].includes(provider))
+      throw new Error('Invalid CODE_EXECUTION_PROVIDER');
+    return provider;
+  }
+
+  executionMetrics() {
+    return this.piston?.metrics();
+  }
+
+  async availableLanguages() {
+    if (this.provider === 'piston') {
+      if (!this.piston) throw new PistonUnavailableError();
+      return this.piston.availableLanguages();
+    }
+    return ['c', 'cpp', 'java', 'python', 'javascript', 'typescript'].map(
+      (language) => ({ language, enabled: true }),
+    );
+  }
+
+  validateRequest(code: unknown, testCases: unknown): void {
+    if (
+      typeof code !== 'string' ||
+      !code.trim() ||
+      Buffer.byteLength(code) > 1_000_000
+    )
+      throw new BadRequestException(
+        'Source code must be nonempty and at most 1MB',
+      );
+    if (
+      !Array.isArray(testCases) ||
+      testCases.length === 0 ||
+      testCases.length > 100
+    )
+      throw new BadRequestException('Provide between 1 and 100 test cases');
+    if (
+      testCases.some(
+        (tc) =>
+          !tc ||
+          typeof tc !== 'object' ||
+          Buffer.byteLength(
+            typeof tc.input === 'string'
+              ? tc.input
+              : JSON.stringify(tc.input ?? ''),
+          ) > 262144 ||
+          Buffer.byteLength(JSON.stringify(tc.expected ?? tc.output ?? '')) >
+            262144,
+      )
+    )
+      throw new BadRequestException('Invalid or oversized test input/output');
+  }
+
   /**
    * Main entry point — Execute user code against test cases.
    * Supports both stdin/stdout mode (competitive programming) and
@@ -258,6 +323,7 @@ export class ExecutionService {
     testCases: any[],
     config: any = {},
   ): Promise<TestCaseResult[]> {
+    this.validateRequest(code, testCases);
     const langConfig = LANGUAGE_CONFIGS[language.toLowerCase()];
     if (!langConfig) {
       return testCases.map((tc) => ({
@@ -352,8 +418,81 @@ export class ExecutionService {
     const normalizedTestCases: TestCaseInput[] = testCases.map((tc, i) => ({
       id: tc.id ?? i + 1,
       input: this.normalizeInput(tc.input, functionMode),
-      expected: this.normalizeExpected(tc.expected ?? tc.output),
+      expected:
+        (config.exactOutput || this.provider === 'piston') &&
+        typeof (tc.expected ?? tc.output) === 'string'
+          ? (tc.expected ?? tc.output)
+          : this.normalizeExpected(tc.expected ?? tc.output),
     }));
+
+    if (this.provider === 'piston') {
+      if (!this.piston || config.hasCustomChecker)
+        throw new PistonUnavailableError();
+      const prepared = getLanguageAdapter(language)!.prepare(
+        code,
+        functionMode ? 'function' : 'standard',
+        config.functionSignature,
+      );
+      // Piston isolates every test in a new job, including its compilation stage.
+      const results: TestCaseResult[] = [];
+      for (const tc of normalizedTestCases) {
+        const response = await this.piston.execute(
+          language,
+          prepared.filename,
+          prepared.source,
+          tc.input,
+          {
+            timeLimit: config.timeLimit,
+            memoryLimit: config.memoryLimit,
+          },
+        );
+        const compileFailed =
+          response.compile &&
+          (response.compile.code !== 0 ||
+            response.compile.signal ||
+            response.compile.status);
+        const stage = compileFailed ? response.compile! : response.run!;
+        if (stage.status === 'XX') throw new PistonUnavailableError();
+        // SIGKILL is ambiguous (timeout, output, memory, host kill). Use Isolate TO only.
+        let status: string = compileFailed
+          ? Status.COMPILATION_ERROR
+          : stage.status === 'TO'
+            ? Status.TIME_LIMIT_EXCEEDED
+            : stage.code !== 0 || stage.signal || stage.status
+              ? Status.RUNTIME_ERROR
+              : Status.ACCEPTED;
+        const limit = this.piston.config.outputLimit;
+        const oversized =
+          Buffer.byteLength(stage.stdout) > limit ||
+          Buffer.byteLength(stage.stderr) > limit;
+        if (!compileFailed && oversized) status = Status.RUNTIME_ERROR;
+        const output = Buffer.from(stage.stdout)
+          .subarray(0, limit)
+          .toString('utf8');
+        const passed =
+          status === Status.ACCEPTED &&
+          (config.customInput === true ||
+            compareOutput(output, tc.expected, config));
+        if (status === Status.ACCEPTED && !passed) status = Status.WRONG_ANSWER;
+        const diagnostic =
+          oversized || ['OL', 'EL'].includes(stage.status || '')
+            ? 'Output limit exceeded'
+            : stage.status === 'TO'
+              ? 'Execution time limit exceeded'
+              : this.redactDiagnostic(stage.stderr, limit);
+        results.push({
+          id: tc.id,
+          passed,
+          status,
+          output,
+          expected: tc.expected,
+          error: diagnostic || undefined,
+          executionTime: stage.cpu_time ?? undefined,
+          memoryUsed: stage.memory == null ? undefined : stage.memory / 1048576,
+        });
+      }
+      return results;
+    }
 
     // For compiled languages, compile once and run against all test cases
     if (langConfig.compiled) {
@@ -374,6 +513,16 @@ export class ExecutionService {
       normalizedTestCases,
       runOpts,
     );
+  }
+
+  private redactDiagnostic(value: string, limit: number): string {
+    return Buffer.from(value)
+      .subarray(0, limit)
+      .toString('utf8')
+      .replace(
+        /\/(?:piston|box|tmp|usr|opt|home|var)\/[^\s:'"<>]+/g,
+        '[sandbox]',
+      );
   }
 
   // ── Concurrency Helper ───────────────────────────────────────────────────

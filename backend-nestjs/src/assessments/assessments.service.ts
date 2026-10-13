@@ -1,3 +1,5 @@
+import { canonicalLanguage } from '../execution/execution.types';
+import { PistonUnavailableError } from '../execution/piston/piston.types';
 import {
   Injectable,
   NotFoundException,
@@ -1005,11 +1007,10 @@ export class AssessmentsService {
       return this.getStudentResult(id, studentUser);
     }
 
-    // NEW-002: Assessment deadline check with 5-minute grace period
+    // Accept before the deadline; execution may finish after it.
     const now = new Date();
     if (assessment.endTime) {
-      const gracePeriodMs = 5 * 60 * 1000;
-      const deadline = new Date(new Date(assessment.endTime).getTime() + gracePeriodMs);
+      const deadline = new Date(assessment.endTime);
       if (now > deadline) {
         throw new BadRequestException('The examination submission deadline has expired.');
       }
@@ -1061,6 +1062,10 @@ export class AssessmentsService {
           isAttempted = true;
           totalAttempted++;
 
+          const submittedLanguage = canonicalLanguage(r.language || 'python');
+          if (!submittedLanguage || (q.supportedLanguages?.length && !q.supportedLanguages.some(lang => canonicalLanguage(lang) === submittedLanguage))) {
+            throw new BadRequestException('This language is not enabled for the assessment question');
+          }
           // Server-side code execution against verified test cases (AUD-002)
           const testCases = Array.isArray(q.testCases) ? q.testCases : [];
           totalTestCases = testCases.length;
@@ -1076,9 +1081,11 @@ export class AssessmentsService {
                 r.code!,
                 r.language || 'python',
                 tcInputs,
+                { timeLimit: q.timeLimit, memoryLimit: q.memoryLimit },
               );
               testCasesPassed = results.filter((res) => res.passed).length;
             } catch (execErr: any) {
+              if (execErr instanceof PistonUnavailableError) throw execErr;
               testCasesPassed = 0;
             }
           } else {
@@ -1202,7 +1209,7 @@ export class AssessmentsService {
 
     // State machine transition: in_progress -> submitted
     attempt.status = 'submitted';
-    attempt.submittedAt = new Date();
+    attempt.submittedAt = now;
     attempt.timeSpentSeconds = dto.timeSpentSeconds || 0;
     attempt.responses = evaluatedResponses;
     attempt.score = finalScore;

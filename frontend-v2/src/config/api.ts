@@ -1,3 +1,4 @@
+import { awaitExecution } from "@/lib/await-execution";
 import axios from "axios";
 import { getBrowserApiBaseURL } from "@/lib/api-base-url";
 import { normalizeProblemQuery } from "@/lib/public-problems";
@@ -164,13 +165,13 @@ export const submissionAPI = {
 };
 
 export const runAPI = {
+  runtimes: () => api.get<Array<{ language: string; version?: string; enabled: boolean }>>("/execution/runtimes"),
   run: (data: { code: string; language: string; testCases: any[]; config?: any }) =>
     api.post("/execution/run", data, { timeout: 60000 }),
   getJob: (jobId: string) => api.get(`/execution/jobs/${jobId}`, { timeout: 60000 }),
 };
 
-// Azure-backed high-scale execution (Microsoft Azure Container Instances)
-// Falls back to local executor if AZURE_COMPILER_URL is not set on the backend
+// Compatibility endpoint: backend selects the configured provider and queue.
 export const azureRunAPI = {
   run: (data: {
     code: string;
@@ -179,7 +180,10 @@ export const azureRunAPI = {
     testCases?: Array<{ id: string; input: string; expected: string }>;
     timeoutMs?: number;
     memoryMB?: number;
-  }) => api.post("/execution/azure-run", data, { timeout: 90000 }),
+  }) => awaitExecution(
+    () => api.post("/execution/azure-run", data, { timeout: 90000 }),
+    jobId => runAPI.getJob(jobId),
+  ),
 };
 
 // ── Discussions ──
@@ -221,11 +225,31 @@ function notifyContestChange<T>(response: T): T {
 }
 
 export const adminContestsAPI = {
-  getAll: () => api.get("/admin/contests"),
+  getAll: (page = 1, limit = 50, search = "") =>
+    api.get(`/admin/contests?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`),
   getById: (id: string) => api.get(`/admin/contests/${id}`),
   create: (data: any) => api.post("/admin/contests", data).then(notifyContestChange),
   update: (id: string, data: any) => api.put(`/admin/contests/${id}`, data).then(notifyContestChange),
   delete: (id: string) => api.delete(`/admin/contests/${id}`).then(notifyContestChange),
+  getResults: (id: string, params: any = {}) => {
+    const q = new URLSearchParams();
+    if (params.search) q.set("search", params.search);
+    if (params.status) q.set("status", params.status);
+    if (params.minScore !== undefined && params.minScore !== "") q.set("minScore", String(params.minScore));
+    if (params.maxScore !== undefined && params.maxScore !== "") q.set("maxScore", String(params.maxScore));
+    if (params.page) q.set("page", String(params.page));
+    if (params.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return api.get(`/admin/contests/${id}/results${qs ? `?${qs}` : ""}`);
+  },
+  togglePublishResults: (id: string, publish?: boolean) =>
+    api.post(`/admin/contests/${id}/publish-results`, { publish }).then(notifyContestChange),
+  grantReattempts: (id: string, data: { studentIds: string[]; reason?: string; allowedAttempts?: number; expiresAt?: string }) =>
+    api.post(`/admin/contests/${id}/reattempts`, data),
+  revokeReattempt: (id: string, targetId: string) =>
+    api.post(`/admin/contests/${id}/reattempts/revoke`, { targetId }),
+  exportResultsCsv: (id: string) =>
+    api.get(`/admin/contests/${id}/results/export`, { responseType: "blob" }),
 };
 
 export const adminUsersAPI = {
