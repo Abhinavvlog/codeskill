@@ -37,6 +37,8 @@ import {
   ResetPasswordDto,
   StudentLoginDto,
   ForceChangePasswordDto,
+  RefreshTokenDto,
+  LogoutDto,
 } from './dto/auth.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -65,15 +67,17 @@ export class AuthController {
   @Post('login')
   @ApiOperation({ summary: 'Login with email and password' })
   @HttpCode(HttpStatus.OK)
-  async login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(@Body() dto: LoginDto, @Req() req: any) {
+    const ip = req.ip || req.connection?.remoteAddress;
+    return this.authService.login(dto, ip);
   }
 
   @Post('student-login')
   @ApiOperation({ summary: 'Student login with University UID and password' })
   @HttpCode(HttpStatus.OK)
-  async studentLogin(@Body() dto: StudentLoginDto) {
-    return this.authService.studentLogin(dto);
+  async studentLogin(@Body() dto: StudentLoginDto, @Req() req: any) {
+    const ip = req.ip || req.connection?.remoteAddress;
+    return this.authService.studentLogin(dto, ip);
   }
 
   @Post('force-change-password')
@@ -93,8 +97,9 @@ export class AuthController {
   @Post('admin-login')
   @ApiOperation({ summary: 'Admin login requesting OTP' })
   @HttpCode(HttpStatus.OK)
-  async adminLogin(@Body() dto: AdminLoginDto) {
-    return this.authService.adminLogin(dto);
+  async adminLogin(@Body() dto: AdminLoginDto, @Req() req: any) {
+    const ip = req.ip || req.connection?.remoteAddress;
+    return this.authService.adminLogin(dto, ip);
   }
 
   @Post('admin-login/verify')
@@ -102,6 +107,22 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async adminVerifyOtp(@Body() dto: AdminVerifyOtpDto) {
     return this.authService.adminVerifyOtp(dto);
+  }
+
+  @Post('refresh')
+  @ApiOperation({ summary: 'Rotate and exchange a refresh token for new credentials' })
+  @HttpCode(HttpStatus.OK)
+  async refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refreshToken(dto);
+  }
+
+  @Post('logout')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Revoke active refresh token or user session' })
+  @HttpCode(HttpStatus.OK)
+  async logout(@CurrentUser('id') userId: string, @Body() dto: LogoutDto) {
+    return this.authService.logout(userId, dto);
   }
 
   @Post('google')

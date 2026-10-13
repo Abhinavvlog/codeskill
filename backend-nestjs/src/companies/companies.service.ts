@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Company } from '../database/entities/company.entity';
@@ -90,14 +95,53 @@ export class CompaniesService {
     return { success: true, company: { ...company, _id: company.id } };
   }
 
-  async updateCompany(companyId: string, updates: any) {
-    delete updates.username;
-    delete updates.createdBy;
-
+  async updateCompany(
+    companyId: string,
+    updates: any,
+    actor?: { id?: string; role?: string; isAdmin?: boolean },
+  ) {
     const company = await this.companyRepo.findOne({
       where: [{ id: companyId }, { mongoId: companyId }],
     });
     if (!company) throw new NotFoundException('Company not found');
+
+    if (actor) {
+      const isPlatformAdmin =
+        actor.isAdmin ||
+        ['admin', 'super_admin', 'company_admin'].includes(actor.role || '');
+
+      if (!isPlatformAdmin) {
+        const membership = await this.companyUserRepo.findOne({
+          where: {
+            company: { id: company.id },
+            user: { id: actor.id },
+            isActive: true,
+          },
+        });
+        if (!membership || !['Owner', 'Admin'].includes(membership.role)) {
+          throw new ForbiddenException(
+            'You do not have management permissions for this company',
+          );
+        }
+      }
+    }
+
+    // Strip protected fields to prevent mass assignment (NEW-004)
+    delete updates.id;
+    delete updates.mongoId;
+    delete updates.username;
+    delete updates.createdBy;
+    delete updates.created_by_id;
+    delete updates.createdAt;
+    delete updates.updatedAt;
+
+    // isVerified can only be modified by platform super_admin / admin
+    if (
+      updates.isVerified !== undefined &&
+      (!actor || (!actor.isAdmin && !['admin', 'super_admin'].includes(actor.role || '')))
+    ) {
+      delete updates.isVerified;
+    }
 
     Object.assign(company, updates);
     await this.companyRepo.save(company);

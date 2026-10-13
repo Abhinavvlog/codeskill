@@ -13,7 +13,11 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { AppGateway } from '../gateway/app.gateway';
 import { RedisService } from '../redis/redis.service';
-import { SUPPORTED_LANGUAGES } from '../execution/execution.types';
+import {
+  SUPPORTED_LANGUAGES,
+  canonicalLanguage,
+} from '../execution/execution.types';
+import { ProblemsService } from '../problems/problems.service';
 
 export enum SubmissionStatus {
   QUEUED = 'queued',
@@ -41,50 +45,66 @@ export class SubmissionsService {
     @InjectQueue('submissions') private submissionQueue: Queue,
     private readonly appGateway: AppGateway,
     private readonly redisService: RedisService,
+    private readonly problemsService: ProblemsService,
   ) {}
 
-  async createSubmission(userId: string, data: any) {
-    const {
-      status: _untrustedStatus,
-      runtime: _untrustedRuntime,
-      memory: _untrustedMemory,
-      testCasesPassed: _untrustedPassed,
-      totalTestCases: _untrustedTotal,
-      ...submissionData
-    } = data;
+  async createSubmission(userId: string, data: unknown) {
+    if (!data || typeof data !== 'object') {
+      throw new BadRequestException('Invalid submission payload');
+    }
+    const { code, language, problemId } = data as Record<string, unknown>;
 
-    if (!submissionData.code || typeof submissionData.code !== 'string') {
+    if (typeof code !== 'string' || !code) {
       throw new BadRequestException('Missing or invalid code');
     }
-    if (
-      !submissionData.language ||
-      typeof submissionData.language !== 'string'
-    ) {
+    if (!language || typeof language !== 'string') {
       throw new BadRequestException('Missing or invalid language');
     }
-    if (!submissionData.problemId) {
+    if (typeof problemId !== 'string' || !problemId.trim()) {
       throw new BadRequestException('Missing problemId');
     }
 
-    const langLower = submissionData.language.toLowerCase();
-    if (!SUPPORTED_LANGUAGES.includes(langLower)) {
+    const langLower = language.trim().toLowerCase();
+    const resolvedLanguage = canonicalLanguage(langLower);
+    if (!resolvedLanguage) {
       throw new BadRequestException(
-        `Unsupported language: "${submissionData.language}". Supported: ${SUPPORTED_LANGUAGES.join(', ')}`,
+        `Unsupported language: "${language}". Supported: ${SUPPORTED_LANGUAGES.join(', ')}`,
       );
     }
 
-    if (Buffer.byteLength(submissionData.code, 'utf8') > 1_000_000) {
+    if (Buffer.byteLength(code, 'utf8') > 1_000_000) {
       throw new BadRequestException('Source code exceeds the 1MB limit');
+    }
+
+    // Resolve publication and judge data on the server; client source/state is ignored.
+    const problem = await this.problemsService.getExecutionProblem(
+      problemId.trim(),
+    );
+    const allowedLanguages = problem.config.supportedLanguages;
+    if (
+      allowedLanguages.length > 0 &&
+      !allowedLanguages.some(
+        (language) => canonicalLanguage(language) === resolvedLanguage,
+      )
+    ) {
+      throw new BadRequestException(
+        'This language is not enabled for the problem',
+      );
+    }
+    if (!problem.testCases.length) {
+      throw new BadRequestException(
+        'No test cases configured for this problem',
+      );
     }
 
     // 1. Create submission in PostgreSQL with status 'queued'
     const submission = this.submissionRepo.create({
       userId,
-      user: { id: userId } as any,
-      problemId: submissionData.problemId,
-      problem: { id: submissionData.problemId } as any,
-      code: submissionData.code,
-      language: submissionData.language,
+      user: { id: userId },
+      problemId: problem.id,
+      problemSource: problem.source,
+      code,
+      language: langLower,
       status: SubmissionStatus.QUEUED,
       queuedAt: new Date(),
       testResults: [],
@@ -103,9 +123,10 @@ export class SubmissionsService {
       'evaluate-code',
       {
         submissionId: submission.id,
-        problemId: submissionData.problemId,
-        code: submissionData.code,
-        language: submissionData.language,
+        problemId: problem.id,
+        problemSource: problem.source,
+        code,
+        language: langLower,
         userId,
       },
       {
@@ -132,7 +153,7 @@ export class SubmissionsService {
     this.appGateway.emitToUser(userId, 'submission_status', {
       submissionId: submission.id,
       status: SubmissionStatus.QUEUED,
-      problemId: submissionData.problemId,
+      problemId: problem.id,
       queuedAt: submission.queuedAt,
     });
 
@@ -152,7 +173,11 @@ export class SubmissionsService {
       throw new NotFoundException('Submission not found');
     }
 
-    if (!isAdmin && submission.userId !== userId && (submission as any).user?.id !== userId) {
+    if (
+      !isAdmin &&
+      submission.userId !== userId &&
+      (submission as any).user?.id !== userId
+    ) {
       throw new ForbiddenException('Access denied to this submission');
     }
 

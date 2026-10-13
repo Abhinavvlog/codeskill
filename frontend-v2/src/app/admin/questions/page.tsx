@@ -1,5 +1,7 @@
 "use client";
 
+import { getQuestionTypeLabel, getTopicCategories } from "@/lib/question-types";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminQuestionsAPI, adminQuestionBanksAPI, adminProblemsAPI } from "@/config/api";
@@ -553,8 +555,8 @@ export default function QuestionsAdminPage() {
                 <div>
                   <h3 className="text-lg font-bold text-slate-900 tracking-tight">Question Preview</h3>
                   <div className="flex flex-wrap items-center gap-2 mt-2 text-xs font-medium text-slate-500">
-                    <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700">Topic: {inspectQuestion.topic || 'General'}</span>
-                    <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700">Type: {inspectQuestion.questionType || 'MCQ'}</span>
+                    <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700">Topic: {getTopicCategories(inspectQuestion).join(', ') || 'General'}</span>
+                    <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700">Type: {getQuestionTypeLabel(inspectQuestion.questionType)}</span>
                     <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 capitalize">Difficulty: {inspectQuestion.difficulty || 'Easy'}</span>
                     <span className="px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-700 font-semibold">Marks: {inspectQuestion.marks || 1}</span>
                   </div>

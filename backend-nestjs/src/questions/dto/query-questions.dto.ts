@@ -38,6 +38,13 @@ export class QueryQuestionsDto {
   difficulty?: string;
 
   @ApiPropertyOptional({
+    description: 'Question type (unified or legacy value)',
+  })
+  @IsOptional()
+  @IsString()
+  questionType?: string;
+
+  @ApiPropertyOptional({
     enum: ['pending', 'approved', 'rejected', 'archived'],
   })
   @IsOptional()

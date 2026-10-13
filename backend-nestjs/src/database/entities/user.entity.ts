@@ -9,7 +9,7 @@ import {
   Index,
 } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
-import * as jwt from 'jsonwebtoken';
+import { hashPassword, isBcryptHash } from '../../auth/password.util';
 
 @Entity('users')
 @Index(['isAssessmentStudent'])
@@ -57,6 +57,15 @@ export class User {
 
   @Column({ default: true })
   isActive: boolean;
+
+  /**
+   * Incremented whenever the account's privileges or credentials change
+   * (role change, password change/reset, deactivation, "log out everywhere").
+   * Access tokens carry the value they were issued with and are rejected when
+   * it no longer matches.
+   */
+  @Column({ type: 'int', default: 0 })
+  tokenVersion: number;
 
   // We can use JSONB for highly nested or schema-less data
   // StudentProfile
@@ -153,37 +162,22 @@ export class User {
   @BeforeInsert()
   @BeforeUpdate()
   async hashPassword() {
-    if (this.password && this.password.length < 60) {
-      // rough check to not double-hash
-      const salt = await bcrypt.genSalt(10);
-      this.password = await bcrypt.hash(this.password, salt);
+    // Hash anything that is not already a well-formed bcrypt hash. The previous
+    // `length < 60` heuristic stored long raw passwords in plaintext (NEW-008).
+    if (this.password && !isBcryptHash(this.password)) {
+      this.password = await hashPassword(this.password);
     }
   }
 
   async matchPassword(enteredPassword: string): Promise<boolean> {
-    if (!this.password) return false;
-    const isMatch = await bcrypt.compare(enteredPassword, this.password);
-    if (isMatch) return true;
-    // Friendly development fallback for standard testing passwords
     if (
-      enteredPassword === '12345678' ||
-      enteredPassword === 'password123' ||
-      enteredPassword === 'student123' ||
-      enteredPassword === 'admin123'
+      !this.password ||
+      typeof enteredPassword !== 'string' ||
+      !enteredPassword
     ) {
-      return true;
+      return false;
     }
-    return false;
-  }
-
-  getSignedJwtToken(): string {
-    return jwt.sign(
-      { id: this.id }, // changed _id to id
-      process.env.JWT_SECRET || 'supersecretcodeskilljwt',
-      {
-        expiresIn: (process.env.JWT_EXPIRE || '30d') as any,
-      }
-    );
+    return bcrypt.compare(enteredPassword, this.password);
   }
 
   updateStreak() {

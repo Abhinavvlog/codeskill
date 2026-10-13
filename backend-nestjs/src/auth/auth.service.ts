@@ -4,13 +4,15 @@ import {
   UnauthorizedException,
   NotFoundException,
   InternalServerErrorException,
-  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, ILike } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { User as UserEntity } from '../database/entities/user.entity';
 import { OtpService } from '../redis/otp.service';
+import { TokenService } from './token.service';
+import { LoginThrottleService } from './login-throttle.service';
+import { validatePasswordPolicy } from './password.util';
 import { OAuth2Client } from 'google-auth-library';
 import axios from 'axios';
 import {
@@ -27,102 +29,32 @@ import {
   ResetPasswordDto,
   StudentLoginDto,
   ForceChangePasswordDto,
+  RefreshTokenDto,
+  LogoutDto,
 } from './dto/auth.dto';
 
 @Injectable()
-export class AuthService implements OnModuleInit {
+export class AuthService {
   private googleClient: OAuth2Client;
 
   constructor(
     @InjectRepository(UserEntity) private userRepository: Repository<UserEntity>,
     private otpService: OtpService,
     private configService: ConfigService,
+    private tokenService: TokenService,
+    private loginThrottleService: LoginThrottleService,
   ) {
     this.googleClient = new OAuth2Client(
       this.configService.get<string>('oauth.googleClientId'),
     );
   }
 
-  async onModuleInit() {
-    try {
-      await this.seedAdmin();
-    } catch (err) {
-      console.error('[Seed Admin] Startup error:', err);
-    }
-  }
-
-  async seedAdmin() {
-    const adminEmailsString =
-      this.configService.get<string>('admin.emails') ||
-      'admin@codeskill.com,admin@cuchd.in,md.shadab.azam.ansari@gmail.com,kanhamishra555@gmail.com,shaikhmustakim2942@gmail.com';
-    const adminEmails = adminEmailsString
-      .split(',')
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean);
-    const defaultPassword =
-      this.configService.get<string>('admin.password') || 'admin123';
-
-    const results = [];
-    for (const email of adminEmails) {
-      try {
-        const user = await this.userRepository.findOne({
-          where: { email },
-          select: { id: true, email: true, password: true, isAdmin: true, role: true },
-        });
-        if (user) {
-          let updated = false;
-          if (!user.isAdmin) {
-            user.isAdmin = true;
-            updated = true;
-          }
-          if (user.role !== 'admin' && user.role !== 'super_admin') {
-            user.role = 'super_admin';
-            updated = true;
-          }
-          if (!user.password) {
-            user.password = defaultPassword;
-            updated = true;
-          }
-          if (updated) {
-            await this.userRepository.save(user);
-            results.push({ email, status: 'Upgraded / Updated Admin' });
-          } else {
-            results.push({ email, status: 'Already Admin' });
-          }
-        } else {
-          const adminName =
-            email
-              .split('@')[0]
-              .replace(/[._-]/g, ' ')
-              .replace(/\b\w/g, (c) => c.toUpperCase()) + ' (Admin)';
-          const newUser = this.userRepository.create({
-            name: adminName,
-            email,
-            password: defaultPassword,
-            isAdmin: true,
-            role: 'super_admin',
-            stats: {},
-            profile: {},
-            studentProfile: {},
-          });
-          await this.userRepository.save(newUser);
-          results.push({ email, status: 'Created as Admin' });
-        }
-      } catch (e: any) {
-        results.push({ email, status: `Failed: ${e.message}` });
-      }
-    }
+  private async authResponse(user: UserEntity) {
+    const tokens = await this.tokenService.issueTokens(user);
     return {
-      success: true,
-      message: 'Admin seeding process completed',
-      results,
-    };
-  }
-
-  private authResponse(user: UserEntity) {
-    const token = user.getSignedJwtToken();
-    return {
-      token,
+      token: tokens.token,
+      refreshToken: tokens.refreshToken,
+      expiresIn: tokens.expiresIn,
       user: {
         id: user.id,
         name: user.name,
@@ -142,10 +74,6 @@ export class AuthService implements OnModuleInit {
     };
   }
 
-  async sendOtp(dto: SendOtpDto) {
-    return this.otpService.sendOTP(dto.email);
-  }
-
   async sendRegistrationOtp(dto: SendOtpDto) {
     throw new BadRequestException(
       'Public registration is currently disabled. Please contact your administrator.',
@@ -158,8 +86,22 @@ export class AuthService implements OnModuleInit {
     );
   }
 
-  async login(dto: LoginDto) {
-    const raw = dto.email.trim();
+  async sendOtp(dto: SendOtpDto) {
+    throw new BadRequestException(
+      'Passwordless login is disabled for security. Please sign in with your password.',
+    );
+  }
+
+  async verifyOtp(dto: VerifyOtpDto) {
+    throw new BadRequestException(
+      'Passwordless login is disabled for security. Please sign in with your password.',
+    );
+  }
+
+  async login(dto: LoginDto, ip?: string) {
+    const raw = (dto.email || '').trim();
+    await this.loginThrottleService.assertAllowed(raw, ip);
+
     const user = await this.userRepository.findOne({
       where: [
         { email: ILike(raw) },
@@ -168,13 +110,37 @@ export class AuthService implements OnModuleInit {
         { name: ILike(raw) },
         { email: ILike(`${raw}@%`) },
       ],
-      select: { id: true, name: true, email: true, password: true, role: true, isAdmin: true, uid: true, isAssessmentStudent: true, forcePasswordChange: true, studentProfile: true, avatar: true, bio: true, profile: true, stats: true, authProvider: true, isActive: true }
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        password: true,
+        role: true,
+        isAdmin: true,
+        uid: true,
+        isAssessmentStudent: true,
+        forcePasswordChange: true,
+        studentProfile: true,
+        avatar: true,
+        bio: true,
+        profile: true,
+        stats: true,
+        authProvider: true,
+        isActive: true,
+        tokenVersion: true,
+      },
     });
+
     if (!user) {
+      await this.loginThrottleService.recordFailure(raw, ip);
       throw new UnauthorizedException('Invalid credentials');
     }
+
     if (user.isActive === false) {
-      throw new UnauthorizedException('Your account has been deactivated. Please contact your administrator.');
+      await this.loginThrottleService.recordFailure(raw, ip);
+      throw new UnauthorizedException(
+        'Your account has been deactivated. Please contact your administrator.',
+      );
     }
 
     if (user.authProvider !== 'local' && !user.password) {
@@ -185,26 +151,146 @@ export class AuthService implements OnModuleInit {
 
     const isMatch = await user.matchPassword(dto.password);
     if (!isMatch) {
+      await this.loginThrottleService.recordFailure(raw, ip);
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return this.authResponse(user);
+    await this.loginThrottleService.recordSuccess(raw);
+    user.lastActive = new Date();
+    await this.userRepository.save(user);
+
+    return await this.authResponse(user);
   }
 
-  async verifyOtp(dto: VerifyOtpDto) {
-    await this.otpService.verifyOTP(dto.email, dto.code);
+  async adminLogin(dto: AdminLoginDto, ip?: string) {
+    const raw = (dto.email || '').trim();
+    await this.loginThrottleService.assertAllowed(raw, ip);
 
-    let user = await this.userRepository.findOne({ where: { email: dto.email } });
+    const user = await this.userRepository.findOne({
+      where: [
+        { email: ILike(raw) },
+        { uid: ILike(raw) },
+        { username: ILike(raw) },
+        { name: ILike(raw) },
+        { email: ILike(`${raw}@%`) },
+      ],
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        password: true,
+        role: true,
+        isAdmin: true,
+        uid: true,
+        isAssessmentStudent: true,
+        forcePasswordChange: true,
+        studentProfile: true,
+        avatar: true,
+        bio: true,
+        profile: true,
+        stats: true,
+        authProvider: true,
+        isActive: true,
+        tokenVersion: true,
+      },
+    });
+
+    if (
+      !user ||
+      !user.isAdmin ||
+      user.isActive !== true ||
+      !user.password ||
+      typeof dto.password !== 'string' ||
+      !dto.password
+    ) {
+      await this.loginThrottleService.recordFailure(raw, ip);
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const isMatch = await user.matchPassword(dto.password);
+    if (!isMatch) {
+      await this.loginThrottleService.recordFailure(raw, ip);
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    await this.loginThrottleService.recordSuccess(raw);
+    user.lastActive = new Date();
+    await this.userRepository.save(user);
+
+    return await this.authResponse(user);
+  }
+
+  async adminVerifyOtp(dto: AdminVerifyOtpDto) {
+    const normalizedEmail = dto.email.trim().toLowerCase();
+    await this.otpService.verifyOTP(normalizedEmail, dto.otp, 'admin_login');
+
+    const user = await this.userRepository.findOne({ where: { email: normalizedEmail } });
+    if (!user || !user.isAdmin || user.isActive !== true) {
+      throw new UnauthorizedException('Access denied');
+    }
+
+    user.lastActive = new Date();
+    await this.userRepository.save(user);
+
+    return await this.authResponse(user);
+  }
+
+  async studentLogin(dto: StudentLoginDto, ip?: string) {
+    const raw = (dto.uid || '').trim();
+    await this.loginThrottleService.assertAllowed(raw, ip);
+
+    const user = await this.userRepository.findOne({
+      where: [
+        { uid: ILike(raw) },
+        { email: ILike(raw) },
+        { username: ILike(raw) },
+        { name: ILike(raw) },
+        { email: ILike(`${raw}@%`) },
+      ],
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        password: true,
+        role: true,
+        isAdmin: true,
+        uid: true,
+        isAssessmentStudent: true,
+        forcePasswordChange: true,
+        studentProfile: true,
+        avatar: true,
+        bio: true,
+        profile: true,
+        stats: true,
+        authProvider: true,
+        isActive: true,
+        tokenVersion: true,
+      },
+    });
+
     if (!user) {
+      await this.loginThrottleService.recordFailure(raw, ip);
+      throw new UnauthorizedException('Invalid University UID or password');
+    }
+
+    if (user.isActive === false) {
+      await this.loginThrottleService.recordFailure(raw, ip);
       throw new UnauthorizedException(
-        'Account not found. Sign-up is disabled. Please contact your administrator.',
+        'Your student account has been deactivated. Please contact your institution administrator.',
       );
     }
-    if (user.isActive === false) {
-      throw new UnauthorizedException('Your account has been deactivated. Please contact your administrator.');
+
+    const isMatch = await user.matchPassword(dto.password);
+    if (!isMatch) {
+      await this.loginThrottleService.recordFailure(raw, ip);
+      throw new UnauthorizedException('Invalid University UID or password');
     }
 
-    return this.authResponse(user);
+    await this.loginThrottleService.recordSuccess(raw);
+    user.lastActive = new Date();
+    await this.userRepository.save(user);
+
+    return await this.authResponse(user);
   }
 
   async googleLogin(dto: OAuthDto) {
@@ -254,7 +340,7 @@ export class AuthService implements OnModuleInit {
       );
     }
 
-    return this.authResponse(user);
+    return await this.authResponse(user);
   }
 
   async githubLogin(dto: GithubAuthDto) {
@@ -313,7 +399,7 @@ export class AuthService implements OnModuleInit {
         );
       }
 
-      return this.authResponse(user);
+      return await this.authResponse(user);
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException('GitHub authentication failed');
@@ -373,11 +459,36 @@ export class AuthService implements OnModuleInit {
         );
       }
 
-      return this.authResponse(user);
+      return await this.authResponse(user);
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException('LinkedIn authentication failed');
     }
+  }
+
+  async refreshToken(dto: RefreshTokenDto) {
+    const rotated = await this.tokenService.rotate(dto.refreshToken);
+    return {
+      token: rotated.token,
+      refreshToken: rotated.refreshToken,
+      expiresIn: rotated.expiresIn,
+      user: {
+        id: rotated.user.id,
+        name: rotated.user.name,
+        email: rotated.user.email,
+        role: rotated.user.role || (rotated.user.isAdmin ? 'admin' : 'student'),
+        isAdmin: rotated.user.isAdmin,
+      },
+    };
+  }
+
+  async logout(userId: string, dto?: LogoutDto) {
+    if (dto?.refreshToken) {
+      await this.tokenService.revokeRefreshToken(dto.refreshToken);
+    } else {
+      await this.tokenService.invalidateUserSessions(userId);
+    }
+    return { success: true, message: 'Logged out successfully' };
   }
 
   async getMe(userId: string) {
@@ -445,7 +556,7 @@ export class AuthService implements OnModuleInit {
         'Assessment students cannot reset password online. Please contact your institution administrator.',
       );
     }
-    await this.otpService.sendOTP(normalizedEmail);
+    await this.otpService.sendOTP(normalizedEmail, 'password_reset');
     return {
       success: true,
       message: 'Password reset OTP sent to your email via SES',
@@ -454,66 +565,24 @@ export class AuthService implements OnModuleInit {
 
   async resetPassword(dto: ResetPasswordDto) {
     const normalizedEmail = dto.email.trim().toLowerCase();
-    await this.otpService.verifyOTP(normalizedEmail, dto.otp);
+    const passwordError = validatePasswordPolicy(dto.newPassword);
+    if (passwordError) {
+      throw new BadRequestException(passwordError);
+    }
+
+    await this.otpService.verifyOTP(normalizedEmail, dto.otp, 'password_reset');
     const user = await this.userRepository.findOne({
       where: { email: normalizedEmail },
-      select: { id: true, password: true },
+      select: { id: true, password: true, tokenVersion: true },
     });
     if (!user) {
       throw new BadRequestException('User not found');
     }
     user.password = dto.newPassword;
     await this.userRepository.save(user);
+    // Invalidate all existing sessions on password reset
+    await this.tokenService.invalidateUserSessions(user.id);
     return { success: true, message: 'Password has been successfully reset' };
-  }
-
-  async adminLogin(dto: AdminLoginDto) {
-    const raw = dto.email.trim();
-    const user = await this.userRepository.findOne({
-      where: [
-        { email: ILike(raw) },
-        { uid: ILike(raw) },
-        { username: ILike(raw) },
-        { name: ILike(raw) },
-        { email: ILike(`${raw}@%`) },
-      ],
-      select: { id: true, name: true, email: true, password: true, role: true, isAdmin: true, uid: true, isAssessmentStudent: true, forcePasswordChange: true, studentProfile: true, avatar: true, bio: true, profile: true, stats: true, authProvider: true }
-    });
-    if (!user) {
-      throw new UnauthorizedException('User not found with this email or ID');
-    }
-    if (!user.isAdmin) {
-      throw new UnauthorizedException('Access denied. Admin privileges required.');
-    }
-
-    if (user.password) {
-      if (!dto.password) {
-        throw new BadRequestException(
-          'Password is required for this admin account',
-        );
-      }
-      const isMatch = await user.matchPassword(dto.password);
-      if (!isMatch) {
-        throw new UnauthorizedException('Invalid credentials');
-      }
-    }
-
-    return this.authResponse(user);
-  }
-
-  async adminVerifyOtp(dto: AdminVerifyOtpDto) {
-    const normalizedEmail = dto.email.trim().toLowerCase();
-    await this.otpService.verifyOTP(normalizedEmail, dto.otp);
-
-    const user = await this.userRepository.findOne({ where: { email: normalizedEmail } });
-    if (!user || !user.isAdmin) {
-      throw new UnauthorizedException('Access denied');
-    }
-
-    user.lastActive = new Date();
-    await this.userRepository.save(user);
-
-    return this.authResponse(user);
   }
 
   async updateAvatar(userId: string, avatarUrl: string) {
@@ -524,39 +593,10 @@ export class AuthService implements OnModuleInit {
     return user;
   }
 
-  async studentLogin(dto: StudentLoginDto) {
-    const raw = dto.uid.trim();
-    const user = await this.userRepository.findOne({
-      where: [
-        { uid: ILike(raw) },
-        { email: ILike(raw) },
-        { username: ILike(raw) },
-        { name: ILike(raw) },
-        { email: ILike(`${raw}@%`) },
-      ],
-      select: { id: true, name: true, email: true, password: true, role: true, isAdmin: true, uid: true, isAssessmentStudent: true, forcePasswordChange: true, studentProfile: true, avatar: true, bio: true, profile: true, stats: true, authProvider: true, isActive: true }
-    });
-    if (!user) {
-      throw new UnauthorizedException('Invalid University UID or password');
-    }
-    if (user.isActive === false) {
-      throw new UnauthorizedException(
-        'Your student account has been deactivated. Please contact your institution administrator.',
-      );
-    }
-    const isMatch = await user.matchPassword(dto.password);
-    if (!isMatch) {
-      throw new UnauthorizedException('Invalid University UID or password');
-    }
-    user.lastActive = new Date();
-    await this.userRepository.save(user);
-    return this.authResponse(user);
-  }
-
   async forceChangePassword(userId: string, dto: ForceChangePasswordDto) {
     const user = await this.userRepository.findOne({
       where: { id: userId },
-      select: { id: true, name: true, email: true, uid: true, password: true, forcePasswordChange: true }
+      select: { id: true, name: true, email: true, uid: true, password: true, forcePasswordChange: true, tokenVersion: true },
     });
     if (!user) throw new NotFoundException('User not found');
     const isMatch = await user.matchPassword(dto.currentPassword);
@@ -568,9 +608,16 @@ export class AuthService implements OnModuleInit {
         'New password must be different from current temporary password',
       );
     }
+    const passwordError = validatePasswordPolicy(dto.newPassword);
+    if (passwordError) {
+      throw new BadRequestException(passwordError);
+    }
     user.password = dto.newPassword;
     user.forcePasswordChange = false;
     await this.userRepository.save(user);
+    // Invalidate prior sessions
+    await this.tokenService.invalidateUserSessions(user.id);
+
     return {
       success: true,
       message: 'Password successfully updated',

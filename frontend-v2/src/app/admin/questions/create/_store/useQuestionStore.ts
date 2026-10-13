@@ -1,3 +1,4 @@
+import { normalizeQuestionType } from "@/lib/question-types";
 import { create } from 'zustand';
 
 // ── Language & Compiler Definitions ──
@@ -548,7 +549,7 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
     }
 
     return {
-      metadata: { ...state.metadata, ...data.metadata, questionType: isTF ? 'TRUE_FALSE' : (data.metadata?.questionType || state.metadata.questionType) },
+      metadata: { ...state.metadata, ...data.metadata, questionType: normalizeQuestionType(rawQType, state.metadata.questionType) },
       languages: { ...state.languages, ...data.languages },
       execution: { ...state.execution, ...data.execution },
       statement: {

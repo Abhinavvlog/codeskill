@@ -3,6 +3,8 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual } from 'typeorm';
@@ -19,6 +21,8 @@ import { Submission } from '../database/entities/submission.entity';
 import { Assessment } from '../database/entities/assessment.entity';
 import { Question } from '../database/entities/question.entity';
 import { CacheService } from '../redis/cache.service';
+import { TokenService } from '../auth/token.service';
+import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 
 @Injectable()
 export class AdminService {
@@ -46,6 +50,8 @@ export class AdminService {
     @InjectRepository(Question)
     private readonly questionModel: Repository<Question>,
     private readonly cacheService: CacheService,
+    @Optional()
+    private readonly tokenService?: TokenService,
   ) {}
 
   async getDashboardStats() {
@@ -161,15 +167,108 @@ export class AdminService {
     };
   }
 
-  async updateUserRole(id: string, roleData: any) {
+  async updateUserRole(
+    id: string,
+    roleData: UpdateUserRoleDto,
+    actor?: { id?: string; role?: string; isAdmin?: boolean },
+  ) {
     const user = await this.userRepo.findOne({
       where: [{ id }, { mongoId: id }],
     });
     if (!user) throw new NotFoundException('User not found');
-    Object.assign(user, roleData);
+
+    const targetRole = roleData.role !== undefined ? roleData.role : user.role;
+    const targetIsAdmin =
+      roleData.isAdmin !== undefined
+        ? roleData.isAdmin
+        : roleData.role !== undefined
+          ? ['admin', 'super_admin', 'student_admin', 'assessment_admin'].includes(roleData.role)
+          : user.isAdmin;
+
+    const isElevatingToAdmin =
+      (targetIsAdmin && !user.isAdmin) ||
+      (targetRole === 'super_admin' && user.role !== 'super_admin') ||
+      (targetRole === 'admin' && user.role !== 'admin');
+
+    const isActorSuperAdmin = actor && actor.role === 'super_admin';
+
+    // Only super_admin can grant administrative privileges
+    if (isElevatingToAdmin && actor && !isActorSuperAdmin) {
+      throw new ForbiddenException(
+        'Only super_admin can grant administrative privileges',
+      );
+    }
+
+    // Only super_admin can modify an existing super_admin account
+    if (user.role === 'super_admin' && actor && !isActorSuperAdmin) {
+      throw new ForbiddenException(
+        'Only super_admin can modify an existing super_admin account',
+      );
+    }
+
+    // Guard against demoting or removing the last super_admin in the system
+    if (
+      user.role === 'super_admin' &&
+      (targetRole !== 'super_admin' || targetIsAdmin === false)
+    ) {
+      const superAdminCount = await this.userRepo.count({
+        where: { role: 'super_admin' },
+      });
+      if (superAdminCount <= 1) {
+        throw new BadRequestException(
+          'Cannot demote or remove the last super_admin in the system',
+        );
+      }
+    }
+
+    // Apply strict field updates only (no mass assignment)
+    user.role = targetRole;
+    user.isAdmin = targetIsAdmin;
+    if (user.profile) {
+      user.profile = { ...user.profile, role: targetRole };
+    }
+
     await this.userRepo.save(user);
-    const { password, ...rest } = user;
+
+    // Invalidate user sessions immediately upon role change
+    if (this.tokenService) {
+      await this.tokenService.invalidateUserSessions(user.id);
+    }
+
+    const { password, mfaSecret, ...rest } = user;
     return { ...rest, _id: user.id };
+  }
+
+  async promoteUser(
+    id: string,
+    actor?: { id?: string; role?: string; isAdmin?: boolean },
+  ) {
+    const user = await this.updateUserRole(
+      id,
+      { role: 'admin', isAdmin: true },
+      actor,
+    );
+    return {
+      success: true,
+      message: `${user.email} is now an admin`,
+      user,
+    };
+  }
+
+  async demoteUser(
+    id: string,
+    actor?: { id?: string; role?: string; isAdmin?: boolean },
+  ) {
+    const user = await this.updateUserRole(
+      id,
+      { role: 'student', isAdmin: false },
+      actor,
+    );
+    return {
+      success: true,
+      message: `${user.email} is no longer an admin`,
+      user,
+    };
   }
 
   async getReport(userId: string) {
@@ -222,9 +321,20 @@ export class AdminService {
     };
   }
 
+  private contestLookup(id: string) {
+    if (
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+    ) {
+      return [{ id }, { mongoId: id }];
+    }
+    // Legacy Mongo IDs must not be compared with PostgreSQL's UUID column.
+    if (/^[0-9a-f]{24}$/i.test(id)) return [{ mongoId: id }];
+    throw new BadRequestException('Invalid contest ID');
+  }
+
   async getContestById(id: string) {
     const contest = await this.contestModel.findOne({
-      where: [{ id }, { mongoId: id }],
+      where: this.contestLookup(id),
     });
     if (!contest) throw new NotFoundException('Contest not found');
     return { ...contest, _id: contest.id };
@@ -232,7 +342,7 @@ export class AdminService {
 
   async deleteContest(id: string) {
     const contest = await this.contestModel.findOne({
-      where: [{ id }, { mongoId: id }],
+      where: this.contestLookup(id),
     });
     if (!contest) throw new NotFoundException('Contest not found');
     await this.contestModel.remove(contest);
@@ -303,7 +413,7 @@ export class AdminService {
   async updateContest(id: string, body: any) {
     const data = this.validateContestPayload(body);
     const contest = await this.contestModel.findOne({
-      where: [{ id }, { mongoId: id }],
+      where: this.contestLookup(id),
     });
     if (!contest) throw new NotFoundException('Contest not found');
 

@@ -1,15 +1,12 @@
-import { Test, TestingModule } from '@nestjs/testing';
+jest.mock('@nestjs/typeorm', () => ({ InjectRepository: () => () => {} }));
+
 import { ExamSecurityController } from './exam-security.controller';
 
 describe('ExamSecurityController', () => {
   let controller: ExamSecurityController;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [ExamSecurityController],
-    }).compile();
-
-    controller = module.get<ExamSecurityController>(ExamSecurityController);
+  beforeEach(() => {
+    controller = new ExamSecurityController({} as never);
   });
 
   it('should be defined', () => {

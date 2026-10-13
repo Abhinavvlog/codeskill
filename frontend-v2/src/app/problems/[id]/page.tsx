@@ -1,4 +1,5 @@
 "use client";
+import ProblemWorkspace from "@/components/problems/ProblemWorkspace";
 
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";

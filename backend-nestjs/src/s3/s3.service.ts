@@ -70,19 +70,26 @@ export class S3Service {
     }
   }
 
-  async deleteFile(fileUrl: string): Promise<void> {
-    if (!this.bucketName) {
+  async deleteFile(fileUrl: string, allowedPrefix: string = 'avatars/'): Promise<void> {
+    if (!this.bucketName || !fileUrl || typeof fileUrl !== 'string') {
       return;
     }
 
     try {
-      // Expecting URL format: https://bucketName.s3.region.amazonaws.com/folder/filename.ext
-      // We need to extract 'folder/filename.ext'
       const url = new URL(fileUrl);
-      // pathname has a leading slash, e.g., '/avatars/uuid.ext'
-      const key = url.pathname.substring(1);
+      const key = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
 
-      if (!key) return;
+      // Strict validation: must start with the allowed prefix, cannot traverse paths,
+      // and must match this bucket's domain.
+      if (!key || !key.startsWith(allowedPrefix) || key.includes('..')) {
+        this.logger.warn(`Rejected S3 delete for disallowed key: ${key}`);
+        return;
+      }
+
+      if (!url.hostname.startsWith(`${this.bucketName}.s3.`)) {
+        this.logger.warn(`Rejected S3 delete for foreign host: ${url.hostname}`);
+        return;
+      }
 
       const command = new DeleteObjectCommand({
         Bucket: this.bucketName,
@@ -93,8 +100,6 @@ export class S3Service {
       this.logger.log(`Successfully deleted old file from S3: ${key}`);
     } catch (error) {
       this.logger.error(`Error deleting file from S3: ${fileUrl}`, error);
-      // We usually don't throw an error here to prevent failing the avatar update
-      // if the old file is already deleted or missing.
     }
   }
 }

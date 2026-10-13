@@ -1,40 +1,27 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Search, Loader2, ArrowRight, BookOpen, Clock, Activity, Code2 } from "lucide-react";
+import { Plus, Search, Loader2, ArrowRight, Code2 } from "lucide-react";
 import Link from "next/link";
-import { adminProblemsAPI } from "@/config/api";
+import { loadPracticeProblems, filterPracticeProblems, type PracticeRow } from "@/lib/practice-problems";
 
 export default function AdminProblemsPage() {
-  const [problems, setProblems] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [result, setResult] = useState<{ problems: PracticeRow[]; errors: string[] } | null>(null);
+  const [retry, setRetry] = useState(0);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    fetchProblems();
-  }, []);
+    const controller = new AbortController();
+    loadPracticeProblems(controller.signal).then(data => {
+      if (!controller.signal.aborted) setResult(data);
+    }).catch(() => {
+      if (!controller.signal.aborted) setResult({ problems: [], errors: ["Practice problems could not be loaded."] });
+    });
+    return () => controller.abort();
+  }, [retry]);
 
-  const fetchProblems = async () => {
-    try {
-      setIsLoading(true);
-      const res = await adminProblemsAPI.getAll();
-      if (Array.isArray(res.data?.problems)) {
-        setProblems(res.data.problems);
-      } else if (res.data?.data) {
-        setProblems(res.data.data);
-      } else if (Array.isArray(res.data)) {
-        setProblems(res.data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch problems", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const filteredProblems = problems.filter((p) =>
-    p.title?.toLowerCase().includes(search.toLowerCase())
-  );
+  const isLoading = result === null;
+  const filteredProblems = filterPracticeProblems(result?.problems || [], search);
 
   return (
     <div className="p-6 md:p-8 max-w-[1400px] mx-auto space-y-8">
@@ -42,7 +29,7 @@ export default function AdminProblemsPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Practice Problems</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage public coding challenges and DSA problems shown in the student workspace.
+            Manage practice problems and coding questions from the Question Bank.
           </p>
         </div>
         <Link
@@ -60,7 +47,7 @@ export default function AdminProblemsPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search problems by title..."
+              placeholder="Search problems by title, slug, or topic..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2 text-sm bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
@@ -71,6 +58,12 @@ export default function AdminProblemsPage() {
           </div>
         </div>
 
+        {result && result.errors.length > 0 && (
+          <div role="alert" className="p-4 border-b border-border bg-amber-500/10 text-sm text-amber-700 dark:text-amber-400 flex flex-wrap items-center justify-between gap-3">
+            <p>{result.errors.join(" ")} Displayed results may be incomplete.</p>
+            <button type="button" onClick={() => { setResult(null); setRetry(value => value + 1); }} className="font-semibold underline">Try again</button>
+          </div>
+        )}
         {isLoading ? (
           <div className="p-16 flex flex-col items-center justify-center text-muted-foreground">
             <Loader2 className="w-8 h-8 animate-spin mb-4 text-primary" />
@@ -83,7 +76,11 @@ export default function AdminProblemsPage() {
             </div>
             <h3 className="text-lg font-bold text-foreground mb-1">No problems found</h3>
             <p className="text-sm text-muted-foreground max-w-sm">
-              We couldn't find any practice problems. Click the button above to create one.
+              {search.trim()
+                ? "No practice problems or coding questions match your search."
+                : result?.errors.length
+                ? "Retry loading the lists to see available problems."
+                : "No practice problems or eligible coding questions are available yet."}
             </p>
           </div>
         ) : (
@@ -100,12 +97,13 @@ export default function AdminProblemsPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {filteredProblems.map((problem) => {
-                  const probId = problem._id || problem.id;
+                  const probId = problem.id;
                   return (
-                    <tr key={probId} className="hover:bg-muted/20 transition-colors group">
+                    <tr key={`${problem.source}:${probId}`} className="hover:bg-muted/20 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="font-semibold text-foreground">{problem.title}</div>
-                        <div className="text-[11px] text-muted-foreground font-mono mt-0.5">/{problem.slug}</div>
+                        {problem.slug && <div className="text-[11px] text-muted-foreground font-mono mt-0.5">/{problem.slug}</div>}
+                        {problem.source === "question-bank" && <span className="inline-flex mt-1 px-2 py-0.5 bg-muted text-muted-foreground text-[10px] rounded-md border border-border">Question Bank</span>}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <span
@@ -136,7 +134,7 @@ export default function AdminProblemsPage() {
                       </td>
                       <td className="px-6 py-4 text-center">
                         <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                          problem.visibility === 'Published' || problem.visibility === 'Public' 
+                          ["published", "public"].includes(problem.visibility.toLowerCase())
                             ? 'bg-blue-500/10 text-blue-500' 
                             : 'bg-muted text-muted-foreground'
                         }`}>
@@ -145,7 +143,9 @@ export default function AdminProblemsPage() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <Link
-                          href={`/admin/problems/${probId}/edit`}
+                          href={problem.editHref}
+                          aria-label={`Edit ${problem.title}`}
+                          title={problem.source === "question-bank" ? "Edit in Question Bank" : "Edit practice problem"}
                           className="inline-flex items-center justify-center p-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                         >
                           <ArrowRight className="w-4 h-4" />

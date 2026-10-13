@@ -16,10 +16,11 @@ import { AzureExecutionService } from './azure-execution.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { SubmissionRateLimitGuard } from '../common/guards/submission-rate-limit.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Execution')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, SubmissionRateLimitGuard)
 @Controller('execution')
 export class ExecutionController {
   constructor(

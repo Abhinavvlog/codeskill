@@ -9,11 +9,20 @@ import { authAPI } from "@/config/api";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AdminLogo } from "@/components/admin/AdminLogo";
 import { Spinner } from "@/components/ui/spinner";
+import { ChevronDown, UserCog, SlidersHorizontal, LogOut } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, loading, updateUserLocal } = useAuth();
+  const { user, loading, updateUserLocal, logout } = useAuth();
   const [isVerifying, setIsVerifying] = useState(true);
 
   const isLoginPage = pathname === "/admin/login";
@@ -86,6 +95,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     };
   }, [user, loading, router, isLoginPage, updateUserLocal]);
 
+  const handleLogout = () => {
+    logout();
+    router.push("/admin/login");
+  };
+
+  const userName = user?.name?.trim() || "Administrator";
+  const userInitial = userName.charAt(0).toUpperCase();
+  const userEmail = user?.email || "Email unavailable";
+  const userRole = user?.role ? (user.role === "admin" ? "Admin" : user.role) : "Admin";
+
   if (loading || isVerifying) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -103,10 +122,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <AdminSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Standardized Admin Header with CodeSkill Branding & Theme Toggle */}
-        <header className="bg-card/90 backdrop-blur-md border-b border-border h-20 flex items-center justify-between px-6 sticky top-0 z-10 shrink-0 shadow-xs">
-          <div className="flex items-center gap-4">
+        <header className="bg-card/90 backdrop-blur-md border-b border-border h-20 flex items-center justify-between gap-3 px-2 sm:px-6 sticky top-0 z-10 shrink-0 shadow-xs">
+          <div className="hidden md:flex items-center gap-4 min-w-0">
             <AdminLogo variant="icon" size="md" />
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xl md:text-2xl font-black tracking-tight text-foreground leading-none">
                   Code<span className="text-rose-600 dark:text-rose-500">Skill</span>
@@ -115,7 +134,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   Admin Console
                 </span>
               </div>
-              <p className="text-xs font-semibold text-muted-foreground tracking-wide mt-1">
+              <p className="text-xs font-semibold text-muted-foreground tracking-wide mt-1 truncate">
                 Chandigarh University <span className="hidden lg:inline">• Department of Skill Development & Lab</span>
               </p>
             </div>
@@ -124,17 +143,97 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">System Live</span>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0 ml-auto">
             <ThemeToggle />
 
-            <div className="flex items-center gap-2.5 pl-2 border-l border-border">
-              <div className="w-8 h-8 bg-amber-500/10 border border-amber-500/20 text-amber-600 rounded-md flex items-center justify-center font-bold text-xs">
-                {user?.name?.charAt(0) || "A"}
-              </div>
-              <div className="hidden sm:block">
-                <p className="text-xs font-semibold text-foreground">{user?.name || "Administrator"}</p>
-                <p className="text-[10px] text-muted-foreground font-medium">Examination Controller</p>
-              </div>
+            <div className="pl-1 sm:pl-2 border-l border-border">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label={`Account menu for ${userName}`}
+                  openOnHover
+                  delay={100}
+                  closeDelay={150}
+                  className="flex items-center gap-2 sm:gap-3 p-1.5 sm:px-2.5 rounded-xl border border-transparent hover:border-border hover:bg-muted/60 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/20 group select-none text-left"
+                >
+                  <div className="w-8 h-8 bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:text-amber-400 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 shadow-xs ring-1 ring-amber-500/10">
+                    {userInitial}
+                  </div>
+                  <div className="hidden lg:block min-w-0 max-w-60">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-semibold text-foreground leading-none truncate">
+                        {userName}
+                      </p>
+                      <span className="text-[10px] font-bold text-muted-foreground shrink-0">
+                        ({userRole})
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground font-medium mt-1">
+                      Examination Controller
+                    </p>
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-transform duration-200 group-data-[popup-open]:rotate-180 ml-0.5 shrink-0" />
+                </DropdownMenuTrigger>
+
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={8}
+                  className="w-64 max-w-[calc(100vw-1rem)] bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-xl p-1.5 z-50 text-foreground"
+                >
+                  {/* User Header Section: Show user full name, role, and email address */}
+                  <div className="px-3 py-2.5 mb-1 bg-muted/40 rounded-lg border border-border/50">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-sm shrink-0">
+                        {userInitial}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-foreground break-words">
+                          {userName}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground break-all">
+                          {userEmail}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 rounded">
+                            {userRole}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground font-medium truncate">
+                            Examination Controller
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      onClick={() => router.push("/profile")}
+                      className="cursor-pointer gap-2.5 px-3 py-2 text-xs font-medium rounded-lg hover:bg-muted focus:bg-muted text-foreground transition-colors"
+                    >
+                      <UserCog className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span>Profile Settings</span>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+                      onClick={() => router.push("/profile")}
+                      className="cursor-pointer gap-2.5 px-3 py-2 text-xs font-medium rounded-lg hover:bg-muted focus:bg-muted text-foreground transition-colors"
+                    >
+                      <SlidersHorizontal className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span>Account Preferences</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+
+                  <DropdownMenuSeparator className="my-1 bg-border/80" />
+
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={handleLogout}
+                    className="cursor-pointer gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 focus:bg-rose-500/10 focus:text-rose-600 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                    <span>Log Out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </header>

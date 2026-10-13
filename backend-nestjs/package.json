@@ -19,7 +19,8 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "admin:bootstrap": "ts-node -r tsconfig-paths/register src/create-admins.ts"
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",
@@ -104,12 +105,13 @@
     "moduleFileExtensions": [
       "js",
       "json",
-      "ts"
+      "ts",
+      "tsx"
     ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)sx?$": "ts-jest"
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"

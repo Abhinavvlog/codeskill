@@ -547,6 +547,13 @@ export class ExecutionService {
       process.env.JUDGE_SANDBOX ||
       (process.env.NODE_ENV === 'production' ? 'docker' : 'local')
     ).toLowerCase();
+
+    if (process.env.NODE_ENV === 'production' && sandbox === 'local') {
+      throw new Error(
+        'Local sandbox execution is strictly forbidden in production (AUD-005)',
+      );
+    }
+
     if (sandbox === 'local') return { cmd, args };
     if (sandbox !== 'docker') {
       throw new Error(`Unsupported JUDGE_SANDBOX value: ${sandbox}`);
@@ -570,6 +577,8 @@ export class ExecutionService {
       args: [
         'run',
         '--rm',
+        '--user',
+        '1000:1000',
         '--network',
         'none',
         '--read-only',

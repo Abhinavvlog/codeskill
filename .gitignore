@@ -28,18 +28,27 @@ Thumbs.db
 # Optional eslint cache
 .eslintcache
 
-# Environment Variables
+# Environment Variables & Secrets (AUD-004, X-03)
 .env
-.env.test
-.env.production
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-backend/.env
-frontend/.env
-frontend-v2/.env
-frontend-v2/.env.local
+.env.*
+!.env.example*
+**/.env
+**/.env.*
+!**/.env.example*
+*.pem
+*.key
+*.cert
+*.crt
+
+# Terraform state, cache, and secrets
+.terraform/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+terraform.tfstate*
+.terraform.lock.hcl
 
 # Next.js / Frontend builds
 .next/

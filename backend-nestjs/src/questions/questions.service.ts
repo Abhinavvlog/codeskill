@@ -12,6 +12,7 @@ import { CreateQuestionDto } from './dto/create-question.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
 import { QueryQuestionsDto } from './dto/query-questions.dto';
 import { CreateQuestionBankDto } from './dto/create-question-bank.dto';
+import { CacheService } from '../redis/cache.service';
 import * as XLSX from 'xlsx';
 
 @Injectable()
@@ -23,7 +24,14 @@ export class QuestionsService {
     private readonly questionBankRepository: Repository<QuestionBankEntity>,
     @InjectRepository(AuditLogEntity)
     private readonly auditLogRepository: Repository<AuditLogEntity>,
+    private readonly cacheService: CacheService,
   ) {}
+
+  private normalizeCategories(categories: string[]): string[] {
+    return [
+      ...new Set(categories.map((category) => category.trim()).filter(Boolean)),
+    ];
+  }
 
   async findAll(query: QueryQuestionsDto) {
     const page = Math.max(1, Number(query.page) || 1);
@@ -41,7 +49,27 @@ export class QuestionsService {
     }
 
     if (query.topic && query.topic.trim()) {
-      qb.andWhere('question.topic = :topic', { topic: query.topic.trim() });
+      qb.andWhere(
+        "(question.topic = :topic OR (question.metadata->'categories') ? :topic)",
+        { topic: query.topic.trim() },
+      );
+    }
+
+    const questionType = query.questionType;
+    if (questionType && questionType !== 'all') {
+      const groups = [
+        ['MCQ', 'single_choice'],
+        ['MULTIPLE_CHOICE', 'multiple_choice'],
+        ['TRUE_FALSE', 'true_false'],
+        ['CODE_OUTPUT', 'code_output'],
+        ['DSA', 'coding', 'algorithmic'],
+      ];
+      const types = groups.find((group) => group.includes(questionType)) || [
+        questionType,
+      ];
+      qb.andWhere('question.questionType IN (:...questionTypes)', {
+        questionTypes: types,
+      });
     }
 
     if (query.subtopic && query.subtopic.trim()) {
@@ -164,7 +192,13 @@ export class QuestionsService {
     ip = '',
     userAgent = '',
   ) {
-    const { options: rawOptions, status: _ignoredStatus, ...rest } = dto as any;
+    const {
+      options: rawOptions,
+      categories,
+      visibility,
+      contestOnly,
+      ...rest
+    } = dto;
     const type = String(dto.questionType || 'single_choice');
     const isChoice = [
       'single_choice',
@@ -288,19 +322,39 @@ export class QuestionsService {
       throw new BadRequestException('Marks must be greater than 0');
     }
 
+    const status = dto.status ?? 'approved';
+    const metadata = {
+      ...(categories !== undefined
+        ? { categories: this.normalizeCategories(categories) }
+        : {}),
+      ...(visibility !== undefined ? { visibility } : {}),
+      ...(contestOnly !== undefined ? { contestOnly } : {}),
+    };
+    const isApproved = ['approved', 'active', 'published'].includes(status);
     const newQuestion = this.questionRepository.create({
       ...rest,
+      ...(categories !== undefined
+        ? {
+            topic: this.normalizeCategories(categories)[0] || 'General',
+          }
+        : {}),
+      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       question: dto.question || dto.title,
       options,
       correctAnswer,
       correctAnswers,
       created_by_id: adminUser.id || adminUser._id,
-      status: 'approved',
-      approved_by_id: adminUser.id || adminUser._id,
-      approvedAt: new Date(),
+      status,
+      ...(isApproved
+        ? {
+            approved_by_id: adminUser.id || adminUser._id,
+            approvedAt: new Date(),
+          }
+        : {}),
     } as any) as unknown as QuestionEntity;
 
     const question = await this.questionRepository.save(newQuestion);
+    await this.cacheService.invalidatePrefix('problems:');
 
     const auditLog = this.auditLogRepository.create({
       actorId: adminUser.id || adminUser._id,
@@ -477,8 +531,38 @@ export class QuestionsService {
       dto.question = dto.title;
     }
 
-    Object.assign(question, dto);
+    const { categories, visibility, contestOnly, ...updates } = dto;
+    const existingCategories: unknown = question.metadata?.categories;
+    if (categories !== undefined) {
+      const topics = this.normalizeCategories(categories);
+      question.metadata = { ...question.metadata, categories: topics };
+      updates.topic = topics[0] || 'General';
+    } else if (
+      updates.topic !== undefined &&
+      Array.isArray(existingCategories)
+    ) {
+      question.metadata = {
+        ...question.metadata,
+        categories: this.normalizeCategories([
+          updates.topic,
+          ...existingCategories
+            .slice(1)
+            .filter(
+              (category: unknown): category is string =>
+                typeof category === 'string',
+            ),
+        ]),
+      };
+    }
+    if (visibility !== undefined) {
+      question.metadata = { ...question.metadata, visibility };
+    }
+    if (contestOnly !== undefined) {
+      question.metadata = { ...question.metadata, contestOnly };
+    }
+    Object.assign(question, updates);
     await this.questionRepository.save(question);
+    await this.cacheService.invalidatePrefix('problems:');
 
     const auditLog = this.auditLogRepository.create({
       actorId: adminUser.id || adminUser._id,
@@ -501,6 +585,7 @@ export class QuestionsService {
 
     question.status = 'archived';
     await this.questionRepository.save(question);
+    await this.cacheService.invalidatePrefix('problems:');
 
     const auditLog = this.auditLogRepository.create({
       actorId: adminUser.id || adminUser._id,
@@ -538,6 +623,7 @@ export class QuestionsService {
     }
 
     await this.questionRepository.save(question);
+    await this.cacheService.invalidatePrefix('problems:');
 
     const auditLog = this.auditLogRepository.create({
       actorId: adminUser.id || adminUser._id,
@@ -557,7 +643,7 @@ export class QuestionsService {
   async getTopicsDistribution() {
     const query = await this.questionRepository.query(`
       SELECT 
-        COALESCE(topic, 'Unassigned') as topic,
+        category as topic,
         COUNT(*) as total,
         SUM(CASE WHEN difficulty = 'easy' THEN 1 ELSE 0 END) as easy,
         SUM(CASE WHEN difficulty = 'medium' THEN 1 ELSE 0 END) as medium,
@@ -565,8 +651,17 @@ export class QuestionsService {
         SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
       FROM questions
+      CROSS JOIN LATERAL (
+        SELECT DISTINCT value AS category
+        FROM jsonb_array_elements_text(
+          CASE WHEN jsonb_typeof(metadata->'categories') = 'array' AND metadata->'categories' <> '[]'::jsonb
+            THEN metadata->'categories'
+            ELSE jsonb_build_array(COALESCE(topic, 'Unassigned'))
+          END
+        )
+      ) AS categories
       WHERE status != 'archived'
-      GROUP BY topic
+      GROUP BY category
       ORDER BY total DESC
     `);
 
@@ -1207,6 +1302,7 @@ export class QuestionsService {
       }
     }
 
+    await this.cacheService.invalidatePrefix('problems:');
     const totalProcessed = docs.length;
 
     const auditLog = this.auditLogRepository.create({

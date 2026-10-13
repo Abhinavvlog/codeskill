@@ -36,13 +36,17 @@ export class EmailService {
       };
       this.logger.log('[SES] Using explicit credentials from configuration');
       this.isMock = false;
-    } else if (isProd && !forceMock) {
+    } else if (isProd) {
+      if (forceMock) {
+        // The mock transport logs one-time codes; it must never run in production.
+        throw new Error('USE_MOCK_SES is not permitted when NODE_ENV=production');
+      }
       this.logger.log(
         '[SES] Using EC2 IAM Role / Default AWS Provider Chain in production',
       );
       this.isMock = false;
     } else {
-      this.logger.warn('[SES] Using Mock SES service');
+      this.logger.warn('[SES] Using Mock SES service (non-production only)');
       this.isMock = true;
     }
 
