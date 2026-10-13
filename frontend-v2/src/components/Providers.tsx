@@ -3,14 +3,13 @@
 import { AuthProvider } from "@/context/AuthContext";
 import { ReactNode } from "react";
 import { GoogleOAuthProvider } from "@react-oauth/google";
+import { googleClientId, googleOAuthEnabled } from "@/config/auth";
 
 import { ThemeProvider } from "@/context/ThemeContext";
 
 import { Toaster } from "react-hot-toast";
 
 export function Providers({ children }: { children: ReactNode }) {
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-
   const content = (
     <AuthProvider>
       {children}
@@ -20,8 +19,8 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <ThemeProvider defaultTheme="light">
-      {clientId ? (
-        <GoogleOAuthProvider clientId={clientId}>
+      {googleOAuthEnabled ? (
+        <GoogleOAuthProvider clientId={googleClientId}>
           {content}
         </GoogleOAuthProvider>
       ) : (
