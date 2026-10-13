@@ -1,6 +1,6 @@
 import { PistonUnavailableError } from './piston/piston.types';
 import { Submission } from '../database/entities/submission.entity';
-jest.mock('@nestjs/typeorm', () => ({ InjectRepository: () => () => {} }));
+jest.mock('@nestjs/typeorm', () => ({ InjectRepository: () => () => {}, InjectDataSource: () => () => {} }));
 
 import { Logger, NotFoundException } from '@nestjs/common';
 import { JudgeProcessor, SubmissionStatus } from './judge.processor';
@@ -56,12 +56,10 @@ describe('Practice judging', () => {
     save: jest.fn(),
   };
   const submissionRepo = {
-    manager: {
-      transaction: jest.fn(
-        async (callback: (value: typeof manager) => unknown) =>
-          callback(manager),
-      ),
-    },
+    transaction: jest.fn(
+      async (_userId: string, callback: (value: typeof manager) => unknown) =>
+        callback(manager),
+    ),
     findOne: jest.fn(),
     save: jest
       .fn()
@@ -69,6 +67,12 @@ describe('Practice judging', () => {
   };
   const problems = { getExecutionProblem: jest.fn() };
   const userRepo = {
+    manager: {
+      transaction: jest.fn(
+        async (callback: (value: typeof manager) => unknown) =>
+          callback(manager),
+      ),
+    },
     findOne: jest.fn().mockResolvedValue(null),
     save: jest.fn(),
   };
@@ -138,7 +142,7 @@ describe('Practice judging', () => {
       status: 'accepted',
     });
     expect(execution.executeCode).not.toHaveBeenCalled();
-    expect(submissionRepo.manager.transaction).not.toHaveBeenCalled();
+    expect(submissionRepo.transaction).not.toHaveBeenCalled();
   });
 
   it('retries a transient Piston outage without persisting a final verdict', async () => {

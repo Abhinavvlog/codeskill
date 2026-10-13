@@ -38,7 +38,9 @@ export async function partitionTableIfRegular(
   await queryRunner.query(`DROP TABLE IF EXISTS "${legacyTable}" CASCADE`);
 
   // Rename current regular table
-  await queryRunner.query(`ALTER TABLE "${tableName}" RENAME TO "${legacyTable}"`);
+  await queryRunner.query(
+    `ALTER TABLE "${tableName}" RENAME TO "${legacyTable}"`,
+  );
 
   // Create partitioned table
   await queryRunner.query(createPartitionedTableSql);
@@ -51,9 +53,9 @@ export async function partitionTableIfRegular(
 
   // Find common column names between legacyTable and new tableName
   const commonCols: { column_name: string }[] = await queryRunner.query(
-    `SELECT a.column_name 
+    `SELECT a.column_name
      FROM information_schema.columns a
-     INNER JOIN information_schema.columns b 
+     INNER JOIN information_schema.columns b
        ON a.column_name = b.column_name AND b.table_name = $1
      WHERE a.table_name = $2
      ORDER BY a.ordinal_position`,
@@ -73,15 +75,17 @@ export async function partitionTableIfRegular(
 
 export async function applyDeclarativePartitioningMigration(
   queryRunner: MigrationQueryRunner,
+  options: { skipSubmissions?: boolean } = {},
 ): Promise<void> {
   // Ensure uuid extension
   await queryRunner.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
 
   // 1. Submissions partitioned by RANGE ("createdAt")
-  await partitionTableIfRegular(
-    queryRunner,
-    'submissions',
-    `CREATE TABLE "submissions" (
+  if (!options.skipSubmissions)
+    await partitionTableIfRegular(
+      queryRunner,
+      'submissions',
+      `CREATE TABLE "submissions" (
       "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
       "userId" uuid NOT NULL,
       "problemId" uuid NOT NULL,
@@ -109,7 +113,7 @@ export async function applyDeclarativePartitioningMigration(
       CONSTRAINT "PK_submissions" PRIMARY KEY ("id", "createdAt"),
       CONSTRAINT "CHK_submissions_problem_source" CHECK ("problemSource" IN ('problem', 'metadata', 'question'))
     ) PARTITION BY RANGE ("createdAt")`,
-    `CREATE TABLE IF NOT EXISTS "submissions_y2026m10" PARTITION OF "submissions"
+      `CREATE TABLE IF NOT EXISTS "submissions_y2026m10" PARTITION OF "submissions"
       FOR VALUES FROM ('2026-10-01 00:00:00') TO ('2026-11-01 00:00:00');
      CREATE TABLE IF NOT EXISTS "submissions_y2026m11" PARTITION OF "submissions"
       FOR VALUES FROM ('2026-11-01 00:00:00') TO ('2026-12-01 00:00:00');
@@ -118,12 +122,12 @@ export async function applyDeclarativePartitioningMigration(
      CREATE TABLE IF NOT EXISTS "submissions_y2027" PARTITION OF "submissions"
       FOR VALUES FROM ('2027-01-01 00:00:00') TO ('2028-01-01 00:00:00');
      CREATE TABLE IF NOT EXISTS "submissions_default" PARTITION OF "submissions" DEFAULT;`,
-    `CREATE INDEX IF NOT EXISTS "IDX_submissions_id" ON "submissions" ("id");
+      `CREATE INDEX IF NOT EXISTS "IDX_submissions_id" ON "submissions" ("id");
      CREATE INDEX IF NOT EXISTS "IDX_submissions_user_problem_status" ON "submissions" ("userId", "problemId", "status");
      CREATE INDEX IF NOT EXISTS "IDX_submissions_createdAt" ON "submissions" ("createdAt");
      CREATE INDEX IF NOT EXISTS "IDX_submissions_status" ON "submissions" ("status");
      CREATE INDEX IF NOT EXISTS "IDX_submissions_language" ON "submissions" ("language");`,
-  );
+    );
 
   // 2. Exam Security Events partitioned by RANGE ("createdAt")
   await partitionTableIfRegular(

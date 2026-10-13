@@ -5,8 +5,9 @@ import { Job } from 'bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExecutionService } from './execution.service';
-import { Submission } from '../database/entities/submission.entity';
+import { SubmissionStore } from '../database/sharding/submission-store';
 import { ProblemsService } from '../problems/problems.service';
+import { Submission } from '../database/entities/submission.entity';
 import { User } from '../database/entities/user.entity';
 import { AppGateway } from '../gateway/app.gateway';
 import { RedisService } from '../redis/redis.service';
@@ -36,8 +37,7 @@ export class JudgeProcessor extends WorkerHost {
 
   constructor(
     private readonly executionService: ExecutionService,
-    @InjectRepository(Submission)
-    private readonly submissionRepo: Repository<Submission>,
+    private readonly submissionRepo: SubmissionStore,
     private readonly problemsService: ProblemsService,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
@@ -103,7 +103,7 @@ export class JudgeProcessor extends WorkerHost {
       try {
         // 1. Mark as running in DB
         const submission = await this.submissionRepo.findOne({
-          where: [{ id: submissionId }, { mongoId: submissionId }],
+          where: this.submissionLookup(submissionId, job.data.userId),
         });
 
         if (!submission) throw new Error('Submission not found');
@@ -112,7 +112,8 @@ export class JudgeProcessor extends WorkerHost {
         const { problemId, code, language } = submission;
         userId = submission.userId;
 
-        const claimed = await this.submissionRepo.manager.transaction(
+        const claimed = await this.submissionRepo.transaction(
+          submission.userId,
           async (manager) => {
             const current = await manager.findOne(Submission, {
               where: { id: submission.id },
@@ -268,7 +269,8 @@ export class JudgeProcessor extends WorkerHost {
           );
           // Commit verdict and counters under a row lock. Concurrent/stalled replays
           // may execute twice, but only one verdict changes scoring/counters.
-          const committed = await this.submissionRepo.manager.transaction(
+          const committed = await this.submissionRepo.transaction(
+            submission.userId,
             async (manager) => {
               const locked = await manager.findOne(Submission, {
                 where: { id: submission.id },
@@ -281,24 +283,26 @@ export class JudgeProcessor extends WorkerHost {
               )
                 return false;
               await manager.save(Submission, submission);
-              if (status === SubmissionStatus.ACCEPTED && userId) {
-                const user = await manager.findOne(User, {
-                  where: { id: userId },
-                  lock: { mode: 'pessimistic_write' },
-                });
-                if (user) {
-                  user.stats = {
-                    ...(user.stats || {}),
-                    acceptedSubmissions:
-                      (user.stats?.acceptedSubmissions || 0) + 1,
-                  };
-                  await manager.save(User, user);
-                }
-              }
               return true;
             },
           );
           if (!committed) return { status: 'already_processed' };
+          if (status === SubmissionStatus.ACCEPTED && userId) {
+            await this.userRepo.manager.transaction(async (manager) => {
+              const user = await manager.findOne(User, {
+                where: { id: userId },
+                lock: { mode: 'pessimistic_write' },
+              });
+              if (user) {
+                user.stats = {
+                  ...(user.stats || {}),
+                  acceptedSubmissions:
+                    (user.stats?.acceptedSubmissions || 0) + 1,
+                };
+                await manager.save(User, user);
+              }
+            });
+          }
           finalizedHere = true;
         }
 
@@ -348,7 +352,7 @@ export class JudgeProcessor extends WorkerHost {
           err instanceof PistonUnavailableError &&
           job.attemptsMade + 1 < (job.opts?.attempts || 1);
         const sub = await this.submissionRepo.findOne({
-          where: [{ id: submissionId }, { mongoId: submissionId }],
+          where: this.submissionLookup(submissionId, userId || job.data.userId),
         });
         if (sub?.completedAt || sub?.status === 'cancelled')
           return { status: sub.status };
@@ -388,6 +392,18 @@ export class JudgeProcessor extends WorkerHost {
         }
       }
     }
+  }
+
+  private submissionLookup(id: string, userId?: string) {
+    const scope = this.submissionRepo.isSharded && userId ? { userId } : {};
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      id,
+    )
+      ? [
+          { id, ...scope },
+          { mongoId: id, ...scope },
+        ]
+      : [{ mongoId: id, ...scope }];
   }
 
   private overallStatus(
