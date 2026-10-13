@@ -6,6 +6,9 @@ import { databaseConfig } from '../config';
 import { applyPracticeSubmissionSourceMigration } from './migrations/practice-submission-source';
 import { applyAuthTokensSchemaMigration } from './migrations/auth-tokens-schema';
 import { applyDeclarativePartitioningMigration } from './migrations/declarative-partitioning';
+import { readShardingState } from './sharding/sharding-state';
+import { parseSubmissionShardingConfig } from './sharding/sharding.config';
+import { validateShardingState } from './sharding/sharding-state';
 
 export function practiceSubmissionMigrationOptions(): DataSourceOptions {
   const postgres = databaseConfig().postgres;
@@ -40,9 +43,15 @@ export async function runPracticeSubmissionSourceMigration(): Promise<void> {
       await queryRunner.connect();
       await queryRunner.startTransaction();
       try {
-        await applyPracticeSubmissionSourceMigration(queryRunner);
+        const sharding = await readShardingState(queryRunner);
+        if (sharding)
+          validateShardingState(parseSubmissionShardingConfig(), sharding);
+        if (!sharding)
+          await applyPracticeSubmissionSourceMigration(queryRunner);
         await applyAuthTokensSchemaMigration(queryRunner);
-        await applyDeclarativePartitioningMigration(queryRunner);
+        await applyDeclarativePartitioningMigration(queryRunner, {
+          skipSubmissions: !!sharding,
+        });
         await queryRunner.commitTransaction();
       } catch (error) {
         await queryRunner.rollbackTransaction();

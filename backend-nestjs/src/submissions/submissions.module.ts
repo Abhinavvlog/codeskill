@@ -1,4 +1,5 @@
 import { ExecutionModule } from '../execution/execution.module';
+import { SubmissionShardingModule } from '../database/sharding/sharding.module';
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -12,6 +13,7 @@ import { ProblemsModule } from '../problems/problems.module';
 
 @Module({
   imports: [
+    SubmissionShardingModule,
     TypeOrmModule.forFeature([Submission, User]),
     BullModule.registerQueue({
       name: 'submissions',

@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Submission } from '../database/entities/submission.entity';
+import { SubmissionStore } from '../database/sharding/submission-store';
 import { User } from '../database/entities/user.entity';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -43,8 +43,7 @@ export class SubmissionsService {
   private readonly logger = new Logger(SubmissionsService.name);
 
   constructor(
-    @InjectRepository(Submission)
-    private readonly submissionRepo: Repository<Submission>,
+    private readonly submissionRepo: SubmissionStore,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     @InjectQueue('submissions') private submissionQueue: Queue,
@@ -214,7 +213,10 @@ export class SubmissionsService {
     isAdmin = false,
   ) {
     const submission = await this.submissionRepo.findOne({
-      where: [{ id: submissionId }, { mongoId: submissionId }],
+      where: this.submissionLookup(
+        submissionId,
+        this.submissionRepo.isSharded && !isAdmin ? userId : undefined,
+      ),
       relations: { user: true },
     });
     if (!submission) {
@@ -265,7 +267,10 @@ export class SubmissionsService {
     isAdmin = false,
   ) {
     const submission = await this.submissionRepo.findOne({
-      where: [{ id: submissionId }, { mongoId: submissionId }],
+      where: this.submissionLookup(
+        submissionId,
+        this.submissionRepo.isSharded && !isAdmin ? userId : undefined,
+      ),
     });
     if (!submission) {
       throw new NotFoundException('Submission not found');
@@ -311,6 +316,18 @@ export class SubmissionsService {
     });
 
     return { success: true, message: 'Submission cancelled successfully' };
+  }
+
+  private submissionLookup(id: string, userId?: string) {
+    const scope = userId ? { userId } : {};
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      id,
+    )
+      ? [
+          { id, ...scope },
+          { mongoId: id, ...scope },
+        ]
+      : [{ mongoId: id, ...scope }];
   }
 
   async getSubmissionsByProblem(userId: string, problemId: string) {

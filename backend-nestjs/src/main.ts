@@ -11,6 +11,7 @@ import { RedisIoAdapter } from './gateway/redis-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.enableShutdownHooks();
 
   // Global prefix
   app.setGlobalPrefix('api');

@@ -1,6 +1,6 @@
 import { PistonUnavailableError } from './piston/piston.types';
 import { Submission } from '../database/entities/submission.entity';
-jest.mock('@nestjs/typeorm', () => ({ InjectRepository: () => () => {} }));
+jest.mock('@nestjs/typeorm', () => ({ InjectRepository: () => () => {}, InjectDataSource: () => () => {} }));
 
 import { Logger, NotFoundException } from '@nestjs/common';
 import { JudgeProcessor, SubmissionStatus } from './judge.processor';

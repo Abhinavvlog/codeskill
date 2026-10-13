@@ -1,3 +1,4 @@
+import { SubmissionShardingModule } from '../database/sharding/sharding.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminDashboardController } from './controllers/dashboard.controller';
@@ -24,6 +25,7 @@ import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
+    SubmissionShardingModule,
     AuthModule,
     TypeOrmModule.forFeature([
       User,
