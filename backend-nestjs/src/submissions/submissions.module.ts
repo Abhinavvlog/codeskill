@@ -1,3 +1,4 @@
+import { ExecutionModule } from '../execution/execution.module';
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -18,6 +19,7 @@ import { ProblemsModule } from '../problems/problems.module';
     GatewayModule,
     RedisModule,
     ProblemsModule,
+    ExecutionModule,
   ],
   controllers: [SubmissionsController],
   providers: [SubmissionsService],

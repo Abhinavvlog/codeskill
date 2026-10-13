@@ -1,3 +1,4 @@
+import { PistonUnavailableError } from '../execution/piston/piston.types';
 jest.mock('@nestjs/typeorm', () => ({ InjectRepository: () => () => {} }));
 
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
@@ -56,6 +57,43 @@ describe('Assessment Integrity & Server-Side Scoring (AUD-002, NEW-001, NEW-002,
     );
   });
 
+  const codingAttempt = () => {
+    const now = Date.now();
+    mockAssessmentRepo.findOne.mockResolvedValue({ ...mockAssessment, endTime: new Date(now + 1000) });
+    mockAttemptRepo.findOne.mockResolvedValue({ id: 'attempt-1', assessmentId, studentId: studentUser.id, status: 'in_progress', startedAt: new Date(now - 1000) });
+    mockAttemptRepo.find.mockResolvedValue([]);
+    mockQuestionRepo.find.mockResolvedValue([{ id: 'q-coding-1', questionType: 'coding', marks: 5, supportedLanguages: ['python'], testCases: [{ id: 'tc-1', input: '', expectedOutput: '2' }] }]);
+    return { responses: [{ questionId: 'q-coding-1', code: 'print(2)', language: 'python' }] };
+  };
+
+  it('does not finalize a zero-score result during Piston infrastructure failure', async () => {
+    const dto = codingAttempt();
+    mockExecutionService.runCode.mockRejectedValueOnce(new PistonUnavailableError());
+    await expect(service.submitAttempt(assessmentId, dto as never, studentUser)).rejects.toBeInstanceOf(PistonUnavailableError);
+    expect(mockAttemptRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('preserves acceptance time when execution finishes after the deadline', async () => {
+    jest.useFakeTimers();
+    try {
+      const acceptedAt = new Date();
+      const dto = codingAttempt();
+      mockExecutionService.runCode.mockImplementationOnce(async () => {
+        jest.setSystemTime(new Date(acceptedAt.getTime() + 2000));
+        return [{ passed: true, status: 'accepted' }];
+      });
+      await service.submitAttempt(assessmentId, dto as never, studentUser);
+      expect(mockAttemptRepo.save.mock.calls[0][0].submittedAt).toEqual(acceptedAt);
+      expect(mockAttemptRepo.save.mock.calls[0][0].score).toBe(5);
+    } finally { jest.useRealTimers(); }
+  });
+
+  it('rejects disallowed assessment languages before execution', async () => {
+    const dto = codingAttempt(); dto.responses[0].language = 'java';
+    await expect(service.submitAttempt(assessmentId, dto as never, studentUser)).rejects.toBeInstanceOf(BadRequestException);
+    expect(mockExecutionService.runCode).not.toHaveBeenCalled();
+  });
+
   it('rejects submission if attempt does not belong to the calling candidate (NEW-001)', async () => {
     mockAssessmentRepo.findOne.mockResolvedValue(mockAssessment);
     mockAttemptRepo.findOne.mockResolvedValue({
@@ -72,10 +110,10 @@ describe('Assessment Integrity & Server-Side Scoring (AUD-002, NEW-001, NEW-002,
     expect(mockAttemptRepo.save).not.toHaveBeenCalled();
   });
 
-  it('rejects submission if assessment end time has passed beyond grace period (NEW-002)', async () => {
+  it('rejects submission if assessment end time has passed (NEW-002)', async () => {
     mockAssessmentRepo.findOne.mockResolvedValue({
       ...mockAssessment,
-      endTime: new Date(Date.now() - 600000), // Expired 10 minutes ago (> 5 min grace)
+      endTime: new Date(Date.now() - 1000), // No new submissions after the deadline
     });
     mockAttemptRepo.findOne.mockResolvedValue({
       id: 'attempt-1',
@@ -201,6 +239,6 @@ describe('Assessment Integrity & Server-Side Scoring (AUD-002, NEW-001, NEW-002,
 
     // Total score is strictly calculated from server evaluations (0 + 2.5 = 2.5)
     expect(savedAttempt.score).toBe(2.5);
-    expect(response.result.score).toBe(2.5);
+    expect((response as any).result.score).toBe(2.5);
   });
 });

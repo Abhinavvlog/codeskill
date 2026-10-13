@@ -1,5 +1,7 @@
 "use client";
 
+import { useExecutionRuntimes } from "@/hooks/useExecutionRuntimes";
+
 import { useState, useEffect, useRef } from "react";
 import {
   Play,
@@ -186,6 +188,7 @@ export default function DSAAssessmentEditor({
   isLastQuestion = false,
 }: DSAAssessmentEditorProps) {
   const initialLang = savedResponse?.language || question.language || "python";
+  const executionRuntimes = useExecutionRuntimes();
   const [language, setLanguage] = useState(initialLang);
 
   // Initialize code from saved response, or question starterCode, or language template
@@ -315,6 +318,7 @@ export default function DSAAssessmentEditor({
 
   // Run Test (Single or Sample cases)
   const handleRunTest = async () => {
+    if (isRunning || isSubmitting) return;
     setIsRunning(true);
     setBottomTab("output");
     setRunResult(null);
@@ -379,6 +383,7 @@ export default function DSAAssessmentEditor({
 
   // Submit and Save Solution
   const handleSubmitSolution = async () => {
+    if (isRunning || isSubmitting) return;
     setIsSubmitting(true);
     setBottomTab("output");
     try {
@@ -564,7 +569,7 @@ export default function DSAAssessmentEditor({
 
               {showLangDropdown && (
                 <div className="absolute left-0 top-full mt-1 w-44 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 py-1 overflow-hidden">
-                  {LANGUAGES.map((l) => (
+                  {LANGUAGES.filter(option => !executionRuntimes.length || executionRuntimes.some(runtime => runtime.language === option.value && runtime.enabled)).map((l) => (
                     <button
                       key={l.value}
                       type="button"

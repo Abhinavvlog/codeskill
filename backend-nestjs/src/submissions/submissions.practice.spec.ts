@@ -35,6 +35,7 @@ describe('Practice submission identity', () => {
     find: jest.fn(() => Promise.resolve([stored])),
   };
   const userRepo = {
+    manager: { transaction: jest.fn(async (callback: (manager: unknown) => unknown) => callback({ findOne: async () => null, save: jest.fn() })) },
     findOne: jest.fn().mockResolvedValue(null),
     save: jest.fn(),
   };

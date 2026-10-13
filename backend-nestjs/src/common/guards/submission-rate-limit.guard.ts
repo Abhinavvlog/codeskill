@@ -29,6 +29,7 @@ export class SubmissionRateLimitGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
+    if (request.method === 'GET') return true;
     const userId = request.user?._id || request.user?.id || 'anonymous';
     const clientIp =
       request.headers['x-forwarded-for']?.split(',')[0] ||
@@ -37,7 +38,12 @@ export class SubmissionRateLimitGuard implements CanActivate {
 
     const client = this.redisService.getClient();
     if (!client) {
-      return true; // Gracefully permit if Redis rate limiting is offline
+      if (process.env.CODE_EXECUTION_PROVIDER === 'piston')
+        throw new HttpException(
+          'Execution rate limiting is temporarily unavailable',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      return true; // Legacy compatibility
     }
 
     const now = Date.now();
@@ -66,14 +72,24 @@ export class SubmissionRateLimitGuard implements CanActivate {
       }
 
       // 2. Sliding window rate limiting
-      const multi = client.multi();
-      multi.zremrangebyscore(rateLimitKey, 0, now - windowSec * 1000);
-      multi.zcard(rateLimitKey);
-      multi.zadd(rateLimitKey, now, `${now}-${Math.random()}`);
-      multi.expire(rateLimitKey, windowSec);
-
-      const results = await multi.exec();
-      const currentCount = (results?.[1]?.[1] as number) || 0;
+      const currentCount = Number(
+        await client.eval(
+          `
+        redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[1] - ARGV[2])
+        local count = redis.call('ZCARD', KEYS[1])
+        if count >= tonumber(ARGV[4]) then return count end
+        redis.call('ZADD', KEYS[1], ARGV[1], ARGV[3])
+        redis.call('EXPIRE', KEYS[1], 60)
+        return count
+      `,
+          1,
+          rateLimitKey,
+          now,
+          windowSec * 1000,
+          `${now}-${Math.random()}`,
+          this.maxPerMinute,
+        ),
+      );
 
       if (currentCount >= this.maxPerMinute) {
         throw new HttpException(
@@ -93,7 +109,12 @@ export class SubmissionRateLimitGuard implements CanActivate {
         throw err;
       }
       this.logger.warn(`Rate limiter check error: ${err.message}`);
-      return true; // Fallback permit on non-HTTP error
+      if (process.env.CODE_EXECUTION_PROVIDER === 'piston')
+        throw new HttpException(
+          'Execution rate limiting is temporarily unavailable',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      return true; // Legacy compatibility
     }
   }
 }

@@ -1,3 +1,4 @@
+import { awaitExecution } from "@/lib/await-execution";
 import axios from "axios";
 import { getBrowserApiBaseURL } from "@/lib/api-base-url";
 import { normalizeProblemQuery } from "@/lib/public-problems";
@@ -164,13 +165,13 @@ export const submissionAPI = {
 };
 
 export const runAPI = {
+  runtimes: () => api.get<Array<{ language: string; version?: string; enabled: boolean }>>("/execution/runtimes"),
   run: (data: { code: string; language: string; testCases: any[]; config?: any }) =>
     api.post("/execution/run", data, { timeout: 60000 }),
   getJob: (jobId: string) => api.get(`/execution/jobs/${jobId}`, { timeout: 60000 }),
 };
 
-// Azure-backed high-scale execution (Microsoft Azure Container Instances)
-// Falls back to local executor if AZURE_COMPILER_URL is not set on the backend
+// Compatibility endpoint: backend selects the configured provider and queue.
 export const azureRunAPI = {
   run: (data: {
     code: string;
@@ -179,7 +180,10 @@ export const azureRunAPI = {
     testCases?: Array<{ id: string; input: string; expected: string }>;
     timeoutMs?: number;
     memoryMB?: number;
-  }) => api.post("/execution/azure-run", data, { timeout: 90000 }),
+  }) => awaitExecution(
+    () => api.post("/execution/azure-run", data, { timeout: 90000 }),
+    jobId => runAPI.getJob(jobId),
+  ),
 };
 
 // ── Discussions ──
