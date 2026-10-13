@@ -128,9 +128,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xl md:text-2xl font-black tracking-tight text-foreground leading-none">
-                  Code<span className="text-rose-600 dark:text-rose-500">Skill</span>
+                  Code<span className="text-sky-600 dark:text-sky-400">Skill</span>
                 </span>
-                <span className="px-2 py-0.5 text-xs font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/25 rounded-md leading-none shadow-xs">
+                <span className="px-2 py-0.5 text-xs font-bold uppercase tracking-wider bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/25 rounded-md leading-none shadow-xs">
                   Admin Console
                 </span>
               </div>
@@ -193,7 +193,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                           {userEmail}
                         </p>
                         <div className="flex items-center gap-1.5 mt-1">
-                          <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 rounded">
+                          <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/20 rounded">
                             {userRole}
                           </span>
                           <span className="text-[10px] text-muted-foreground font-medium truncate">
