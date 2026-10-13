@@ -95,9 +95,9 @@ export function AdminSidebar() {
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-lg font-black tracking-tight text-foreground leading-none">
-                Code<span className="text-rose-600 dark:text-rose-500">Skill</span>
+                Code<span className="text-sky-600 dark:text-sky-400">Skill</span>
               </span>
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/25 px-1.5 py-0.5 rounded leading-none shadow-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/25 px-1.5 py-0.5 rounded leading-none shadow-xs">
                 Admin
               </span>
             </div>
