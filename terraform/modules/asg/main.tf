@@ -15,6 +15,15 @@ exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
 
 echo "Starting CodeSkill EC2 initialization for Amazon Linux..."
 
+# Set up 2GB swap space to prevent memory exhaustion (OOM) on t3.micro
+if [ ! -f /swapfile ]; then
+  dd if=/dev/zero of=/swapfile bs=128M count=16
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo "/swapfile swap swap defaults 0 0" >> /etc/fstab
+fi
+
 # Update and install dependencies
 # Add retry logic because dnf can sometimes be locked during boot
 dnf update -y

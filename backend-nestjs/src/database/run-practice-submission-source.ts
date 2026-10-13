@@ -2,6 +2,7 @@ import { DataSource, DataSourceOptions } from 'typeorm';
 import { databaseConfig } from '../config';
 import { applyPracticeSubmissionSourceMigration } from './migrations/practice-submission-source';
 import { applyAuthTokensSchemaMigration } from './migrations/auth-tokens-schema';
+import { applyDeclarativePartitioningMigration } from './migrations/declarative-partitioning';
 
 export function practiceSubmissionMigrationOptions(): DataSourceOptions {
   const postgres = databaseConfig().postgres;
@@ -38,6 +39,7 @@ export async function runPracticeSubmissionSourceMigration(): Promise<void> {
       try {
         await applyPracticeSubmissionSourceMigration(queryRunner);
         await applyAuthTokensSchemaMigration(queryRunner);
+        await applyDeclarativePartitioningMigration(queryRunner);
         await queryRunner.commitTransaction();
       } catch (error) {
         await queryRunner.rollbackTransaction();
