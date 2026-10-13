@@ -87,6 +87,18 @@ export class Assessment {
   @Column('text', { array: true, default: '{}' })
   targetSections: string[];
 
+  @Column('int', { array: true, default: '{}' })
+  targetSemesters: number[];
+
+  @Column('int', { array: true, default: '{}' })
+  targetYears: number[];
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  subjectId?: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  subjectCode?: string;
+
   @Column({ type: 'timestamp', nullable: true })
   startTime?: Date;
 

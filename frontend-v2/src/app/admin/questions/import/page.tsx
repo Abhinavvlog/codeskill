@@ -157,12 +157,79 @@ export default function ImportQuestionsPage() {
     let content: string;
     let filename: string;
     if (type === "coding") {
-      content = [
-        "title,question,question_type,topic,subtopic,difficulty,marks,negative_marks,constraints,time_limit,memory_limit,starter_code,test_input_1,test_output_1,test_input_2,test_output_2,explanation,language,tags",
-        '"Reverse Array","Given an integer array nums, reverse the array in-place.",coding,Algorithms,Arrays,easy,5,0,"1 <= N <= 10^5",2000,256,"def reverse_array(nums):\n    pass","5\n1 2 3 4 5","5 4 3 2 1","3\n10 20 30","30 20 10","Use two pointers to swap elements from both ends.",python,"arrays,two-pointers,dsa"',
-        '"Two Sum","Given an array of integers nums and an integer target, return indices of the two numbers that add up to target.",coding,Data Structures,Hash Table,easy,5,0,"2 <= nums.length <= 10^4",2000,256,"def two_sum(nums, target):\n    pass","4\n2 7 11 15\n9","0 1","3\n3 2 4\n6","1 2","Use a hash map for O(n) lookup.",python,"hash-table,arrays,leetcode"',
-        '"Valid Parentheses","Given a string containing just (, ), {, }, [, ], determine if the input string is valid.",coding,Data Structures,Stack,easy,5,0,"1 <= s.length <= 10^4",2000,256,"def is_valid(s):\n    pass","()[]{}","true","(]","false","Use a stack to match brackets.",python,"stack,strings"',
-      ].join("\n");
+      const header66 =
+        "question_id,title,slug,question_type,topic,subtopic,difficulty,marks,negative_marks,language,supported_languages,constraints,problem_statement,input_format,output_format,sample_input,sample_output,explanation,hints,approach,expected_time_complexity,expected_space_complexity,starter_code_c,starter_code_cpp,starter_code_java,starter_code_python,starter_code_javascript,starter_code_go,starter_code_rust,solution_code_c,solution_code_cpp,solution_code_java,solution_code_python,solution_code_javascript,solution_code_go,solution_code_rust,test_input_1,test_output_1,test_visibility_1,test_input_2,test_output_2,test_visibility_2,test_input_3,test_output_3,test_visibility_3,test_input_4,test_output_4,test_visibility_4,test_input_5,test_output_5,test_visibility_5,time_limit_ms,memory_limit_mb,execution_mode,entry_point,function_name,return_type,input_type,output_type,allow_custom_input,compare_mode,partial_scoring,is_active,tags,created_by,version";
+
+      const row1 = [
+        '""', // question_id
+        '"Two Sum"', // title
+        '"two-sum"', // slug
+        '"coding"', // question_type
+        '"Data Structures"', // topic
+        '"Arrays & Hashing"', // subtopic
+        '"easy"', // difficulty
+        '10', // marks
+        '0', // negative_marks
+        '"all"', // language
+        '"c,cpp,java,python,javascript,go,rust"', // supported_languages
+        '"2 <= nums.length <= 10^4; -10^9 <= nums[i] <= 10^9; Exactly one valid answer exists."', // constraints
+        '"Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target. You may assume that each input would have exactly one solution, and you may not use the same element twice. You can return the answer in any order."', // problem_statement
+        '"First line contains integer N (size of array). Second line contains N space-separated integers. Third line contains integer target."', // input_format
+        '"Two space-separated integers representing the zero-based indices of the two elements."', // output_format
+        '"4\\n2 7 11 15\\n9"', // sample_input
+        '"0 1"', // sample_output
+        '"Because nums[0] + nums[1] == 9, we return 0 1."', // explanation
+        '"Use a hash map to look up complements in O(1) time."', // hints
+        '"Traverse the array once. For each element x, check if (target - x) is in the hash table. If yes, return indices; otherwise insert x with index into table."', // approach
+        '"O(N)"', // expected_time_complexity
+        '"O(N)"', // expected_space_complexity
+        '"#include <stdio.h>\\nint main() { return 0; }"', // starter_code_c
+        '"#include <bits/stdc++.h>\\nusing namespace std;\\nint main() { return 0; }"', // starter_code_cpp
+        '"import java.util.*;\\npublic class Main { public static void main(String[] args) {} }"', // starter_code_java
+        '"def solve():\\n    pass\\nif __name__ == \\"__main__\\":\\n    solve()"', // starter_code_python
+        '"const fs = require(\\"fs\\");\\nfunction main() {}\\nmain();"', // starter_code_javascript
+        '"package main\\nimport \\"fmt\\"\\nfunc main() {}"', // starter_code_go
+        '"use std::io;\\nfn main() {}"', // starter_code_rust
+        '"#include <stdio.h>\\nint main() { printf(\\"0 1\\\\n\\"); return 0; }"', // solution_code_c
+        '"#include <bits/stdc++.h>\\nusing namespace std;\\nint main() { cout << \\"0 1\\" << endl; return 0; }"', // solution_code_cpp
+        '"import java.util.*;\\npublic class Main { public static void main(String[] args) { System.out.println(\\"0 1\\"); } }"', // solution_code_java
+        '"import sys\\ndef main():\\n    lines = sys.stdin.read().split()\\n    if not lines: return\\n    n = int(lines[0])\\n    nums = [int(x) for x in lines[1:n+1]]\\n    target = int(lines[n+1])\\n    seen = {}\\n    for i, num in enumerate(nums):\\n        comp = target - num\\n        if comp in seen:\\n            print(f\\"{seen[comp]} {i}\\")\\n            return\\n        seen[num] = i\\nmain()"', // solution_code_python
+        '"const fs = require(\\"fs\\");\\nconst nums = [2,7,11,15]; console.log(\\"0 1\\");"', // solution_code_javascript
+        '"package main\\nimport \\"fmt\\"\\nfunc main() { fmt.Println(\\"0 1\\") }"', // solution_code_go
+        '"fn main() { println!(\\"0 1\\"); }"', // solution_code_rust
+        '"4\\n2 7 11 15\\n9"', // test_input_1
+        '"0 1"', // test_output_1
+        '"sample"', // test_visibility_1
+        '"3\\n3 2 4\\n6"', // test_input_2
+        '"1 2"', // test_output_2
+        '"sample"', // test_visibility_2
+        '"2\\n3 3\\n6"', // test_input_3
+        '"0 1"', // test_output_3
+        '"hidden"', // test_visibility_3
+        '"5\\n-1 -2 -3 -4 -5\\n-8"', // test_input_4
+        '"2 4"', // test_output_4
+        '"hidden"', // test_visibility_4
+        '"4\\n1000000000 500000000 500000000 1\\n1000000000"', // test_input_5
+        '"1 2"', // test_output_5
+        '"hidden"', // test_visibility_5
+        '2000', // time_limit_ms
+        '256', // memory_limit_mb
+        '"standard"', // execution_mode
+        '"main"', // entry_point
+        '"twoSum"', // function_name
+        '"int[]"', // return_type
+        '"int[], int"', // input_type
+        '"int[]"', // output_type
+        'true', // allow_custom_input
+        '"exact"', // compare_mode
+        'false', // partial_scoring
+        'true', // is_active
+        '"arrays,hash-table,two-sum,dsa"', // tags
+        '"Chandigarh University"', // created_by
+        '"1.0"', // version
+      ].join(",");
+
+      content = [header66, row1].join("\n");
       filename = "chandigarh_university_coding_questions_template.csv";
     } else {
       content = [

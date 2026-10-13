@@ -32,3 +32,5 @@ export async function applyAuthTokensSchemaMigration(
     'ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "tokenVersion" integer NOT NULL DEFAULT 0',
   );
 }
+
+export const ensureAuthTokensSchema = applyAuthTokensSchemaMigration;

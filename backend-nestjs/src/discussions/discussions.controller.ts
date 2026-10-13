@@ -14,6 +14,55 @@ import { DiscussionsService } from './discussions.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
+import {
+  IsString,
+  IsNotEmpty,
+  MaxLength,
+  IsOptional,
+  IsArray,
+} from 'class-validator';
+
+export class CreateThreadDto {
+  @IsString()
+  @IsNotEmpty()
+  problemId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(300)
+  title: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(10000)
+  body?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(10000)
+  content?: string;
+
+  @IsOptional()
+  @IsArray()
+  tags?: string[];
+}
+
+export class CreateReplyDto {
+  @IsString()
+  @IsOptional()
+  @MaxLength(5000)
+  body?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(5000)
+  content?: string;
+
+  @IsString()
+  @IsOptional()
+  parentReply?: string;
+}
+
 @ApiTags('Discussions')
 @Controller('discussions')
 export class DiscussionsController {
@@ -45,8 +94,16 @@ export class DiscussionsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new discussion thread' })
-  async createThread(@CurrentUser('id') userId: string, @Body() data: any) {
-    return this.discussionsService.createThread(userId, data);
+  async createThread(
+    @CurrentUser('id') userId: string,
+    @Body() data: CreateThreadDto,
+  ) {
+    return this.discussionsService.createThread(userId, {
+      problemId: data.problemId,
+      title: data.title,
+      body: data.body || data.content || '',
+      tags: data.tags,
+    });
   }
 
   // ── Authenticated: Delete thread ───────────────────────────────────────
@@ -82,9 +139,12 @@ export class DiscussionsController {
   async createReply(
     @CurrentUser('id') userId: string,
     @Param('threadId') threadId: string,
-    @Body() data: any,
+    @Body() data: CreateReplyDto,
   ) {
-    return this.discussionsService.createReply(userId, threadId, data);
+    return this.discussionsService.createReply(userId, threadId, {
+      body: data.body || data.content || '',
+      parentReply: data.parentReply,
+    });
   }
 
   // ── Authenticated: Delete reply ────────────────────────────────────────

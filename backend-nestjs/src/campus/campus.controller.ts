@@ -40,12 +40,23 @@ export class CampusController {
     return this.campusService.getMyUniversities(req.user.id);
   }
 
-  @Get(':id')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get university profile for portal' })
-  async getUniversityById(@Param('id') id: string) {
-    return this.campusService.getUniversityById(id);
+  @Get('profile/:username')
+  @ApiOperation({ summary: 'Get university profile by username' })
+  async getUniversityProfileByUsername(@Param('username') username: string) {
+    return this.campusService.getUniversityProfile(username);
+  }
+
+  @Get(':identifier')
+  @ApiOperation({ summary: 'Get university profile by id or username' })
+  async getUniversityById(
+    @Param('identifier') identifier: string,
+    @Request() req: any,
+  ) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
+    if (!isUuid) {
+      return this.campusService.getUniversityProfile(identifier);
+    }
+    return this.campusService.getUniversityById(identifier, req?.user);
   }
 
   @Put(':id')
@@ -58,11 +69,5 @@ export class CampusController {
     @Request() req: any,
   ) {
     return this.campusService.updateUniversity(id, body, req.user);
-  }
-
-  @Get(':username')
-  @ApiOperation({ summary: 'Get university profile' })
-  async getUniversityProfile(@Param('username') username: string) {
-    return this.campusService.getUniversityProfile(username);
   }
 }

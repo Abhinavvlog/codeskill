@@ -4,8 +4,19 @@ import Link from "next/link";
 import { ArrowRight, ShieldCheck, Sparkles, Terminal } from "lucide-react";
 import { HeroCodePreview } from "@/components/landing/HeroCodePreview";
 import { motion } from "framer-motion";
+import { useAuth } from "@/context/AuthContext";
 
 export function Hero() {
+  const { user } = useAuth();
+  const dashboardHref = user?.isAdmin
+    ? "/admin/dashboard"
+    : user?.isAssessmentStudent
+    ? "/assessments"
+    : "/dashboard";
+  const dashboardLabel = user?.isAdmin
+    ? "Admin Console"
+    : "Go to Dashboard";
+
   return (
     <section className="relative w-full pt-28 sm:pt-32 md:pt-36 pb-16 sm:pb-20 px-4 sm:px-6 md:px-8 border-b border-border/70 overflow-hidden bg-background text-foreground">
       {/* Background architectural fine grid & subtle warmth */}
@@ -61,10 +72,10 @@ export function Hero() {
               className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 w-full sm:w-auto pt-1"
             >
               <Link
-                href="/login"
+                href={user ? dashboardHref : "/login"}
                 className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-lg bg-foreground hover:bg-[#262626] text-background dark:bg-white dark:hover:bg-neutral-100 dark:text-black font-bold text-sm transition-all shadow-xs hover:shadow-md hover:scale-[1.02] group active:scale-[0.98]"
               >
-                <span>Log In</span>
+                <span>{user ? dashboardLabel : "Log In"}</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
               </Link>
 

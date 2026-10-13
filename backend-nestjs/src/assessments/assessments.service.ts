@@ -6,6 +6,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Optional,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Not } from 'typeorm';
@@ -20,6 +21,7 @@ import { ExecutionService } from '../execution/execution.service';
 
 @Injectable()
 export class AssessmentsService {
+  private readonly logger = new Logger(AssessmentsService.name);
   constructor(
     @InjectRepository(Assessment)
     private readonly assessmentRepo: Repository<Assessment>,
@@ -116,6 +118,8 @@ export class AssessmentsService {
       targetBatches: dto.targetBatches || [],
       targetDepartments: dto.targetDepartments || [],
       targetCourses: dto.targetCourses || [],
+      targetSemesters: dto.targetSemesters || [],
+      targetYears: dto.targetYears || [],
       startTime: dto.startTime ? new Date(dto.startTime) : undefined,
       endTime: dto.endTime ? new Date(dto.endTime) : undefined,
       shuffleQuestions: dto.shuffleQuestions ?? true,
@@ -536,6 +540,14 @@ export class AssessmentsService {
     const studentProfile = studentUser.studentProfile || {};
     const batch = studentProfile.batch || '';
     const dept = studentProfile.department || '';
+    const semester =
+      studentProfile.semester !== undefined && !isNaN(Number(studentProfile.semester))
+        ? Number(studentProfile.semester)
+        : undefined;
+    const year =
+      studentProfile.year !== undefined && !isNaN(Number(studentProfile.year))
+        ? Number(studentProfile.year)
+        : undefined;
 
     const assessments = await this.assessmentRepo
       .createQueryBuilder('a')
@@ -545,7 +557,7 @@ export class AssessmentsService {
       .orderBy('a.createdAt', 'DESC')
       .getMany();
 
-    // Cohort filtering: targetBatches empty or includes student's batch, same for department
+    // Cohort filtering: targetBatches, targetDepartments, targetSemesters, targetYears
     const filteredAssessments = assessments.filter((a) => {
       const matchBatch =
         !a.targetBatches ||
@@ -555,7 +567,15 @@ export class AssessmentsService {
         !a.targetDepartments ||
         a.targetDepartments.length === 0 ||
         (dept && a.targetDepartments.includes(dept));
-      return matchBatch && matchDept;
+      const matchSem =
+        !a.targetSemesters ||
+        a.targetSemesters.length === 0 ||
+        (semester !== undefined && a.targetSemesters.map(Number).includes(semester));
+      const matchYear =
+        !a.targetYears ||
+        a.targetYears.length === 0 ||
+        (year !== undefined && a.targetYears.map(Number).includes(year));
+      return matchBatch && matchDept && matchSem && matchYear;
     });
 
     const studentId = String(studentUser.id || studentUser._id);
@@ -868,14 +888,19 @@ export class AssessmentsService {
               ? q.constraints
               : (q.metadata as any)?.constraints || [],
           timeLimit: q.timeLimit || (q.metadata as any)?.timeLimit || 2000,
-          memoryLimit: q.memoryLimit || (q.metadata as any)?.memoryLimit || 256,
-          testCases: (((q.metadata as any)?.testCases || []) as any[])
-            .filter((tc: any) => !tc.isHidden)
+          testCases: (
+            (Array.isArray(q.testCases) && q.testCases.length > 0
+              ? q.testCases
+              : Array.isArray((q.metadata as any)?.testCases)
+                ? (q.metadata as any).testCases
+                : []) as any[]
+          )
+            .filter((tc: any) => !tc.isHidden && !tc.is_hidden)
             .map((tc: any, tcIdx: number) => ({
               id: tc.id || String(tcIdx + 1),
-              input: tc.input || '',
-              expected: tc.output || tc.expected || '',
-              output: tc.output || tc.expected || '',
+              input: tc.input || tc.input_data || '',
+              expected: tc.output || tc.expectedOutput || tc.expected || '',
+              output: tc.output || tc.expectedOutput || tc.expected || '',
               explanation: tc.explanation || '',
             })),
         };
@@ -1067,15 +1092,19 @@ export class AssessmentsService {
             throw new BadRequestException('This language is not enabled for the assessment question');
           }
           // Server-side code execution against verified test cases (AUD-002)
-          const testCases = Array.isArray(q.testCases) ? q.testCases : [];
+          const testCases = Array.isArray(q.testCases) && q.testCases.length > 0
+            ? q.testCases
+            : Array.isArray((q.metadata as any)?.testCases)
+              ? (q.metadata as any).testCases
+              : [];
           totalTestCases = testCases.length;
 
           if (this.executionService && totalTestCases > 0) {
             try {
-              const tcInputs = testCases.map((tc, idx) => ({
+              const tcInputs = (testCases as any[]).map((tc: any, idx: number) => ({
                 id: tc.id || idx + 1,
-                input: tc.input || '',
-                expected: tc.expectedOutput || '',
+                input: tc.input || tc.input_data || '',
+                expected: tc.expectedOutput || tc.output || tc.expected || '',
               }));
               const results = await this.executionService.runCode(
                 r.code!,
@@ -1086,6 +1115,7 @@ export class AssessmentsService {
               testCasesPassed = results.filter((res) => res.passed).length;
             } catch (execErr: any) {
               if (execErr instanceof PistonUnavailableError) throw execErr;
+              this.logger.error(`Assessment coding evaluation error: ${execErr.message}`);
               testCasesPassed = 0;
             }
           } else {
@@ -1099,6 +1129,27 @@ export class AssessmentsService {
           if (isCorrect) totalCorrect++;
           else if (ratio > 0) totalCorrect++;
           else totalWrong++;
+        } else {
+          totalSkipped++;
+        }
+      } else if (qType === 'code_output') {
+        // Output prediction questions (AUD-002)
+        const studentAns = String(
+          r.answerText ?? (r.code !== undefined && r.code.trim().length > 0 ? r.code : (r.selectedAnswer !== undefined && r.selectedAnswer >= 0 ? r.selectedAnswer : ''))
+        ).trim();
+        isAttempted = studentAns.length > 0;
+        if (isAttempted) {
+          totalAttempted++;
+          const expected = String(q.expectedOutput || q.correctAnswer || '').trim();
+          isCorrect = studentAns.toLowerCase() === expected.toLowerCase();
+          if (isCorrect) {
+            marksAwarded = q.marks || 1;
+            totalCorrect++;
+          } else {
+            const negMarks = assessment.negativeMarking ? (q.negativeMarks || 0) : 0;
+            marksAwarded = negMarks > 0 ? -negMarks : 0;
+            totalWrong++;
+          }
         } else {
           totalSkipped++;
         }

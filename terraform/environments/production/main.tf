@@ -97,7 +97,7 @@ module "asg" {
   private_app_subnet_ids    = module.vpc.private_app_subnet_ids
   target_group_arn          = module.alb.target_group_arn
   app_security_group_id     = module.ec2.app_security_group_id
-  instance_type             = "t3.micro"
+  instance_type             = "t3.large"
   min_size                  = 1
   max_size                  = 2
   desired_capacity          = 1

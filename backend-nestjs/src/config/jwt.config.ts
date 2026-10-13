@@ -25,6 +25,7 @@ const FORBIDDEN_SECRETS = new Set(
     'jwt_secret',
     'your_jwt_secret',
     'your-secret-key',
+    'codeskill_prod_secure_jwt_token_2026_super_secret_enterprise_key',
   ].map((s) => s.toLowerCase()),
 );
 

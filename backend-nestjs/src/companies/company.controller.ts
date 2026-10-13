@@ -33,13 +33,25 @@ export class CompanyController {
     return this.companiesService.getMyCompanies(req.user.id);
   }
 
+  @Get()
+  @ApiOperation({ summary: 'Get all verified companies' })
+  async getCompanies() {
+    return this.companiesService.getCompanies();
+  }
+
+  @Get('profile/:username')
+  @ApiOperation({ summary: 'Get company public profile' })
+  async getCompanyProfile(@Param('username') username: string) {
+    return this.companiesService.getCompanyProfile(username);
+  }
+
   // Note: Express backend didn't technically require a guard specifically for this but it had authorizeCompany
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get company profile for admin' })
-  async getCompanyById(@Param('id') id: string) {
-    return this.companiesService.getCompanyById(id);
+  async getCompanyById(@Param('id') id: string, @Request() req: any) {
+    return this.companiesService.getCompanyById(id, req?.user);
   }
 
   @Put(':id')

@@ -49,22 +49,28 @@ async function main() {
     const cliPassword = process.argv[3];
     const cliName = process.argv[4];
 
+    const defaultPassword = process.env.ADMIN_PASSWORD;
+    if (!defaultPassword && !cliPassword) {
+      console.error('ERROR: ADMIN_PASSWORD environment variable or CLI argument is required. Hardcoded default passwords have been removed for security (AUD-006).');
+      process.exit(1);
+    }
+
     const adminList = [
       {
         email: 'admin@codeskill.com',
-        password: process.env.ADMIN_PASSWORD || 'admin123',
+        password: defaultPassword || cliPassword,
         name: 'System Administrator',
         role: 'super_admin'
       },
       {
         email: 'admin@cuchd.in',
-        password: process.env.ADMIN_CUCHD_PASSWORD || 'Admin@CodeSkill2026',
+        password: process.env.ADMIN_CUCHD_PASSWORD || defaultPassword || cliPassword,
         name: 'Chandigarh University Administrator',
         role: 'super_admin'
       },
       {
         email: 'md.shadab.azam.ansari@gmail.com',
-        password: process.env.ADMIN_PASSWORD || 'admin123',
+        password: defaultPassword || cliPassword,
         name: 'Md Shadab Azam Ansari',
         role: 'super_admin'
       }

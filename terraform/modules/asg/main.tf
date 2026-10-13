@@ -28,8 +28,18 @@ fi
 # Add retry logic because dnf can sometimes be locked during boot
 dnf update -y
 for i in {1..5}; do
-  dnf install -y unzip aws-cli nginx --allowerasing && break || sleep 10
+  dnf install -y unzip aws-cli nginx docker --allowerasing && break || sleep 10
 done
+
+# Enable and start Docker daemon for judge execution sandbox
+systemctl enable --now docker
+usermod -aG docker ec2-user
+
+# Pre-pull required sandbox images
+docker pull python:3.11-alpine || true
+docker pull node:20-alpine || true
+docker pull gcc:13 || true
+docker pull eclipse-temurin:17-jdk || true
 
 # Install Node.js (v20)
 curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
@@ -45,6 +55,9 @@ APP_DIR="/opt/codeskill"
 mkdir -p $APP_DIR
 cd $APP_DIR
 
+# Download RDS global CA bundle for TLS verification (AUD-016)
+curl -fsSL https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o /opt/codeskill/rds-global-bundle.pem || true
+
 # Download latest build from S3 using the IAM Instance Profile attached to this EC2 instance
 aws s3 cp s3://${var.name_prefix}-files-reports/releases/latest.zip .
 
@@ -52,7 +65,7 @@ aws s3 cp s3://${var.name_prefix}-files-reports/releases/latest.zip .
 unzip latest.zip
 chown -R ec2-user:ec2-user $APP_DIR
 
-# Create Nginx reverse proxy configuration
+# Create Nginx reverse proxy configuration with forwarded headers (AUD-005)
 cat << 'NGINX' > /etc/nginx/conf.d/codeskill.conf
 server {
     listen 80;
@@ -64,6 +77,9 @@ server {
         proxy_set_header Upgrade $${http_upgrade};
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host $${host};
+        proxy_set_header X-Forwarded-For $${proxy_add_x_forwarded_for};
+        proxy_set_header X-Real-IP $${remote_addr};
+        proxy_set_header X-Forwarded-Proto $${scheme};
         proxy_cache_bypass $${http_upgrade};
     }
 
@@ -74,6 +90,9 @@ server {
         proxy_set_header Upgrade $${http_upgrade};
         proxy_set_header Connection "Upgrade";
         proxy_set_header Host $${host};
+        proxy_set_header X-Forwarded-For $${proxy_add_x_forwarded_for};
+        proxy_set_header X-Real-IP $${remote_addr};
+        proxy_set_header X-Forwarded-Proto $${scheme};
     }
     
     location /socket.io/ {
@@ -82,6 +101,9 @@ server {
         proxy_set_header Upgrade $${http_upgrade};
         proxy_set_header Connection "Upgrade";
         proxy_set_header Host $${host};
+        proxy_set_header X-Forwarded-For $${proxy_add_x_forwarded_for};
+        proxy_set_header X-Real-IP $${remote_addr};
+        proxy_set_header X-Forwarded-Proto $${scheme};
     }
 }
 NGINX
@@ -97,7 +119,7 @@ cd /opt/codeskill
 npm install --prefix backend-nestjs --omit=dev --legacy-peer-deps
 npm install --prefix frontend-v2 --omit=dev --legacy-peer-deps
 
-# Fetch backend .env securely from AWS SSM Parameter Store (AUD-004, X-03)
+# Fetch backend .env securely from AWS SSM Parameter Store (AUD-004, AUD-006)
 if aws ssm get-parameter --name "/${var.name_prefix}/production/backend_env" --with-decryption --query "Parameter.Value" --output text > /opt/codeskill/backend-nestjs/.env 2>/dev/null; then
   echo "Loaded backend configuration securely from AWS SSM Parameter Store."
 else
@@ -109,13 +131,13 @@ DATABASE_USER="${var.db_username}"
 DATABASE_PASSWORD="${var.db_password}"
 DATABASE_NAME="${var.db_name}"
 DATABASE_SSL=true
-JWT_SECRET="codeskill_prod_secure_jwt_token_2026_super_secret_enterprise_key"
+DATABASE_SSL_CA="/opt/codeskill/rds-global-bundle.pem"
 JWT_EXPIRE=24h
 JWT_ACCESS_TTL=24h
 JWT_REFRESH_TTL=7d
 REDIS_HOST="${var.redis_endpoint}"
 REDIS_PORT=6379
-REDIS_CLUSTER_MODE=true
+REDIS_CLUSTER_MODE=false
 NODE_ENV=production
 CLIENT_URL=https://codeskill.novaserve.cloud
 AWS_SES_EMAIL=noreply@codeskill.novaserve.cloud
@@ -125,9 +147,9 @@ fi
 chmod 600 /opt/codeskill/backend-nestjs/.env
 chown ec2-user:ec2-user /opt/codeskill/backend-nestjs/.env
 
-# Run database migrations (AUD-011: runtime schema sync disabled in production)
+# Run database migrations (AUD-007, AUD-011: runtime schema sync disabled in production)
 cd /opt/codeskill/backend-nestjs
-NODE_ENV=production node dist/database/run-practice-submission-source.js || true
+NODE_ENV=production node dist/database/run-practice-submission-source.js
 
 # Start API server, Judge Worker, and Next.js frontend via ecosystem configuration (AUD-009, AUD-021)
 cd /opt/codeskill

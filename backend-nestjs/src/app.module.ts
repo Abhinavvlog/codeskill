@@ -42,6 +42,7 @@ import { DiscussionsModule } from './discussions/discussions.module';
 import { StudentsModule } from './students/students.module';
 import { QuestionsModule } from './questions/questions.module';
 import { AssessmentsModule } from './assessments/assessments.module';
+import { SubjectsModule } from './subjects/subjects.module';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 
@@ -75,7 +76,9 @@ import { ExamSecurityModule } from './exam-security/exam-security.module';
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => {
-        const isCluster = process.env.NODE_ENV === 'production';
+        const isCluster =
+          process.env.REDIS_CLUSTER_MODE === 'true' ||
+          process.env.REDIS_ENABLE_CLUSTER === 'true';
         const host = configService.get<string>('redis.host') || '127.0.0.1';
         const port = Number(configService.get<number>('redis.port')) || 6379;
         const password = configService.get<string>('redis.password') || undefined;
@@ -84,7 +87,7 @@ import { ExamSecurityModule } from './exam-security/exam-security.module';
           return {
             prefix: '{bull}',
             connection: new Cluster([{ host, port }], {
-              redisOptions: { password },
+              redisOptions: { password, maxRetriesPerRequest: null },
             }) as any,
           };
         }
@@ -126,6 +129,7 @@ import { ExamSecurityModule } from './exam-security/exam-security.module';
     AnalyticsModule,
     ReportsModule,
     PetModule,
+    SubjectsModule,
   ],
   controllers: [AppController],
   providers: [

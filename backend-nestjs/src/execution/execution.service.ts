@@ -224,8 +224,8 @@ const LANGUAGE_CONFIGS: Record<string, LanguageConfig> = {
     extension: '.ts',
     compiled: false,
     runCommand: (srcPath) => ({
-      cmd: 'npx',
-      args: ['--yes', 'tsx', srcPath],
+      cmd: 'tsx',
+      args: [srcPath],
     }),
   },
 
@@ -233,8 +233,8 @@ const LANGUAGE_CONFIGS: Record<string, LanguageConfig> = {
     extension: '.ts',
     compiled: false,
     runCommand: (srcPath) => ({
-      cmd: 'npx',
-      args: ['--yes', 'tsx', srcPath],
+      cmd: 'tsx',
+      args: [srcPath],
     }),
   },
 };

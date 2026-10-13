@@ -28,14 +28,16 @@ sudo systemctl start redis-server
 sudo systemctl enable postgresql
 sudo systemctl start postgresql
 
-# 5. Setup Project Env Files (Placeholder)
+# 5. Setup Project Env Files (Development / Standalone Test Only - AUD-018)
 echo "[5/8] Setting up environment files..."
 if [ ! -f backend-nestjs/.env ]; then
+  RANDOM_SECRET=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | xxd -ps 2>/dev/null || echo "insecure_dev_only_change_immediately_32chars")
   echo "PORT=5001" > backend-nestjs/.env
-  echo "DATABASE_URL=postgresql://postgres:password123@localhost:5432/codeskill" >> backend-nestjs/.env
+  echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/codeskill" >> backend-nestjs/.env
   echo "REDIS_HOST=localhost" >> backend-nestjs/.env
   echo "REDIS_PORT=6379" >> backend-nestjs/.env
-  echo "JWT_SECRET=super_secret_jwt_key_here" >> backend-nestjs/.env
+  echo "JWT_SECRET=${RANDOM_SECRET}" >> backend-nestjs/.env
+  echo "JUDGE_SANDBOX=local" >> backend-nestjs/.env
   echo "# AWS_REGION=us-east-1" >> backend-nestjs/.env
   echo "# AWS_ACCESS_KEY_ID=" >> backend-nestjs/.env
   echo "# AWS_SECRET_ACCESS_KEY=" >> backend-nestjs/.env

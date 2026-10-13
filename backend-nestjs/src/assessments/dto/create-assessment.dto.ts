@@ -124,6 +124,16 @@ export class CreateAssessmentDto {
   @IsOptional()
   targetCourses?: string[];
 
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @IsOptional()
+  targetSemesters?: number[];
+
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @IsOptional()
+  targetYears?: number[];
+
   @IsOptional()
   startTime?: string;
 
