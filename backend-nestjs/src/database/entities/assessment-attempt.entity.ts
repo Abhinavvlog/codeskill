@@ -93,6 +93,9 @@ export class AssessmentAttempt {
   @Column({ type: 'float', default: 0 })
   score: number;
 
+  @Column({ type: 'float', default: 0 })
+  negativeMarksDeducted: number;
+
   @Column({ type: 'float', nullable: true, default: 0 })
   highestScore?: number;
 

@@ -128,6 +128,32 @@ export class QuestionsController {
     return { success: true, topics, data: topics };
   }
 
+  @Get('duplicates/scan')
+  @ApiOperation({
+    summary: 'Scan question repository for duplicate questions and references',
+  })
+  async scanDuplicates() {
+    return this.questionsService.scanDuplicates();
+  }
+
+  @Post('duplicates/resolve')
+  @ApiOperation({
+    summary: 'Resolve duplicate questions by archiving or merging references',
+  })
+  async resolveDuplicates(
+    @Body('primaryQuestionId') primaryQuestionId: string,
+    @Body('duplicateQuestionIds') duplicateQuestionIds: string[],
+    @Body('action') action: 'archive' | 'merge',
+    @CurrentUser() adminUser: any,
+  ) {
+    return this.questionsService.resolveDuplicates(
+      primaryQuestionId,
+      duplicateQuestionIds,
+      action,
+      adminUser,
+    );
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get single question details (Admin full view)' })
   @ApiParam({ name: 'id', description: 'Question ID' })

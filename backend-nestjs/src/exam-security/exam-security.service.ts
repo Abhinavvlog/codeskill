@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { randomBytes } from 'crypto';
 import { Assessment } from '../database/entities/assessment.entity';
 import { ExamSession } from '../database/entities/exam-session.entity';
 import { ExamSecurityEvent } from '../database/entities/exam-security-event.entity';
@@ -37,14 +38,19 @@ export class ExamSecurityService {
     const security = (assessment as any).securityPolicy;
     const isSecureMode = security && security.secureExamMode !== 'DISABLED';
 
-    const clientType = clientBody.isSEB ? 'SEB' : 'BROWSER';
+    const sebConfigHash =
+      headers?.['x-safeexambrowser-configkeyhash'] ||
+      headers?.['x-safeexambrowser-requesthash'];
+    const clientType = (clientBody.isSEB || sebConfigHash) ? 'SEB' : 'BROWSER';
     const clientVersion = clientBody.clientVersion || 'UNKNOWN';
-    const configKey = clientBody.configKey;
+    const configKey = clientBody.configKey || sebConfigHash;
 
-    if (security?.requireSEB && clientType !== 'SEB') {
-      throw new ForbiddenException(
-        'This assessment requires Safe Exam Browser. Please launch via SEB.',
-      );
+    if (security?.requireSEB) {
+      if (clientType !== 'SEB' || (!sebConfigHash && process.env.NODE_ENV === 'production')) {
+        throw new ForbiddenException(
+          'This assessment requires Safe Exam Browser with valid cryptographic headers. Please launch via SEB.',
+        );
+      }
     }
 
     if (security?.requireSEB && security.allowedSEBVersions?.length > 0) {
@@ -98,7 +104,7 @@ export class ExamSecurityService {
       expiresAt: session.expiresAt,
       status: session.status,
       secureMode: session.secureMode,
-      token: 'simulate-secure-token',
+      token: randomBytes(32).toString('hex'),
     };
   }
 

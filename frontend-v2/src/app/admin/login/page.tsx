@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -37,8 +37,14 @@ export default function AdminLoginPage() {
   const [otpStatus, setOtpStatus] = useState<OtpStatus>("idle");
   const [otpErrorMessage, setOtpErrorMessage] = useState<string>("");
   const otpRef = useRef<OtpInputHandle>(null);
-  const { adminLogin, adminLoginVerify } = useAuth();
+  const { user, adminLogin, adminLoginVerify } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    if (user && user.isAdmin) {
+      router.replace("/admin/dashboard");
+    }
+  }, [user, router]);
 
   const form = useForm<AdminLoginFormValues>({
     resolver: zodResolver(adminLoginSchema),

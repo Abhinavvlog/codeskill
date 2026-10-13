@@ -52,9 +52,14 @@ describe('Question publication persistence', () => {
         customFlag: true,
       },
     };
+    const assessmentRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+    };
     service = new QuestionsService(
       repository as never,
       {} as never,
+      assessmentRepo as never,
       audit as never,
       cache as never,
     );
