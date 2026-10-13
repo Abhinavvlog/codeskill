@@ -91,15 +91,15 @@ export function AdminSidebar() {
 
   return (
     <div className="w-64 bg-sidebar text-sidebar-foreground flex flex-col h-full border-r border-sidebar-border relative z-20">
-      <div className="h-20 flex items-center px-4 border-b border-border bg-card/60 shrink-0">
+      <div className="h-[72px] flex items-center px-4 border-b border-border bg-card/60 shrink-0">
         <Link href="/admin/dashboard" className="flex items-center gap-3 group select-none">
           <AdminLogo variant="icon" size="md" />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-lg font-black tracking-tight text-foreground leading-none">
-                Code<span className="text-sky-600 dark:text-sky-400">Skill</span>
+                Code<span className="text-emerald-700 dark:text-emerald-400">Skill</span>
               </span>
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/25 px-1.5 py-0.5 rounded leading-none shadow-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/25 px-1.5 py-0.5 rounded leading-none shadow-xs">
                 Admin
               </span>
             </div>
@@ -120,7 +120,7 @@ export function AdminSidebar() {
               <div key={item.name} className="space-y-0.5">
                 <Link
                   href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium leading-5 transition-colors ${
                     isCategoryActive 
                       ? "bg-primary/10 text-primary border border-primary/20" 
                       : "hover:bg-muted/40 hover:text-foreground border border-transparent"
@@ -172,7 +172,7 @@ export function AdminSidebar() {
           <Link
             href="/company"
             target="_blank"
-            className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium hover:bg-primary/10 hover:text-primary transition-colors group text-muted-foreground"
+            className="flex items-center justify-between px-3 py-2.5 rounded-lg text-[13px] font-medium leading-5 hover:bg-primary/10 hover:text-primary transition-colors group text-muted-foreground"
           >
             <div className="flex items-center gap-3">
               <Building2 className="w-4 h-4 group-hover:text-primary" />
@@ -183,7 +183,7 @@ export function AdminSidebar() {
           <Link
             href="/campus"
             target="_blank"
-            className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors group text-muted-foreground"
+            className="flex items-center justify-between px-3 py-2.5 rounded-lg text-[13px] font-medium leading-5 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors group text-muted-foreground"
           >
             <div className="flex items-center gap-3">
               <GraduationCap className="w-4 h-4 group-hover:text-emerald-500" />
@@ -198,7 +198,7 @@ export function AdminSidebar() {
       <div className="p-3 border-t border-border">
         <button 
           onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2 w-full rounded-lg text-xs font-semibold text-muted-foreground hover:bg-muted/40 hover:text-rose-500 transition-colors"
+          className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-[13px] font-medium text-muted-foreground hover:bg-muted/40 hover:text-rose-500 transition-colors"
         >
           <LogOut className="w-4 h-4" />
           Log out

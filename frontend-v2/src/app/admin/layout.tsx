@@ -122,15 +122,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <AdminSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Standardized Admin Header with CodeSkill Branding & Theme Toggle */}
-        <header className="bg-card/90 backdrop-blur-md border-b border-border h-20 flex items-center justify-between gap-3 px-2 sm:px-6 sticky top-0 z-10 shrink-0 shadow-xs">
+        <header className="bg-card/90 backdrop-blur-md border-b border-border h-[72px] flex items-center justify-between gap-3 px-2 sm:px-6 sticky top-0 z-10 shrink-0 shadow-xs">
           <div className="hidden md:flex items-center gap-4 min-w-0">
             <AdminLogo variant="icon" size="md" />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xl md:text-2xl font-black tracking-tight text-foreground leading-none">
-                  Code<span className="text-sky-600 dark:text-sky-400">Skill</span>
+                  Code<span className="text-emerald-700 dark:text-emerald-400">Skill</span>
                 </span>
-                <span className="px-2 py-0.5 text-xs font-bold uppercase tracking-wider bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/25 rounded-md leading-none shadow-xs">
+                <span className="px-2 py-0.5 text-xs font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/25 rounded-md leading-none shadow-xs">
                   Admin Console
                 </span>
               </div>
