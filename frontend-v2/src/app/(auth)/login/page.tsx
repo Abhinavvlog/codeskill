@@ -6,11 +6,13 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { KeyRound, AlertCircle, CheckCircle2, ShieldCheck, Terminal } from "lucide-react";
+import { KeyRound, AlertCircle, CheckCircle2 } from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
 import { LoginForm, LoginFormValues } from "@/components/auth/LoginForm";
+import { Building2, ShieldCheck, Quote } from "lucide-react";
+import { AuthUI } from "@/components/ui/auth-ui";
 
 // Modal specific schemas
 const forcePasswordSchema = z
@@ -36,7 +38,7 @@ export default function AppLoginPage() {
   const [showForcePasswordModal, setShowForcePasswordModal] = useState(false);
   const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false);
 
-  const { login, forceChangePassword } = useAuth();
+  const { login, studentLogin, forceChangePassword } = useAuth();
   const router = useRouter();
 
   const forceForm = useForm<ForcePasswordFormValues>({
@@ -77,8 +79,7 @@ export default function AppLoginPage() {
         router.push("/dashboard");
       }, 1500);
     } catch (err: unknown) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to update password. Please try again.";
+      const errorMessage = err instanceof Error ? err.message : "Failed to update password. Please try again.";
       forceForm.setError("root", {
         type: "manual",
         message: errorMessage,
@@ -89,72 +90,66 @@ export default function AppLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FFFBF5] dark:bg-[#080D1B] flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 relative selection:bg-[#7F1D1D] selection:text-white">
-      {/* Background Subtle Geometry */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_0%,rgba(250,204,21,0.08),transparent)] pointer-events-none" />
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(0,0,0,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.02)_1px,transparent_1px)] bg-[size:36px_36px] pointer-events-none" />
-
-      {/* Centered Authentication Card */}
-      <div className="relative z-10 w-full max-w-[440px] bg-white dark:bg-[#151E30] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-xl p-8 sm:p-10 space-y-6">
-        {/* Brand Header */}
-        <div className="text-center space-y-3">
-          <Link href="/" className="inline-flex items-center gap-2.5 group">
-            <div className="w-10 h-10 rounded-xl bg-[#7F1D1D] text-white flex items-center justify-center font-bold text-sm shadow-md group-hover:scale-105 transition-transform">
-              <Terminal className="w-5 h-5 text-[#FACC15]" />
+    <>
+      <AuthUI
+        signInContent={{
+          image: {
+            src: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=2070&auto=format&fit=crop",
+            alt: "Students studying"
+          },
+          quote: {
+            text: "Build your technical foundation. Master your skills securely.",
+            author: "Chandigarh University"
+          }
+        }}
+      >
+        <div className="w-full max-w-[400px] flex flex-col gap-8 mx-auto">
+          <div className="flex flex-col">
+            <div className="w-24 h-24 bg-card border border-border rounded-2xl p-2.5 flex items-center justify-center mb-6 shadow-sm">
+              <img
+                src="/cu-logo.png"
+                alt="Logo"
+                className="w-full h-full object-contain"
+              />
             </div>
-            <div className="text-left leading-none">
-              <span className="font-extrabold text-lg tracking-tight text-[#111827] dark:text-[#F8FAFC]">
-                Code<span className="text-[#7F1D1D] dark:text-[#FACC15]">Skill</span>
-              </span>
-              <span className="block text-[10px] text-[#64748B] dark:text-[#94A3B8] font-medium tracking-wide">
-                Assessment System
-              </span>
-            </div>
-          </Link>
-
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-[#111827] dark:text-[#F8FAFC]">
-              Log in to your account
-            </h1>
-            <p className="text-xs text-[#64748B] dark:text-[#94A3B8] mt-1.5">
-              Enter your student email or official UID to access practice and assessments.
+            <h2 className="text-2xl font-bold tracking-tight text-foreground mb-2">
+              Welcome back
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Please enter your credentials to access your account.
             </p>
           </div>
-        </div>
 
-        {/* Login Form Component */}
-        <LoginForm onSubmit={handleLogin} loading={loading} showSocial={true} />
+          <LoginForm onSubmit={handleLogin} loading={loading} />
 
-        {/* Security & Support Note */}
-        <div className="pt-2 border-t border-[#E5E7EB] dark:border-[#334155]/60 text-center space-y-2">
-          <div className="flex items-center justify-center gap-1.5 text-xs text-[#64748B] dark:text-[#94A3B8]">
-            <ShieldCheck className="w-3.5 h-3.5 text-[#16A34A] shrink-0" />
-            <span>Proctored and monitored examination environment</span>
-          </div>
-          <div>
-            <Link
-              href="/"
-              className="text-xs font-semibold text-[#64748B] hover:text-[#7F1D1D] dark:hover:text-[#FACC15] transition-colors"
-            >
-              &larr; Return to homepage
+          <p className="text-center text-xs text-muted-foreground">
+            By signing in, you agree to our{" "}
+            <a href="#" className="underline hover:text-foreground transition-colors">Terms of Service</a>{" "}
+            and{" "}
+            <a href="#" className="underline hover:text-foreground transition-colors">Privacy Policy</a>.
+          </p>
+
+          <div className="mt-4 pt-4 border-t border-border/50 text-center">
+            <Link href="/" className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+              &larr; Return to Home
             </Link>
           </div>
         </div>
-      </div>
+      </AuthUI>
 
       {/* Modal: First-Time Mandatory Password Change */}
       {showForcePasswordModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#151E30] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
-            <div className="flex items-center gap-3 border-b border-[#E5E7EB] dark:border-[#334155] pb-3">
-              <div className="w-10 h-10 rounded-xl bg-[#7F1D1D]/10 text-[#7F1D1D] dark:bg-[#7F1D1D]/20 dark:text-[#FACC15] flex items-center justify-center shrink-0">
+          <div className="bg-card border border-border rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+            <div className="flex items-center gap-3 border-b border-border pb-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
                 <KeyRound className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-[#111827] dark:text-[#F8FAFC]">
+                <h3 className="text-lg font-bold text-foreground">
                   Mandatory Password Setup
                 </h3>
-                <p className="text-xs text-[#64748B] dark:text-[#94A3B8]">
+                <p className="text-xs text-muted-foreground">
                   This is your first login. You must set a permanent secure password before proceeding.
                 </p>
               </div>
@@ -183,55 +178,53 @@ export default function AppLoginPage() {
                 )}
 
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[#111827] dark:text-[#F8FAFC]">
+                  <label className="text-xs font-semibold text-foreground">
                     Temporary / Initial Password
                   </label>
                   <input
                     type="password"
                     readOnly
-                    className="w-full h-10 px-3 rounded-xl border border-[#E5E7EB] dark:border-[#334155] bg-gray-100 dark:bg-[#1E293B] text-[#64748B] dark:text-[#94A3B8] text-xs font-mono cursor-not-allowed"
+                    className="w-full h-10 px-3 rounded-xl border border-border bg-muted/40 text-muted-foreground text-xs font-mono cursor-not-allowed"
                     {...forceForm.register("currentPassword")}
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[#111827] dark:text-[#F8FAFC]">
+                  <label className="text-xs font-semibold text-foreground">
                     New Permanent Password
                   </label>
                   <input
                     type="password"
                     placeholder="Min 8 chars, 1 uppercase, 1 number, 1 special char"
-                    className="w-full h-10 px-3 rounded-xl border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#151E30] text-[#111827] dark:text-[#F8FAFC] text-xs focus:ring-2 focus:ring-[#7F1D1D]/20 focus:border-[#7F1D1D] outline-none"
+                    className="w-full h-10 px-3 rounded-xl border border-border bg-muted/30 text-foreground text-xs focus:ring-2 focus:ring-primary outline-none"
                     {...forceForm.register("newPassword")}
                   />
                   {forceForm.formState.errors.newPassword && (
-                    <p className="text-xs text-rose-500">
+                    <p className="text-xs text-rose-400">
                       {forceForm.formState.errors.newPassword.message}
                     </p>
                   )}
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[#111827] dark:text-[#F8FAFC]">
+                  <label className="text-xs font-semibold text-foreground">
                     Confirm New Password
                   </label>
                   <input
                     type="password"
                     placeholder="Re-enter your new permanent password"
-                    className="w-full h-10 px-3 rounded-xl border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#151E30] text-[#111827] dark:text-[#F8FAFC] text-xs focus:ring-2 focus:ring-[#7F1D1D]/20 focus:border-[#7F1D1D] outline-none"
+                    className="w-full h-10 px-3 rounded-xl border border-border bg-muted/30 text-foreground text-xs focus:ring-2 focus:ring-primary outline-none"
                     {...forceForm.register("confirmPassword")}
                   />
                   {forceForm.formState.errors.confirmPassword && (
-                    <p className="text-xs text-rose-500">
+                    <p className="text-xs text-rose-400">
                       {forceForm.formState.errors.confirmPassword.message}
                     </p>
                   )}
                 </div>
 
-                <div className="p-3 bg-gray-50 dark:bg-[#1E293B]/50 border border-[#E5E7EB] dark:border-[#334155] rounded-xl text-[11px] text-[#64748B] dark:text-[#94A3B8] space-y-1">
-                  <span className="font-semibold text-[#111827] dark:text-[#F8FAFC] block">
-                    Password Requirements:
-                  </span>
+                <div className="p-3 bg-muted/30 border border-border/50 rounded-xl text-[11px] text-muted-foreground space-y-1">
+                  <span className="font-semibold text-foreground block">Password Requirements:</span>
                   <p>• At least 8 characters long</p>
                   <p>• At least one uppercase letter (A-Z) and one number (0-9)</p>
                   <p>• At least one special symbol (!@#$%^&*)</p>
@@ -240,11 +233,11 @@ export default function AppLoginPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full h-11 bg-[#7F1D1D] hover:bg-[#450A0A] text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-md shadow-[#7F1D1D]/20 disabled:opacity-50 cursor-pointer"
+                  className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-md shadow-primary/20 disabled:opacity-50"
                 >
                   {loading ? (
                     <>
-                      <Spinner className="w-4 h-4 animate-spin text-white" /> Saving Password...
+                      <Spinner className="w-4 h-4 animate-spin" /> Saving Password...
                     </>
                   ) : (
                     "Save Password & Enter Dashboard"
@@ -255,6 +248,6 @@ export default function AppLoginPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
