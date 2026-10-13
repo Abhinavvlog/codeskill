@@ -17,6 +17,7 @@ import {
   LogOut,
   ExternalLink,
   ClipboardList,
+  ListChecks,
   BookOpen,
   BarChart3,
   Terminal,
@@ -50,6 +51,7 @@ const navItems = [
       { name: "Topics", href: "/admin/questions/topics" },
     ],
   },
+  { name: "MCQs", href: "/admin/mcqs", icon: ListChecks },
   {
     name: "Assessments",
     href: "/admin/assessments",
