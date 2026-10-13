@@ -1,4 +1,4 @@
-jest.mock('@nestjs/typeorm', () => ({ InjectRepository: () => () => {} }));
+jest.mock('@nestjs/typeorm', () => ({ InjectRepository: () => () => {}, InjectDataSource: () => () => {} }));
 
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { SubmissionsService } from './submissions.service';

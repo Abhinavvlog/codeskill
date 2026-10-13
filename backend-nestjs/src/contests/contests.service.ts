@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -10,6 +11,7 @@ import { randomUUID } from 'crypto';
 import { ProblemsService } from '../problems/problems.service';
 import { Contest } from '../database/entities/contest.entity';
 import { ContestAttempt } from '../database/entities/contest-attempt.entity';
+import { SubmissionStore } from '../database/sharding/submission-store';
 
 @Injectable()
 export class ContestsService {
@@ -19,6 +21,7 @@ export class ContestsService {
     @InjectRepository(ContestAttempt)
     private readonly attemptRepo: Repository<ContestAttempt>,
     private readonly problemsService: ProblemsService,
+    @Optional() private readonly submissions?: SubmissionStore,
   ) {}
 
   async getContests() {
@@ -123,6 +126,9 @@ export class ContestsService {
         id,
       ),
     );
+    if (this.submissions?.isSharded) {
+      return this.shardedLeaderboard(contest, problemIds);
+    }
     const rows: Array<{ name: string; username: string; solved: string }> =
       await this.attemptRepo.query(
         `WITH accepted AS (
@@ -158,6 +164,79 @@ export class ContestsService {
       })),
     };
   }
+
+  private async shardedLeaderboard(contest: Contest, problemIds: string[]) {
+    const participants: Array<{
+      id: string;
+      name: string;
+      username: string;
+      start: string | null;
+      end: string | null;
+    }> = await this.attemptRepo.query(
+      `SELECT u.id, u.name, u.username,
+              CASE WHEN a.id IS NOT NULL THEN to_char(greatest(a."startedAt", $2::timestamp), 'YYYY-MM-DD"T"HH24:MI:SS.US') END AS start,
+              CASE WHEN a.id IS NOT NULL THEN to_char(least(coalesce(a."submittedAt", $3::timestamp), $3::timestamp), 'YYYY-MM-DD"T"HH24:MI:SS.US') END AS "end"
+       FROM users u LEFT JOIN contest_attempts a ON a.user_id::text = u.id::text AND a.contest_id = $1
+       WHERE u.id::text = ANY($4::text[])`,
+      [
+        contest.id,
+        contest.startTime,
+        contest.endTime,
+        contest.participants || [],
+      ],
+    );
+    const windows = participants
+      .filter((row) => row.start && row.end)
+      .map((row) => ({ userId: row.id, start: row.start!, end: row.end! }));
+    const solved = await this.submissions!.contestSolvedProblems(
+      problemIds,
+      windows,
+    );
+    const scores = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        username: string;
+        problems: Set<string>;
+        lastSolve: number | null;
+      }
+    >();
+    for (const participant of participants)
+      scores.set(participant.id, {
+        ...participant,
+        problems: new Set(),
+        lastSolve: null,
+      });
+    for (const row of solved) {
+      const score = scores.get(row.userId);
+      if (!score) continue;
+      score.problems.add(row.problemId);
+      score.lastSolve = Math.max(
+        score.lastSolve ?? -Infinity,
+        new Date(row.solvedAt).getTime(),
+      );
+    }
+    const ordered = [...scores.values()]
+      .sort(
+        (a, b) =>
+          b.problems.size - a.problems.size ||
+          (a.lastSolve ?? Infinity) - (b.lastSolve ?? Infinity) ||
+          a.id.localeCompare(b.id),
+      )
+      .slice(0, 100);
+    return {
+      contest: this.safeContest(contest),
+      leaderboard: ordered.map((row, index) => ({
+        rank: index + 1,
+        name: row.name,
+        username: row.username,
+        solved: row.problems.size,
+        totalProblems: problemIds.length,
+      })),
+    };
+  }
+
   private async eligibleContest(id: string, userId: string) {
     if (
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(

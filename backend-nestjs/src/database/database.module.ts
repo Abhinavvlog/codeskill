@@ -1,3 +1,4 @@
+import { parseSubmissionShardingConfig } from './sharding/sharding.config';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -69,6 +70,9 @@ const entities = [
       useFactory: async (configService: ConfigService) => {
         const isProduction = process.env.NODE_ENV === 'production';
         const isSyncAllowed = !isProduction && process.env.DB_SYNCHRONIZE === 'true';
+        if (isSyncAllowed && parseSubmissionShardingConfig()) {
+          throw new Error('DB_SYNCHRONIZE must be disabled when using submission shards');
+        }
 
         const url = configService.get<string>('database.postgres.url');
         if (url) {

@@ -17,7 +17,7 @@ import { ProblemTestCase } from '../database/entities/problem-testcase.entity';
 import { Contest } from '../database/entities/contest.entity';
 import { Company } from '../database/entities/company.entity';
 import { University } from '../database/entities/university.entity';
-import { Submission } from '../database/entities/submission.entity';
+import { SubmissionStore } from '../database/sharding/submission-store';
 import { Assessment } from '../database/entities/assessment.entity';
 import { Question } from '../database/entities/question.entity';
 import { CacheService } from '../redis/cache.service';
@@ -43,8 +43,7 @@ export class AdminService {
     private readonly companyModel: Repository<Company>,
     @InjectRepository(University)
     private readonly universityModel: Repository<University>,
-    @InjectRepository(Submission)
-    private readonly submissionModel: Repository<Submission>,
+    private readonly submissionModel: SubmissionStore,
     @InjectRepository(Assessment)
     private readonly assessmentModel: Repository<Assessment>,
     @InjectRepository(Question)
@@ -278,7 +277,7 @@ export class AdminService {
     if (!user) throw new NotFoundException('User not found');
 
     const submissions = await this.submissionModel.find({
-      where: [{ userId: user.id }, { userId: userId }],
+      where: { userId: user.id },
       order: { createdAt: 'DESC' },
     });
 
