@@ -72,9 +72,14 @@ const entities = [
 
         const url = configService.get<string>('database.postgres.url');
         if (url) {
+          const usesSsl =
+            url.includes('sslmode=require') ||
+            url.includes('ssl=true') ||
+            configService.get<boolean>('database.postgres.ssl');
           return {
             type: 'postgres',
             url,
+            ssl: usesSsl ? { rejectUnauthorized: false } : false,
             autoLoadEntities: true,
             synchronize: isSyncAllowed,
             invalidWhereValuesBehavior: {
