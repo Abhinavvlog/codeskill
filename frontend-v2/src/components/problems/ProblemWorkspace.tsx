@@ -538,7 +538,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
     );
   }
 
-  const editorTheme = "vs-dark";
+  const editorTheme = theme === "dark" ? "vs-dark" : "light";
   const testCases = getTestCases();
   const difficultyClass = DIFFICULTY_COLORS[problem.difficulty] || DIFFICULTY_COLORS.Easy;
   const acceptanceRate = problem.stats?.totalSubmissions > 0
@@ -606,7 +606,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
             <button
               type="button"
               onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
-              className="inline-flex h-9 min-w-[120px] items-center justify-between gap-2 rounded-[8px] border border-[#3F3F46] bg-[#18181B] px-3 text-sm font-medium text-[#F3F4F6] hover:bg-[#27272A] focus:outline-none focus:ring-1 focus:ring-[#FACC15] transition-colors"
+              className="inline-flex h-9 min-w-[120px] items-center justify-between gap-2 rounded-[8px] border border-[#3F3F46] bg-[#18181B] px-3 text-sm font-medium text-[#F3F4F6] hover:bg-[#27272A] focus:outline-none focus:ring-1 focus:ring-[#F5B800] transition-colors"
               aria-expanded={showLanguageDropdown}
               aria-haspopup="listbox"
               aria-label="Select programming language"
@@ -641,8 +641,8 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
                       }}
                       className="flex w-full items-center justify-between px-3 py-2 text-sm text-[#E5E7EB] hover:bg-[#27272A] transition-colors text-left"
                     >
-                      <span className={language === lang.id ? "text-[#FACC15] font-semibold" : "font-medium"}>{lang.name}</span>
-                      {language === lang.id && <Check className="h-3.5 w-3.5 text-[#FACC15]" />}
+                      <span className={language === lang.id ? "text-[#F5B800] font-semibold" : "font-medium"}>{lang.name}</span>
+                      {language === lang.id && <Check className="h-3.5 w-3.5 text-[#F5B800]" />}
                     </button>
                   ))}
                   </motion.div>
@@ -1461,11 +1461,11 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
           </div>
           <div className="flex items-center gap-3">
             <Button onClick={handleRun} disabled={isRunning || isSubmitting} className="h-[42px] px-5 text-[14px] font-bold gap-2 bg-[#1F2937] hover:bg-[#374151] text-[#E5E7EB] border border-[#374151] rounded-[8px] btn-interactive disabled:opacity-45 disabled:cursor-not-allowed">
-              {isRunning ? <Spinner className="w-4 h-4 text-[#FACC15] animate-spin" /> : <Play className="w-4 h-4 text-[#FACC15]" />}
+              {isRunning ? <Spinner className="w-4 h-4 text-[#F5B800] animate-spin" /> : <Play className="w-4 h-4 text-[#F5B800]" />}
               <span>Run</span>
             </Button>
-            <Button onClick={handleSubmit} disabled={isRunning || isSubmitting} className="bg-[#7F1D1D] hover:bg-[#450A0A] text-white h-[42px] px-6 text-[14px] font-bold gap-2 shadow-sm border-0 rounded-[8px] btn-interactive disabled:opacity-45 disabled:cursor-not-allowed">
-              {isSubmitting ? <Spinner className="w-4 h-4 animate-spin text-[#FACC15]" /> : <Check className="w-4 h-4 text-[#FACC15]" />}
+            <Button onClick={handleSubmit} disabled={isRunning || isSubmitting} className="bg-[#F5B800] hover:bg-[#D99F00] text-[#111111] h-[42px] px-6 text-[14px] font-bold gap-2 shadow-sm border-0 rounded-[8px] btn-interactive disabled:opacity-45 disabled:cursor-not-allowed">
+              {isSubmitting ? <Spinner className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
               <span>Submit</span>
             </Button>
             <Link href="/problems">

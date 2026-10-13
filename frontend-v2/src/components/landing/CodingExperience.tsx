@@ -398,43 +398,43 @@ export function CodingExperience() {
   };
 
   return (
-    <section className="w-full py-16 sm:py-20 px-4 sm:px-6 md:px-8 border-b border-[#E5E7EB] bg-[#FFFBF5]/40 text-[#1F2937] dark:text-foreground">
+    <section className="w-full py-16 sm:py-20 px-4 sm:px-6 md:px-8 border-b border-border bg-background text-foreground">
       <div className="max-w-4xl mx-auto space-y-8">
         
         {/* Section Header */}
         <div className="text-center max-w-xl mx-auto space-y-2.5">
-          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full border border-[#7F1D1D]/20 bg-[#7F1D1D]/5 text-[#7F1D1D] text-xs font-bold uppercase tracking-wider">
-            <Code2 className="w-3.5 h-3.5 text-[#FACC15]" />
-            <span>Online Judge Sandbox</span>
+          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full border border-border bg-muted/60 text-foreground text-xs font-semibold uppercase tracking-wider">
+            <Code2 className="w-3.5 h-3.5 text-primary" />
+            <span>Online Judge</span>
           </div>
 
-          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[#1F2937] dark:text-foreground">
-            Code. <span className="text-[#7F1D1D]">Run.</span> Improve.
+          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
+            Code. Run. Improve.
           </h2>
 
-          <p className="text-xs sm:text-sm text-[#64748B] dark:text-muted-foreground leading-relaxed">
-            Write code, run test cases instantly against dockerized runners, and benchmark runtime efficiency.
+          <p className="text-xs sm:text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed">
+            Write code, run test cases instantly, and benchmark runtime efficiency.
           </p>
         </div>
 
-        {/* Entrance Animation: Motion Card */}
+        {/* 1. Entrance Animation: Motion Card */}
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-40px" }}
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="rounded-2xl bg-white dark:bg-card border border-[#E5E7EB] dark:border-border/80 shadow-md hover:shadow-lg transition-shadow overflow-hidden"
+          className="rounded-2xl bg-card border border-border/80 shadow-md hover:shadow-lg transition-shadow overflow-hidden"
         >
           
           {/* Header Bar */}
-          <div className="flex flex-wrap items-center justify-between px-5 py-3 bg-[#FFFBF5] dark:bg-neutral-900/60 border-b border-[#E5E7EB] dark:border-border text-xs gap-3">
+          <div className="flex flex-wrap items-center justify-between px-5 py-3 bg-neutral-50/80 dark:bg-neutral-900/60 border-b border-border text-xs gap-3">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-sm text-[#1F2937] dark:text-foreground">Two Sum</span>
-              <span className="text-[#E5E7EB]">•</span>
-              <span className="text-[11px] font-bold text-[#16A34A] bg-[#16A34A]/10 px-2 py-0.5 rounded-full border border-[#16A34A]/20">Easy</span>
+              <span className="font-bold text-sm text-foreground">Two Sum</span>
+              <span className="text-neutral-400">•</span>
+              <span className="text-[11px] font-medium text-neutral-500">Easy</span>
             </div>
 
-            {/* Interactive Language Tabs */}
+            {/* 2. Interactive Hover Effects on Language Tabs */}
             <div className="flex items-center gap-1.5">
               {Object.keys(CODE_RENDERERS).map((item) => {
                 const isActive = lang === item;
@@ -442,10 +442,10 @@ export function CodingExperience() {
                   <button
                     key={item}
                     onClick={() => setLang(item)}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer border ${
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all duration-200 cursor-pointer border ${
                       isActive
-                        ? "bg-[#7F1D1D] text-white font-bold border-[#7F1D1D] shadow-xs"
-                        : "bg-white text-[#64748B] border-[#E5E7EB] hover:text-[#1F2937] hover:bg-[#FFFBF5]"
+                        ? "bg-background text-white dark:bg-white dark:text-slate-950 font-bold border-transparent shadow-xs"
+                        : "bg-transparent text-neutral-600 dark:text-neutral-400 border-transparent hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/30"
                     }`}
                   >
                     {item}
@@ -455,13 +455,13 @@ export function CodingExperience() {
             </div>
           </div>
 
-          {/* Syntax Highlighting & Clean Monospace UI */}
-          <div className="p-6 sm:p-7 font-mono text-xs sm:text-[13px] leading-relaxed bg-white dark:bg-background/60 text-[#1F2937] dark:text-foreground overflow-x-auto select-none">
+          {/* 5. Syntax Highlighting & Clean Monospace UI */}
+          <div className="p-6 sm:p-7 font-mono text-xs sm:text-[13px] leading-relaxed bg-background/60 text-foreground overflow-x-auto select-none">
             {CODE_RENDERERS[lang]}
           </div>
 
-          {/* Success State Reveal & Run Button Animation */}
-          <div className="px-5 py-3.5 bg-[#FFFBF5] dark:bg-neutral-900/60 border-t border-[#E5E7EB] dark:border-border flex flex-wrap items-center justify-between gap-3 text-xs">
+          {/* 4. Success State Reveal & Run Button Animation */}
+          <div className="px-5 py-3.5 bg-neutral-50/80 dark:bg-neutral-900/60 border-t border-border flex flex-wrap items-center justify-between gap-3 text-xs">
             
             {/* Success State Animation */}
             <div className="min-h-[28px] flex items-center">
@@ -472,9 +472,9 @@ export function CodingExperience() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="flex items-center gap-2 font-mono text-xs text-[#64748B]"
+                    className="flex items-center gap-2 font-mono text-xs text-neutral-500"
                   >
-                    <span className="w-2 h-2 rounded-full bg-[#FACC15] animate-pulse" />
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                     <span>Executing in isolated sandbox...</span>
                   </motion.div>
                 ) : showResult ? (
@@ -486,27 +486,27 @@ export function CodingExperience() {
                     transition={{ duration: 0.35, ease: "easeOut" }}
                     className="flex flex-wrap items-center gap-3 font-mono text-[11px] sm:text-xs"
                   >
-                    <span className="flex items-center gap-1 text-[#16A34A] font-bold">
+                    <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
                       <span className="text-sm">✓</span> Accepted
                     </span>
-                    <span className="text-[#E5E7EB]">|</span>
-                    <span className="text-[#64748B]">12/12 Test Cases Passed</span>
-                    <span className="text-[#E5E7EB]">|</span>
-                    <span className="text-[#64748B]">
-                      Runtime: <strong className="text-[#1F2937] dark:text-foreground">{runtime}ms</strong>
+                    <span className="text-neutral-300 dark:text-neutral-700">|</span>
+                    <span className="text-neutral-600 dark:text-neutral-400">12/12 Test Cases Passed</span>
+                    <span className="text-neutral-300 dark:text-neutral-700">|</span>
+                    <span className="text-neutral-600 dark:text-neutral-400">
+                      Runtime: <strong className="text-foreground">{runtime}ms</strong>
                     </span>
                   </motion.div>
                 ) : null}
               </AnimatePresence>
             </div>
 
-            {/* Run Button with Dark Red and Yellow Accent */}
+            {/* 3. Run Button Animation with Hover Scale and Active Press */}
             <button
               onClick={triggerRun}
               disabled={isRunning}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#7F1D1D] hover:bg-[#450A0A] text-white font-bold text-xs transition-all duration-200 hover:scale-105 active:scale-95 shadow-xs hover:shadow-md cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-white hover:bg-neutral-100 text-black font-bold text-xs transition-all duration-200 hover:scale-105 active:scale-95 shadow-xs hover:shadow-md cursor-pointer disabled:opacity-50"
             >
-              <Play className={`w-3.5 h-3.5 text-[#FACC15] fill-[#FACC15] ${isRunning ? "animate-spin" : ""}`} />
+              <Play className={`w-3 h-3 fill-current ${isRunning ? "animate-spin" : ""}`} />
               <span>{isRunning ? "Running..." : "Run Solution"}</span>
             </button>
 

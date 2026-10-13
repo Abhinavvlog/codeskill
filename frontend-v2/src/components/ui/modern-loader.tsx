@@ -17,11 +17,11 @@ export interface ModernLoaderProps {
 }
 
 const COLORS = [
-  "bg-[#7F1D1D]",
-  "bg-[#FACC15]",
+  "bg-[#3B82F6]",
   "bg-[#10B981]",
   "bg-[#F59E0B]",
-  "bg-[#64748B]",
+  "bg-[#EF4444]",
+  "bg-[#9CA3AF]",
 ];
 
 function seededRandom(seed: number) {

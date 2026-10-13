@@ -24,11 +24,12 @@ export class UsersService {
   }
 
   async getLeaderboard(limit = 50) {
-    const users = await this.userRepository.find({
-      where: { isActive: true },
-      order: { stats: { xp: 'DESC' } },
-      take: limit,
-    });
+    const users = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.isActive = :isActive', { isActive: true })
+      .orderBy("COALESCE((user.stats->>'xp')::numeric, 0)", 'DESC')
+      .take(limit)
+      .getMany();
 
     const leaderboard = users.map((u, idx) => ({
       rank: idx + 1,
