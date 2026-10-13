@@ -23,7 +23,7 @@ import { SubmissionRateLimitGuard } from '../common/guards/submission-rate-limit
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Execution')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, SubmissionRateLimitGuard)
 @Controller('execution')
 export class ExecutionController {
   constructor(
@@ -66,7 +66,6 @@ export class ExecutionController {
   }
 
   @Post('run')
-  @UseGuards(SubmissionRateLimitGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Execute code against test cases without saving a submission',
@@ -250,7 +249,6 @@ export class ExecutionController {
    * Falls back to BullMQ queue if Azure is not configured.
    */
   @Post('azure-run')
-  @UseGuards(SubmissionRateLimitGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:

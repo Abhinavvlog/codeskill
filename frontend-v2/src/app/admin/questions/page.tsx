@@ -428,7 +428,6 @@ export default function QuestionsAdminPage() {
           onEdit={(id) => router.push(`/admin/questions/${id}/edit`)}
           onApprove={handleApprove}
           onReject={setRejectModalId}
-          onDelete={handleDelete}
         />
       )}
 
@@ -671,63 +670,6 @@ export default function QuestionsAdminPage() {
                 </section>
               )}
 
-              {/* Test Cases (For Coding Questions) */}
-              {Array.isArray(inspectQuestion.testCases) && inspectQuestion.testCases.length > 0 && (
-                <section>
-                  <div className="flex items-center justify-between mb-3 pl-1">
-                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                      Test Cases & Validation ({inspectQuestion.testCases.length})
-                    </h4>
-                    <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      Auto-Evaluation Enabled
-                    </span>
-                  </div>
-                  <div className="space-y-3">
-                    {inspectQuestion.testCases.map((tc: any, idx: number) => (
-                      <div
-                        key={idx}
-                        className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3"
-                      >
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-slate-800">
-                            Test Case #{idx + 1}
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase border ${
-                              tc.isSample
-                                ? "bg-blue-50 text-blue-700 border-blue-200"
-                                : "bg-purple-50 text-purple-700 border-purple-200"
-                            }`}
-                          >
-                            {tc.isSample ? "Sample Test" : "Hidden Assessment Test"}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div>
-                            <div className="text-[11px] font-bold text-slate-500 mb-1">Input:</div>
-                            <pre className="bg-slate-900 text-slate-100 p-2.5 rounded-lg text-xs font-mono overflow-x-auto border border-slate-800">
-                              <code>{tc.input || "(empty)"}</code>
-                            </pre>
-                          </div>
-                          <div>
-                            <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mb-1">Expected Output:</div>
-                            <pre className="bg-slate-900 text-emerald-400 p-2.5 rounded-lg text-xs font-mono overflow-x-auto border border-slate-800">
-                              <code>{tc.output || tc.expectedOutput || "(empty)"}</code>
-                            </pre>
-                          </div>
-                        </div>
-                        {tc.explanation && (
-                          <div className="text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">
-                            <span className="font-semibold text-slate-700">Explanation: </span>
-                            {tc.explanation}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-
               {/* General Explanation */}
               {inspectQuestion.explanation && (
                 <section className="modal-explanation">
@@ -740,28 +682,10 @@ export default function QuestionsAdminPage() {
                 </section>
               )}
 
-              {/* Timestamps */}
-              <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 bg-slate-100/60 p-3.5 rounded-xl border border-slate-200">
-                <div className="flex items-center gap-1.5 font-medium">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Created:</span>
-                  <span className="text-slate-800 font-semibold font-mono">
-                    {inspectQuestion.createdAt ? new Date(inspectQuestion.createdAt).toLocaleString("en-GB") : "-"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 font-medium">
-                  <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Last Updated:</span>
-                  <span className="text-slate-800 font-semibold font-mono">
-                    {inspectQuestion.updatedAt ? new Date(inspectQuestion.updatedAt).toLocaleString("en-GB") : "-"}
-                  </span>
-                </div>
-              </div>
-
             </div>
 
             {/* Modal Footer */}
-            <div className="modal-footer px-6 py-4 border-t border-slate-100 bg-white rounded-b-[20px] flex items-center justify-between shrink-0 flex-wrap gap-3">
+            <div className="modal-footer px-6 py-4 border-t border-slate-100 bg-white rounded-b-[20px] flex items-center justify-between shrink-0">
               <div className="flex flex-col">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Scoring</span>
                 <div className="flex items-center gap-2 text-sm">
@@ -776,7 +700,7 @@ export default function QuestionsAdminPage() {
                 </div>
               </div>
               
-              <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="flex items-center gap-3">
                 {inspectQuestion.status === "pending_review" && (
                   <>
                     <button
@@ -802,17 +726,6 @@ export default function QuestionsAdminPage() {
                 >
                   Edit Question
                 </Link>
-
-                <button
-                  onClick={() => {
-                    const idToDelete = inspectQuestion._id || inspectQuestion.id;
-                    handleDelete(idToDelete);
-                  }}
-                  className="px-4 py-2 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 font-semibold text-sm hover:bg-rose-100 transition-colors shadow-sm flex items-center gap-1.5"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Delete
-                </button>
 
                 <button
                   onClick={handleCloseModal}

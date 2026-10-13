@@ -393,8 +393,8 @@ class TypeScriptAdapter implements LanguageAdapter {
   readonly compiled = false;
   readonly sandboxImage =
     process.env.JUDGE_TS_IMAGE ||
-    process.env.JUDGE_SANDBOX_IMAGE ||
-    'codeskill-judge:1.0';
+    process.env.JUDGE_NODE_IMAGE ||
+    'node:20-alpine';
 
   prepare(
     code: string,
@@ -425,7 +425,7 @@ class TypeScriptAdapter implements LanguageAdapter {
   }
 
   runCommand(sourcePath: string): Command {
-    return { cmd: 'tsx', args: [sourcePath] };
+    return { cmd: 'npx', args: ['--yes', 'tsx', sourcePath] };
   }
 }
 

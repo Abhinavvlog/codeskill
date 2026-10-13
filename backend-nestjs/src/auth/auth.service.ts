@@ -6,7 +6,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, ILike } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { User as UserEntity } from '../database/entities/user.entity';
 import { OtpService } from '../redis/otp.service';
@@ -98,26 +98,17 @@ export class AuthService {
     );
   }
 
-  private async findUserByIdentifier(raw: string): Promise<UserEntity | null> {
-    if (raw.includes('%') || raw.includes('_')) {
-      throw new BadRequestException('Sign-in identifier contains invalid characters');
-    }
-    const normalized = raw.trim().toLowerCase();
-    if (typeof this.userRepository.createQueryBuilder === 'function') {
-      return this.userRepository
-        .createQueryBuilder('user')
-        .where('LOWER(user.email) = :identifier', { identifier: normalized })
-        .orWhere('LOWER(user.uid) = :identifier', { identifier: normalized })
-        .orWhere('LOWER(user.username) = :identifier', { identifier: normalized })
-        .addSelect('user.password')
-        .addSelect('user.tokenVersion')
-        .getOne();
-    }
-    return this.userRepository.findOne({
+  async login(dto: LoginDto, ip?: string) {
+    const raw = (dto.email || '').trim();
+    await this.loginThrottleService.assertAllowed(raw, ip);
+
+    const user = await this.userRepository.findOne({
       where: [
-        { email: normalized },
-        { uid: normalized },
-        { username: normalized },
+        { email: ILike(raw) },
+        { uid: ILike(raw) },
+        { username: ILike(raw) },
+        { name: ILike(raw) },
+        { email: ILike(`${raw}@%`) },
       ],
       select: {
         id: true,
@@ -139,13 +130,6 @@ export class AuthService {
         tokenVersion: true,
       },
     });
-  }
-
-  async login(dto: LoginDto, ip?: string) {
-    const raw = (dto.email || '').trim();
-    await this.loginThrottleService.assertAllowed(raw, ip);
-
-    const user = await this.findUserByIdentifier(raw);
 
     if (!user) {
       await this.loginThrottleService.recordFailure(raw, ip);
@@ -182,7 +166,34 @@ export class AuthService {
     const raw = (dto.email || '').trim();
     await this.loginThrottleService.assertAllowed(raw, ip);
 
-    const user = await this.findUserByIdentifier(raw);
+    const user = await this.userRepository.findOne({
+      where: [
+        { email: ILike(raw) },
+        { uid: ILike(raw) },
+        { username: ILike(raw) },
+        { name: ILike(raw) },
+        { email: ILike(`${raw}@%`) },
+      ],
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        password: true,
+        role: true,
+        isAdmin: true,
+        uid: true,
+        isAssessmentStudent: true,
+        forcePasswordChange: true,
+        studentProfile: true,
+        avatar: true,
+        bio: true,
+        profile: true,
+        stats: true,
+        authProvider: true,
+        isActive: true,
+        tokenVersion: true,
+      },
+    });
 
     if (
       !user ||
@@ -228,7 +239,34 @@ export class AuthService {
     const raw = (dto.uid || '').trim();
     await this.loginThrottleService.assertAllowed(raw, ip);
 
-    const user = await this.findUserByIdentifier(raw);
+    const user = await this.userRepository.findOne({
+      where: [
+        { uid: ILike(raw) },
+        { email: ILike(raw) },
+        { username: ILike(raw) },
+        { name: ILike(raw) },
+        { email: ILike(`${raw}@%`) },
+      ],
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        password: true,
+        role: true,
+        isAdmin: true,
+        uid: true,
+        isAssessmentStudent: true,
+        forcePasswordChange: true,
+        studentProfile: true,
+        avatar: true,
+        bio: true,
+        profile: true,
+        stats: true,
+        authProvider: true,
+        isActive: true,
+        tokenVersion: true,
+      },
+    });
 
     if (!user) {
       await this.loginThrottleService.recordFailure(raw, ip);

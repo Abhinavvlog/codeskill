@@ -27,7 +27,7 @@ export enum SubmissionStatus {
   SYSTEM_ERROR = 'system_error',
 }
 
-const WORKER_CONCURRENCY = Number(process.env.WORKER_CONCURRENCY) || 4;
+const WORKER_CONCURRENCY = Number(process.env.WORKER_CONCURRENCY) || 10;
 
 @Processor('submissions', { concurrency: WORKER_CONCURRENCY })
 export class JudgeProcessor extends WorkerHost {

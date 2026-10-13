@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -38,20 +38,8 @@ export default function AppLoginPage() {
   const [showForcePasswordModal, setShowForcePasswordModal] = useState(false);
   const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false);
 
-  const { user, login, studentLogin, forceChangePassword } = useAuth();
+  const { login, studentLogin, forceChangePassword } = useAuth();
   const router = useRouter();
-
-  useEffect(() => {
-    if (user) {
-      if (user.isAdmin) {
-        router.replace("/admin/dashboard");
-      } else if (user.isAssessmentStudent) {
-        router.replace("/assessments");
-      } else {
-        router.replace("/dashboard");
-      }
-    }
-  }, [user, router]);
 
   const forceForm = useForm<ForcePasswordFormValues>({
     resolver: zodResolver(forcePasswordSchema),
