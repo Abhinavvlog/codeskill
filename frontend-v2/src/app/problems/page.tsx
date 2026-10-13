@@ -9,9 +9,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { problemsAPI } from "@/config/api";
 import { Spinner } from "@/components/ui/spinner";
-import { parsePublicProblemList, type PublicProblemList } from "@/lib/public-problems";
-
-const ITEMS_PER_PAGE = 20;
+import PracticePet from "@/components/pet/PracticePet";
 
 export default function ProblemsPage() {
   const [search, setSearch] = useState("");
@@ -255,6 +253,7 @@ export default function ProblemsPage() {
 
       </motion.div>
       </div>
+      <PracticePet />
     </div>
   );
 }

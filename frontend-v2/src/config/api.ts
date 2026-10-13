@@ -146,6 +146,16 @@ export const problemsAPI = {
   getBySlug: (slug: string) => api.get(`/problems/${slug}`),
 };
 
+export const petAPI = {
+  ask: (data: {
+    question: string;
+    problemSlug?: string;
+    code?: string;
+    language?: string;
+    history: Array<{ role: "user" | "assistant"; content: string }>;
+  }) => api.post<{ reply: string; source: "openrouter" | "deepseek" | "local"; notice?: string }>("/pet/ask", data, { timeout: 30000 }),
+};
+
 // ── Submissions ──
 export const submissionAPI = {
   submit: (data: any) => 

@@ -180,22 +180,28 @@ export class ProblemsService {
     private readonly cacheService: CacheService,
   ) {}
 
-  async getProblems(query: PublicProblemsQuery = {}) {
-    const page = Math.min(1_000_000, positiveInt(query.page, 1));
-    const limit = Math.min(100, positiveInt(query.limit, 20));
-    const difficulty = filter(query.difficulty).toLowerCase();
-    const category = filter(query.category) || filter(query.topic);
-    const search = text(query.search);
-    const cacheKey = `problems:public-v3:${JSON.stringify([page, limit, difficulty, category, search])}`;
-    const cached = await this.cacheService.get<{
-      count: number;
-      total: number;
-      page: number;
-      pages: number;
-      totalPages: number;
-      data: CatalogRow[];
-    }>(cacheKey);
-    if (cached) return cached;
+    const [problems, total] = await qb
+      .select([
+        'problem.id',
+        'problem.title',
+        'problem.slug',
+        'problem.difficulty',
+        'problem.tags',
+        'problem.stats',
+        'problem.createdAt',
+        'problem.updatedAt'
+      ])
+      .orderBy('problem.createdAt', 'DESC')
+      .addOrderBy('problem.id', 'DESC')
+      .skip(startIndex)
+      .take(limit)
+      .getManyAndCount();
+
+    const mappedProblems = problems.map(p => ({
+      ...p,
+      _id: p.id,
+      categories: p.tags // Mapping tags to categories for frontend compatibility
+    }));
 
     const parameters: unknown[] = [];
     const conditions: string[] = [];
@@ -372,97 +378,20 @@ export class ProblemsService {
         },
       };
     }
-    const question = await this.questionRepository
-      .createQueryBuilder('q')
-      .where(
-        `lower(q."questionType") IN (:...types) AND lower(${bankSlugSql}) = :slug`,
-        { types: codingTypes, slug: text(slug).toLowerCase() },
-      )
-      .getOne();
-    if (question) {
-      if (
-        !bankPublished(question) ||
-        (await this.hasMetadataCounterpart(question))
-      )
-        throw new NotFoundException('Problem not found');
-      const samples = cases(question.examples).map(
-        ({ input, output, explanation }) => ({ input, output, explanation }),
-      );
-      return {
-        data: {
-          id: question.id,
-          _id: question.id,
-          title: text(question.title) || question.question,
-          slug: bankSlug(question),
-          difficulty: question.difficulty,
-          categories: bankTopics(question),
-          tags: strings(question.tags),
-          stats: publicStats({}),
-          createdAt: question.createdAt,
-          updatedAt: question.updatedAt,
-          statement: {
-            description:
-              question.problemStatement ||
-              question.description ||
-              question.question,
-            inputFormat: question.inputFormat || '',
-            outputFormat: question.outputFormat || '',
-            constraints: strings(question.constraints).join('\n'),
-            samples,
-            hints: strings(question.hints),
-          },
-          hints: strings(question.hints),
-          config: this.bankConfig(question),
-          testCases: {
-            cases: cases(question.testCases).filter((test) => !test.isHidden),
-          },
-        },
-      };
-    }
-    const problem = await this.problemRepository
-      .createQueryBuilder('problem')
-      .where('lower(btrim(problem.slug)) = :slug', {
-        slug: text(slug).toLowerCase(),
-      })
-      .getOne();
-    if (
-      !problem ||
-      (problem.visibility !== null && !published(problem.visibility)) ||
-      (await this.hasMetadataCounterpart(problem)) ||
-      (await this.hasBankCounterpart(problem))
-    )
-      throw new NotFoundException('Problem not found');
-    const samples = cases(problem.examples).map(
-      ({ input, output, explanation }) => ({ input, output, explanation }),
-    );
-    return {
-      data: {
-        ...this.summary(problem),
+
+    // Mapping to legacy payload structure for frontend compatibility
+    const mappedProblem = {
+      ...problem,
+      _id: problem.id,
+      categories: problem.tags,
+      statement: {
         description: problem.description,
         inputFormat: problem.inputFormat,
         outputFormat: problem.outputFormat,
         constraints: problem.constraints,
-        hints: strings(problem.hints),
-        editorial: problem.editorial,
-        statement: {
-          description: problem.description,
-          inputFormat: problem.inputFormat,
-          outputFormat: problem.outputFormat,
-          constraints: problem.constraints,
-          samples,
-          examples: samples,
-          hints: strings(problem.hints),
-        },
-        config: {
-          timeLimit: problem.timeLimit,
-          memoryLimit: problem.memoryLimit,
-          supportedLanguages: strings(problem.supportedLanguages),
-          starterCode: codeMap(problem.starterCode),
-          difficulty: problem.difficulty,
-        },
-        testCases: {
-          cases: cases(problem.testCases).filter((test) => !test.isHidden),
-        },
+        examples: problem.examples,
+        samples: problem.examples,
+        hints: problem.hints,
       },
     };
   }
@@ -551,7 +480,9 @@ export class ProblemsService {
       config: {
         timeLimit: problem.timeLimit,
         memoryLimit: problem.memoryLimit,
-        supportedLanguages: strings(problem.supportedLanguages),
+        supportedLanguages: problem.supportedLanguages,
+        starterCode: problem.starterCode,
+        difficulty: problem.difficulty,
       },
     };
   }

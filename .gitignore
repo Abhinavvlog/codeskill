@@ -85,3 +85,5 @@ uploads/
 # IDE & PM2
 .pm2/
 
+# Local development database and service state
+.local-dev/
