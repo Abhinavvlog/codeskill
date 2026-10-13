@@ -7,8 +7,8 @@
 @theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
-  --font-heading: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  --font-sans: var(--font-roboto), Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-heading: var(--font-roboto), Roboto, "Helvetica Neue", Arial, sans-serif;
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
   --color-popover: hsl(var(--popover));
@@ -41,6 +41,168 @@
   --radius-2xl: 1rem;
 }
 
+/* Compact HackerRank-inspired coding workspace styling. */
+.codeskill-problem-workspace {
+  font-family: var(--font-roboto), Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.codeskill-problem-workspace .workspace-topbar {
+  min-height: 52px;
+  height: 52px;
+  color: #f8fafc;
+  border-color: #24272b;
+}
+
+.codeskill-problem-workspace .workspace-topbar a {
+  color: #d1d5db;
+  border-radius: 4px;
+}
+
+.codeskill-problem-workspace .workspace-topbar a:hover {
+  color: #fff;
+  background: #202328;
+}
+
+.codeskill-problem-workspace .workspace-language-chip {
+  color: #e5e7eb;
+  background: #181a1e;
+  border-color: #3b3f45;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.codeskill-problem-workspace .workspace-topbar h1 {
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+.codeskill-problem-workspace .workspace-activity-rail {
+  width: 42px;
+  background: #f8fafc;
+  border-color: #d8dde4;
+}
+
+.codeskill-problem-workspace .workspace-activity-rail button {
+  color: #64748b;
+  border-radius: 4px;
+}
+
+.codeskill-problem-workspace .workspace-activity-rail button:hover,
+.codeskill-problem-workspace .workspace-activity-rail button[aria-label][aria-pressed="true"] {
+  color: #0e8a43;
+  background: #eaf6ee;
+}
+
+.codeskill-problem-workspace .workspace-panels {
+  padding: 6px;
+  background: #f1f3f6;
+}
+
+.codeskill-problem-workspace .workspace-pane {
+  border-color: #d7dce3;
+  border-radius: 5px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 6%);
+}
+
+.codeskill-problem-workspace .workspace-pane > div:first-child {
+  min-height: 38px;
+  height: 38px;
+  padding-left: 12px;
+  padding-right: 12px;
+  background: #f4f5f8;
+  border-color: #dfe3e9;
+}
+
+.codeskill-problem-workspace .workspace-pane .p-5 {
+  padding: 16px;
+}
+
+.codeskill-problem-workspace .workspace-pane .text-\[15px\] {
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.codeskill-problem-workspace .workspace-pane .rounded-xl {
+  border-radius: 5px;
+}
+
+.codeskill-problem-workspace .workspace-resize-handle {
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+
+.codeskill-problem-workspace .workspace-resize-handle:hover {
+  background: #0e8a43;
+}
+
+.codeskill-problem-workspace .workspace-editor-pane > div:first-child {
+  background: #f0eff6;
+}
+
+.codeskill-problem-workspace .workspace-output-pane > div:first-child {
+  background: #f6f7fa;
+}
+
+.codeskill-problem-workspace .workspace-output-pane [role="tab"] {
+  border-radius: 4px;
+}
+
+.codeskill-problem-workspace .workspace-action-bar {
+  min-height: 60px;
+  height: 60px;
+}
+
+.codeskill-problem-workspace button,
+.codeskill-problem-workspace select {
+  font-family: inherit;
+  letter-spacing: 0;
+}
+
+.dark .codeskill-problem-workspace .workspace-activity-rail {
+  background: #111318;
+  border-color: #2d323a;
+}
+
+.dark .codeskill-problem-workspace .workspace-activity-rail button {
+  color: #a7b0bd;
+}
+
+.dark .codeskill-problem-workspace .workspace-activity-rail button:hover {
+  color: #53c27a;
+  background: #18251d;
+}
+
+.dark .codeskill-problem-workspace .workspace-panels {
+  background: #101216;
+}
+
+.dark .codeskill-problem-workspace .workspace-pane {
+  border-color: #303640;
+  box-shadow: none;
+}
+
+.dark .codeskill-problem-workspace .workspace-pane > div:first-child {
+  background: #20242b;
+  border-color: #303640;
+}
+
+.dark .codeskill-problem-workspace .workspace-editor-pane > div:first-child,
+.dark .codeskill-problem-workspace .workspace-output-pane > div:first-child {
+  background: #20212a;
+}
+
+@media (max-width: 720px) {
+  .codeskill-problem-workspace .workspace-activity-rail {
+    width: 38px;
+  }
+
+  .codeskill-problem-workspace .workspace-panels {
+    padding: 4px;
+  }
+}
+
 @layer base {
   :root {
     color-scheme: light;
@@ -55,17 +217,17 @@
     --popover: 0 0% 100%;          /* #FFFFFF */
     --popover-foreground: 222 47% 11%;
 
-    --primary: 199 89% 48%;            /* #111111 solid primary button */
+    --primary: 145 78% 32%;            /* #111111 solid primary button */
     --primary-foreground: 0 0% 100%;
 
     --secondary: 210 40% 96%;        /* #F4F4F2 secondary surface */
     --secondary-foreground: 222 47% 11%;
 
-    --muted: 210 40% 96%;            /* #F4F4F2 */
+    --muted: 225 30% 97%;            /* #F4F4F2 */
     --muted-foreground: 215 16% 42%;  /* #525252 supporting/secondary text */
 
-    --accent: 199 89% 95%;         /* #111111 restrained developer blue */
-    --accent-foreground: 201 90% 30%;
+    --accent: 145 55% 95%;         /* #111111 restrained developer blue */
+    --accent-foreground: 145 78% 25%;
 
     --destructive: 0 72% 51%;      /* #dc2626 */
     --destructive-foreground: 0 0% 100%;
@@ -76,19 +238,19 @@
     --warning: 38 92% 50%;         /* #F59E0B amber */
     --warning-foreground: 0 0% 100%;
 
-    --border: 214 32% 90%;            /* subtle rgba(0,0,0,0.12) border */
+    --border: 225 24% 92%;            /* subtle rgba(0,0,0,0.12) border */
     --input: 214 32% 88%;
     --skeleton: 60 4% 93%;
     --btn-border: 0 0% 88%;
-    --ring: 199 89% 48%;
+    --ring: 145 78% 32%;
     --radius: 0.75rem;
 
     /* Sidebar tokens */
     --sidebar: 0 0% 100%;
     --sidebar-foreground: 222 47% 11%;
-    --sidebar-border: 214 32% 92%;
-    --sidebar-accent: 210 40% 96%;
-    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 225 24% 93%;
+    --sidebar-accent: 145 55% 95%;
+    --sidebar-accent-foreground: 145 78% 25%;
   }
 
   .dark {
@@ -104,7 +266,7 @@
     --popover: 222 39% 10%;
     --popover-foreground: 210 40% 96%;
 
-    --primary: 199 89% 60%;           /* #fafafa */
+    --primary: 145 70% 48%;           /* #fafafa */
     --primary-foreground: 222 47% 10%;
 
     --secondary: 217 33% 15%;         /* #1f1f1f */
@@ -113,8 +275,8 @@
     --muted: 217 33% 15%;             /* #1f1f1f */
     --muted-foreground: 215 20% 68%;  /* #999999 */
 
-    --accent: 213 35% 17%;
-    --accent-foreground: 199 89% 75%;
+    --accent: 145 30% 15%;
+    --accent-foreground: 145 70% 68%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
@@ -129,23 +291,27 @@
     --input: 215 28% 22%;
     --skeleton: 0 0% 14%;
     --btn-border: 0 0% 18%;
-    --ring: 199 89% 60%;
+    --ring: 145 70% 48%;
 
     /* Sidebar tokens */
     --sidebar: 222 44% 8%;
     --sidebar-foreground: 210 40% 96%;
     --sidebar-border: 215 28% 17%;
-    --sidebar-accent: 217 33% 15%;
-    --sidebar-accent-foreground: 210 40% 96%;
+    --sidebar-accent: 145 30% 15%;
+    --sidebar-accent-foreground: 145 70% 68%;
   }
 
   * {
     @apply border-border outline-ring/50;
   }
 
+  html {
+    font-size: 15px;
+  }
+
   html,
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--font-roboto), Roboto, "Helvetica Neue", Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -154,7 +320,7 @@
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--font-roboto), Roboto, "Helvetica Neue", Arial, sans-serif;
     font-weight: 700;
   }
 

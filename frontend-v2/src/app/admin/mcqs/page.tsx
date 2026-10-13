@@ -49,12 +49,12 @@ export default function McqsAdminPage() {
   });
   const groups = ["Computer Science Fundamentals", "Programming & Development"];
 
-  return <main className="min-h-full bg-background px-4 py-6 sm:px-7 sm:py-8 lg:px-10">
-    <div className="mx-auto max-w-7xl space-y-8">
+  return <main className="min-h-full bg-background px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+    <div className="mx-auto max-w-7xl space-y-6">
       <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary"><ListChecks className="h-4 w-4" /> Question Bank / MCQs</p>
-          <h1 className="text-3xl font-black tracking-tight sm:text-4xl">MCQ Practice &amp; Assessments</h1>
+          <h1 className="text-3xl font-bold tracking-tight sm:text-3xl">MCQ Practice &amp; Assessments</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">Browse focused tests for core computer science subjects and modern development skills.</p>
         </div>
         <div className="flex gap-2">
@@ -73,30 +73,30 @@ export default function McqsAdminPage() {
 
       {selected ? <section className="space-y-5">
         <button onClick={() => setSelectedId(null)} className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />All subjects</button>
-        <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between sm:p-7">
+        <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="flex items-start gap-4"><div className={`rounded-2xl p-3 ${colorClasses[selected.color].icon}`}><selected.icon className="h-7 w-7" /></div><div><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{selected.group}</p><h2 className="mt-1 text-2xl font-bold">{selected.name}</h2><p className="mt-1 max-w-xl text-sm text-muted-foreground">{selected.description}</p></div></div>
           <Link href="/admin/assessments/create" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"><Plus className="h-4 w-4" />Create subject test</Link>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {selected.topics.map((topic, i) => {
             const matches = findTests(selected).filter((a: any) => norm(a.title || "").includes(norm(topic)) || norm(topic).includes(norm(a.title || "")));
             const test = matches[0];
-            return <article key={topic} className="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+            return <article key={topic} className="flex flex-col rounded-xl border border-border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
               <div className="flex items-start justify-between"><span className={`rounded-lg px-2.5 py-1 text-xs font-bold ${colorClasses[selected.color].chip}`}>TEST {String(i + 1).padStart(2, "0")}</span><span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" />20-question target</span></div>
               <h3 className="mt-4 text-lg font-bold">{topic}</h3><p className="mt-1 min-h-10 text-sm text-muted-foreground">A focused multiple-choice assessment template covering {topic.toLowerCase()}.</p>
               <div className="mt-4 flex items-center justify-between border-t border-border pt-4 text-xs"><span className="text-muted-foreground">{test ? `${test.durationMinutes || 30} min · ${test.status || "draft"}` : "30 minutes · Mixed difficulty"}</span>{test ? <Link href={`/admin/assessments/${test.id || test._id}`} className="inline-flex items-center gap-1 font-semibold text-primary">Manage<ArrowRight className="h-3.5 w-3.5" /></Link> : <Link href="/admin/assessments/create" className="inline-flex items-center gap-1 font-semibold text-primary">Build test<ChevronRight className="h-3.5 w-3.5" /></Link>}</div>
             </article>;
           })}
         </div>
-      </section> : <div className="space-y-9">
+      </section> : <div className="space-y-7">
         {groups.map(group => {
           const list = filteredSubjects.filter(s => s.group === group);
           if (!list.length) return null;
           return <section key={group}>
             <div className="mb-4 flex items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.15em] text-primary">Learning paths</p><h2 className="mt-1 text-xl font-bold">{group}</h2></div><span className="text-sm text-muted-foreground">{list.length} subjects</span></div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{list.map(subject => {
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{list.map(subject => {
               const Icon = subject.icon; const styles = colorClasses[subject.color]; const tests = findTests(subject);
-              return <button key={subject.id} onClick={() => { setSelectedId(subject.id); window.scrollTo({ top: 0, behavior: "smooth" }); }} className={`group rounded-2xl border border-border bg-card p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${styles.border}`}>
+              return <button key={subject.id} onClick={() => { setSelectedId(subject.id); window.scrollTo({ top: 0, behavior: "smooth" }); }} className={`group rounded-xl border border-border bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${styles.border}`}>
                 <div className="flex items-start justify-between"><span className={`rounded-xl p-3 ${styles.icon}`}><Icon className="h-6 w-6" /></span><span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">{tests.length} available</span></div>
                 <h3 className="mt-4 text-lg font-bold group-hover:text-primary">{subject.name}</h3><p className="mt-1 min-h-10 text-sm leading-relaxed text-muted-foreground">{subject.description}</p>
                 <div className="mt-4 flex flex-wrap gap-1.5">{subject.topics.slice(0, 3).map(topic => <span key={topic} className="rounded-md bg-muted/70 px-2 py-1 text-[11px] text-muted-foreground">{topic}</span>)}<span className="rounded-md bg-muted/70 px-2 py-1 text-[11px] text-muted-foreground">+2 topics</span></div>
