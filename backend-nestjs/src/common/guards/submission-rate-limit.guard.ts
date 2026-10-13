@@ -54,9 +54,9 @@ export class SubmissionRateLimitGuard implements CanActivate {
     try {
       // 1. Check concurrent active executions for user
       if (userId !== 'anonymous') {
-        const activeCount = parseInt(
-          (await client.get(activeJobsKey)) || '0',
-          10,
+        const activeCount = Math.max(
+          0,
+          parseInt((await client.get(activeJobsKey)) || '0', 10),
         );
         if (activeCount >= this.maxConcurrent) {
           throw new HttpException(

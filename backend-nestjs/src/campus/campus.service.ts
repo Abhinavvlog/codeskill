@@ -80,13 +80,34 @@ export class CampusService {
     };
   }
 
-  async getUniversityById(universityId: string) {
+  async getUniversityById(
+    universityId: string,
+    actor?: { id?: string; role?: string; isAdmin?: boolean },
+  ) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(universityId);
+    const whereConditions: any[] = isUuid
+      ? [{ id: universityId }, { mongoId: universityId }]
+      : [{ username: universityId.toLowerCase() }, { mongoId: universityId }];
+
     const university = await this.universityRepo.findOne({
-      where: [{ id: universityId }, { mongoId: universityId }],
+      where: whereConditions,
     });
     if (!university) {
       throw new NotFoundException('University not found');
     }
+
+    if (!university.isVerified && actor?.id) {
+      const isPlatformAdmin = actor.isAdmin || actor.role === 'admin' || actor.role === 'super_admin';
+      if (!isPlatformAdmin) {
+        const membership = await this.universityUserRepo.findOne({
+          where: { university: { id: university.id }, user: { id: actor.id }, isActive: true },
+        });
+        if (!membership) {
+          throw new ForbiddenException('Access denied to unverified university');
+        }
+      }
+    }
+
     return { success: true, university: { ...university, _id: university.id } };
   }
 

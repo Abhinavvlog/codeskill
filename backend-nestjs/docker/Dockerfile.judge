@@ -1,0 +1,32 @@
+# Hardened sandbox execution container for CodeSkill Judge Worker (AUD-003, AUD-014)
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV NODE_ENV=production
+
+# Install essential compilers and runtimes for C, C++, Java, Python, Node.js, and TypeScript
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    g++ \
+    openjdk-17-jdk-headless \
+    python3 \
+    python3-pip \
+    curl \
+    ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g tsx typescript \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create unprivileged sandbox user (UID/GID 1000:1000)
+RUN groupadd -g 1000 judge && useradd -u 1000 -g judge -m -s /bin/bash judge
+
+# Prepare execution workspace
+RUN mkdir -p /workspace && chown 1000:1000 /workspace
+WORKDIR /workspace
+
+USER judge
+
+CMD ["/bin/bash"]

@@ -36,9 +36,14 @@ export function useAntiCheatMaster(
   useEffect(() => {
     if (!enabled || !userId || !sessionId) return;
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:5001");
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("codeskill_token") || localStorage.getItem("token")
+        : null;
     const newSocket = io(wsUrl, {
       path: "/socket.io",
       withCredentials: true,
+      auth: token ? { token } : undefined,
     });
 
     newSocket.on("connect", () => {

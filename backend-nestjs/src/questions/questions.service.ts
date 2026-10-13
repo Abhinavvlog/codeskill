@@ -4,9 +4,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Brackets, In } from 'typeorm';
+import { Repository, Brackets, In, Not } from 'typeorm';
 import { Question as QuestionEntity } from '../database/entities/question.entity';
 import { QuestionBank as QuestionBankEntity } from '../database/entities/question-bank.entity';
+import { Assessment } from '../database/entities/assessment.entity';
 import { AuditLog as AuditLogEntity } from '../database/entities/audit-log.entity';
 import { CreateQuestionDto } from './dto/create-question.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
@@ -14,6 +15,18 @@ import { QueryQuestionsDto } from './dto/query-questions.dto';
 import { CreateQuestionBankDto } from './dto/create-question-bank.dto';
 import { CacheService } from '../redis/cache.service';
 import * as XLSX from 'xlsx';
+import * as crypto from 'crypto';
+
+export function computeQuestionFingerprint(questionText: string, topic = ''): string {
+  const normalized = (questionText || '')
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const tokens = Array.from(new Set(normalized.split(' ').filter((w) => w.length > 1))).sort();
+  const rawKey = `${(topic || '').toLowerCase().trim()}:::${tokens.join('_')}`;
+  return crypto.createHash('sha256').update(rawKey).digest('hex').slice(0, 32);
+}
 
 @Injectable()
 export class QuestionsService {
@@ -22,6 +35,8 @@ export class QuestionsService {
     private readonly questionRepository: Repository<QuestionEntity>,
     @InjectRepository(QuestionBankEntity)
     private readonly questionBankRepository: Repository<QuestionBankEntity>,
+    @InjectRepository(Assessment)
+    private readonly assessmentRepository: Repository<Assessment>,
     @InjectRepository(AuditLogEntity)
     private readonly auditLogRepository: Repository<AuditLogEntity>,
     private readonly cacheService: CacheService,
@@ -583,22 +598,184 @@ export class QuestionsService {
     const question = await this.questionRepository.findOne({ where: { id } });
     if (!question) throw new NotFoundException('Question not found');
 
+    // Check if referenced in assessments
+    const allAssessments = await this.assessmentRepository.find({
+      select: { id: true, title: true, questions: true },
+    });
+    const referencingAssessments = allAssessments.filter(
+      (a) => Array.isArray(a.questions) && a.questions.includes(id),
+    );
+
     question.status = 'archived';
     await this.questionRepository.save(question);
     await this.cacheService.invalidatePrefix('problems:');
 
     const auditLog = this.auditLogRepository.create({
-      actorId: adminUser.id || adminUser._id,
-      actorEmail: adminUser.email,
+      actorId: adminUser?.id || adminUser?._id,
+      actorEmail: adminUser?.email,
       action: 'DELETE_QUESTION',
       target: question.id,
       targetType: 'Question',
+      metadata: {
+        referencingAssessmentsCount: referencingAssessments.length,
+        assessmentTitles: referencingAssessments.map((a) => a.title),
+      },
       ipAddress: ip,
       userAgent: userAgent,
     });
     await this.auditLogRepository.save(auditLog);
 
-    return { success: true, message: 'Question successfully archived' };
+    return {
+      success: true,
+      message:
+        referencingAssessments.length > 0
+          ? `Question archived safely. Preserved in ${referencingAssessments.length} assessment(s) for historical integrity.`
+          : 'Question successfully archived.',
+      referencedAssessments: referencingAssessments.map((a) => ({
+        id: a.id,
+        title: a.title,
+      })),
+    };
+  }
+
+  async scanDuplicates() {
+    const questions = await this.questionRepository.find({
+      where: { status: Not('archived') },
+      select: {
+        id: true,
+        title: true,
+        question: true,
+        topic: true,
+        difficulty: true,
+        marks: true,
+        questionType: true,
+        fingerprint: true,
+        createdAt: true,
+      },
+    });
+
+    const groups: Map<string, any[]> = new Map();
+    for (const q of questions) {
+      const fp = q.fingerprint || computeQuestionFingerprint(q.question, q.topic);
+      if (!groups.has(fp)) groups.set(fp, []);
+      groups.get(fp)!.push(q);
+    }
+
+    const allAssessments = await this.assessmentRepository.find({
+      select: { id: true, title: true, questions: true },
+    });
+
+    const duplicateGroups: Array<{
+      fingerprint: string;
+      primaryQuestion: any;
+      duplicateQuestions: any[];
+      totalCount: number;
+      assessmentsReferenced: Array<{ assessmentId: string; title: string }>;
+    }> = [];
+
+    for (const [fp, list] of groups.entries()) {
+      if (list.length > 1) {
+        list.sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+        const primary = list[0];
+        const duplicates = list.slice(1);
+        const allIds = new Set(list.map((q) => q.id));
+
+        const referenced = allAssessments
+          .filter(
+            (a) => Array.isArray(a.questions) && a.questions.some((qId) => allIds.has(qId)),
+          )
+          .map((a) => ({ assessmentId: a.id, title: a.title }));
+
+        duplicateGroups.push({
+          fingerprint: fp,
+          primaryQuestion: primary,
+          duplicateQuestions: duplicates,
+          totalCount: list.length,
+          assessmentsReferenced: referenced,
+        });
+      }
+    }
+
+    return {
+      success: true,
+      totalDuplicates: duplicateGroups.reduce(
+        (acc, g) => acc + g.duplicateQuestions.length,
+        0,
+      ),
+      totalGroups: duplicateGroups.length,
+      groups: duplicateGroups,
+    };
+  }
+
+  async resolveDuplicates(
+    primaryQuestionId: string,
+    duplicateQuestionIds: string[],
+    action: 'archive' | 'merge' = 'archive',
+    adminUser: any,
+  ) {
+    if (!duplicateQuestionIds || duplicateQuestionIds.length === 0) {
+      throw new BadRequestException('No duplicate question IDs provided');
+    }
+
+    const primary = await this.questionRepository.findOne({
+      where: { id: primaryQuestionId },
+    });
+    if (!primary) throw new NotFoundException('Primary question not found');
+
+    const duplicates = await this.questionRepository.find({
+      where: { id: In(duplicateQuestionIds) },
+    });
+
+    let updatedAssessmentsCount = 0;
+    if (action === 'merge') {
+      const assessments = await this.assessmentRepository.find();
+      for (const assessment of assessments) {
+        if (Array.isArray(assessment.questions)) {
+          let hasChange = false;
+          const newQuestions = assessment.questions.map((qId) => {
+            if (duplicateQuestionIds.includes(qId)) {
+              hasChange = true;
+              return primaryQuestionId;
+            }
+            return qId;
+          });
+          if (hasChange) {
+            assessment.questions = [...new Set(newQuestions)];
+            await this.assessmentRepository.save(assessment);
+            updatedAssessmentsCount++;
+          }
+        }
+      }
+    }
+
+    for (const dup of duplicates) {
+      dup.status = 'archived';
+      await this.questionRepository.save(dup);
+    }
+
+    await this.auditLogRepository.save(
+      this.auditLogRepository.create({
+        actorId: adminUser?.id || adminUser?._id,
+        actorEmail: adminUser?.email,
+        action: 'RESOLVE_DUPLICATE_QUESTIONS',
+        target: primaryQuestionId,
+        targetType: 'Question',
+        metadata: {
+          action,
+          duplicateCount: duplicates.length,
+          updatedAssessmentsCount,
+        },
+      }),
+    );
+
+    return {
+      success: true,
+      message: `Successfully resolved ${duplicates.length} duplicate questions via ${action}.`,
+      archivedCount: duplicates.length,
+      updatedAssessmentsCount,
+    };
   }
 
   async review(
@@ -792,16 +969,30 @@ export class QuestionsService {
 
     for (let i = 0; i < rawRows.length; i++) {
       const row = rawRows[i];
-      const question = findField(row, [
-        'question',
-        'question_text',
-        'question_statement',
-        'problem_statement',
-        'problem',
-        'title',
+      const questionId = findField(row, [
+        'question_id',
+        'questionid',
+        'qid',
+        'id',
       ]);
+      const title = findField(row, ['title', 'problem_title', 'name']);
+      const slug = findField(row, ['slug', 'problem_slug']);
+      const problemStatement = findField(row, [
+        'problem_statement',
+        'problemstatement',
+        'question_statement',
+        'question_text',
+        'statement',
+        'description',
+      ]);
+      const genericQuestion = findField(row, [
+        'question',
+        'problem',
+      ]);
+      const question = problemStatement || genericQuestion || title;
+
       const rawQuestionType =
-        findField(row, ['question_type', 'type', 'qtype']) || 'single_choice';
+        findField(row, ['question_type', 'questiontype', 'type', 'qtype']) || 'single_choice';
       const topic =
         findField(row, ['topic', 'subject', 'category']) || 'General';
       const subtopic = findField(row, ['subtopic', 'sub_topic', 'chapter']);
@@ -815,6 +1006,7 @@ export class QuestionsService {
       const rawNeg = findField(row, [
         'negative_marks',
         'negative_mark',
+        'negativemarks',
         'negative',
         'penalty',
       ]);
@@ -867,6 +1059,7 @@ export class QuestionsService {
         'explanation',
         'solution',
         'rationale',
+        'sample_explanation',
       ]);
       const codeSnippet = findField(row, [
         'code_snippet',
@@ -875,7 +1068,13 @@ export class QuestionsService {
         'starter_code',
         'startercode',
       ]);
-      const language = findField(row, ['language', 'lang']) || 'general';
+      const rawLanguage = findField(row, ['language', 'lang']) || 'general';
+      const language = ['na', 'n/a', 'none', 'all', ''].includes(
+        rawLanguage.toLowerCase().trim(),
+      )
+        ? 'general'
+        : rawLanguage;
+
       const rawTags = findField(row, ['tags', 'tag']);
       const tags = rawTags
         ? rawTags
@@ -884,37 +1083,163 @@ export class QuestionsService {
             .filter(Boolean)
         : [];
 
-      // Algorithmic / Coding specific columns
+      // Algorithmic / Structured Coding fields
       const constraints = findField(row, [
         'constraints',
         'constraint',
         'limits',
       ]);
+      const inputFormat = findField(row, ['input_format', 'inputformat']);
+      const outputFormat = findField(row, ['output_format', 'outputformat']);
+      const sampleInput = findField(row, ['sample_input', 'sampleinput', 'example_input']);
+      const sampleOutput = findField(row, ['sample_output', 'sampleoutput', 'example_output']);
+      const rawHints = findField(row, ['hints', 'hint']);
+      const hints = rawHints
+        ? rawHints
+            .split(/[\n|;]/)
+            .map((h: string) => h.trim())
+            .filter(Boolean)
+        : [];
+      const approach = findField(row, ['approach', 'intuition', 'strategy']);
+      const expectedTimeComplexity = findField(row, [
+        'expected_time_complexity',
+        'expectedtimecomplexity',
+        'time_complexity',
+      ]);
+      const expectedSpaceComplexity = findField(row, [
+        'expected_space_complexity',
+        'expectedspacecomplexity',
+        'space_complexity',
+      ]);
+
+      // Starter code for various languages
+      const starterCode: Array<{ language: string; code: string }> = [];
+      const starterC = findField(row, ['starter_code_c', 'startercode_c', 'starter_c']);
+      if (starterC) starterCode.push({ language: 'c', code: starterC });
+      const starterCpp = findField(row, ['starter_code_cpp', 'startercode_cpp', 'starter_cpp', 'starter_code_c++']);
+      if (starterCpp) starterCode.push({ language: 'cpp', code: starterCpp });
+      const starterJava = findField(row, ['starter_code_java', 'startercode_java', 'starter_java']);
+      if (starterJava) starterCode.push({ language: 'java', code: starterJava });
+      const starterPython = findField(row, ['starter_code_python', 'startercode_python', 'starter_python', 'starter_code_py']);
+      if (starterPython) starterCode.push({ language: 'python', code: starterPython });
+      const starterJs = findField(row, [
+        'starter_code_javascript',
+        'starter_code_js',
+        'startercode_javascript',
+        'starter_javascript',
+        'starter_js',
+      ]);
+      if (starterJs) starterCode.push({ language: 'javascript', code: starterJs });
+      const starterTs = findField(row, ['starter_code_typescript', 'starter_code_ts', 'startercode_typescript', 'starter_ts']);
+      if (starterTs) starterCode.push({ language: 'typescript', code: starterTs });
+      const starterGo = findField(row, ['starter_code_go', 'startercode_go', 'starter_go', 'starter_code_golang']);
+      if (starterGo) starterCode.push({ language: 'go', code: starterGo });
+      const starterRust = findField(row, ['starter_code_rust', 'startercode_rust', 'starter_rust', 'starter_code_rs']);
+      if (starterRust) starterCode.push({ language: 'rust', code: starterRust });
+      if (codeSnippet && starterCode.length === 0) {
+        starterCode.push({ language: language !== 'general' ? language : 'python', code: codeSnippet });
+      }
+
+      // Solution code for various languages
+      const referenceSolutions: Array<{ language: string; sourceCode: string }> = [];
+      const solC = findField(row, ['solution_code_c', 'solutioncode_c', 'solution_c']);
+      if (solC) referenceSolutions.push({ language: 'c', sourceCode: solC });
+      const solCpp = findField(row, ['solution_code_cpp', 'solutioncode_cpp', 'solution_cpp', 'solution_code_c++']);
+      if (solCpp) referenceSolutions.push({ language: 'cpp', sourceCode: solCpp });
+      const solJava = findField(row, ['solution_code_java', 'solutioncode_java', 'solution_java']);
+      if (solJava) referenceSolutions.push({ language: 'java', sourceCode: solJava });
+      const solPython = findField(row, ['solution_code_python', 'solutioncode_python', 'solution_python', 'solution_code_py']);
+      if (solPython) referenceSolutions.push({ language: 'python', sourceCode: solPython });
+      const solJs = findField(row, [
+        'solution_code_javascript',
+        'solution_code_js',
+        'solutioncode_javascript',
+        'solution_javascript',
+        'solution_js',
+      ]);
+      if (solJs) referenceSolutions.push({ language: 'javascript', sourceCode: solJs });
+      const solGo = findField(row, ['solution_code_go', 'solutioncode_go', 'solution_go', 'solution_code_golang']);
+      if (solGo) referenceSolutions.push({ language: 'go', sourceCode: solGo });
+      const solRust = findField(row, ['solution_code_rust', 'solutioncode_rust', 'solution_rust', 'solution_code_rs']);
+      if (solRust) referenceSolutions.push({ language: 'rust', sourceCode: solRust });
+
+      // Supported languages
+      const rawSupported = findField(row, ['supported_languages', 'supportedlanguages', 'languages']);
+      const supportedLanguages = rawSupported
+        ? rawSupported.split(/[,|]/).map((l: string) => l.trim()).filter(Boolean)
+        : [
+            ...new Set([
+              ...starterCode.map((s) => s.language),
+              ...referenceSolutions.map((s) => s.language),
+            ]),
+          ];
+
+      // Time & Memory Limits
       const timeLimitRaw = findField(row, [
+        'time_limit_ms',
+        'timelimitms',
         'time_limit',
         'timelimit',
-        'time_limit_ms',
       ]);
       const timeLimit =
         timeLimitRaw && !isNaN(Number(timeLimitRaw))
           ? Number(timeLimitRaw)
           : 2000;
       const memoryLimitRaw = findField(row, [
+        'memory_limit_mb',
+        'memorylimitmb',
         'memory_limit',
         'memorylimit',
-        'memory_limit_mb',
       ]);
       const memoryLimit =
         memoryLimitRaw && !isNaN(Number(memoryLimitRaw))
           ? Number(memoryLimitRaw)
           : 256;
 
-      // Extract test cases
+      // Execution & Function specifics
+      const executionMode =
+        findField(row, ['execution_mode', 'executionmode', 'mode']) || 'standard';
+      const entryPoint = findField(row, ['entry_point', 'entrypoint']) || 'main';
+      const functionName = findField(row, ['function_name', 'functionname', 'fn_name']);
+      const returnType = findField(row, ['return_type', 'returntype']);
+      const inputType = findField(row, ['input_type', 'inputtype']);
+      const outputType = findField(row, ['output_type', 'outputtype']);
+
+      const rawAllowCustom = findField(row, ['allow_custom_input', 'allowcustominput']);
+      const allowCustomInput =
+        rawAllowCustom !== ''
+          ? ['true', '1', 'yes'].includes(rawAllowCustom.toLowerCase().trim())
+          : true;
+
+      const compareMode =
+        findField(row, ['compare_mode', 'comparemode']) || 'exact';
+
+      const rawPartialScoring = findField(row, ['partial_scoring', 'partialscoring']);
+      const partialScoring =
+        rawPartialScoring !== ''
+          ? ['true', '1', 'yes'].includes(rawPartialScoring.toLowerCase().trim())
+          : false;
+
+      const rawIsActive = findField(row, ['is_active', 'isactive', 'active', 'status']);
+      const isActive =
+        rawIsActive !== ''
+          ? ['true', '1', 'yes', 'active', 'approved'].includes(
+              rawIsActive.toLowerCase().trim(),
+            )
+          : true;
+
+      const createdByAuthor = findField(row, ['created_by', 'createdby', 'author']);
+      const version = findField(row, ['version', 'ver']) || '1.0';
+
+      // Extract test cases (1 to 5 + support up to 10)
       const testCases: Array<{
+        id: string;
         input: string;
         output: string;
+        expectedOutput?: string;
         isHidden?: boolean;
         explanation?: string;
+        weight?: number;
       }> = [];
       for (let tcIdx = 1; tcIdx <= 10; tcIdx++) {
         const inp = findField(row, [
@@ -929,14 +1254,54 @@ export class QuestionsService {
           `output_${tcIdx}`,
           `out_${tcIdx}`,
         ]);
+        const vis = findField(row, [
+          `test_visibility_${tcIdx}`,
+          `testvisibility${tcIdx}`,
+          `visibility_${tcIdx}`,
+          `test_visibility${tcIdx}`,
+        ]);
+
         if (inp || out) {
+          let isHidden = tcIdx > 2;
+          if (vis) {
+            const v = vis.toLowerCase().trim();
+            if (['hidden', 'private', 'false', '0', 'no'].includes(v)) {
+              isHidden = true;
+            } else if (['sample', 'public', 'visible', 'true', '1', 'yes'].includes(v)) {
+              isHidden = false;
+            }
+          }
           testCases.push({
+            id: String(tcIdx),
             input: inp,
             output: out,
-            isHidden: tcIdx > 2,
+            expectedOutput: out,
+            isHidden,
+            weight: 1,
           });
         }
       }
+
+      // Sample Input and Output (Examples)
+      const examples: Array<{ input: string; output: string; explanation?: string }> = [];
+      if (sampleInput || sampleOutput) {
+        examples.push({
+          input: sampleInput,
+          output: sampleOutput,
+          explanation: explanation || undefined,
+        });
+        if (testCases.length === 0 && sampleOutput) {
+          testCases.push({
+            id: '1',
+            input: sampleInput,
+            output: sampleOutput,
+            expectedOutput: sampleOutput,
+            isHidden: false,
+            weight: 1,
+          });
+        }
+      }
+
       let testCaseJsonError = false;
       const rawTestCasesJson = findField(row, [
         'test_cases',
@@ -975,7 +1340,15 @@ export class QuestionsService {
         dsa: 'coding',
       };
       const mappedType = TYPE_MAP[typeKey];
-      const isCoding = mappedType === 'coding' || testCases.length > 0;
+      const isCoding =
+        mappedType === 'coding' ||
+        testCases.length > 0 ||
+        starterCode.length > 0 ||
+        referenceSolutions.length > 0 ||
+        supportedLanguages.length > 0 ||
+        !!functionName ||
+        !!inputFormat ||
+        !!outputFormat;
       const unknownType = !isCoding && !mappedType;
 
       // True/False is stored as a two-option single choice question
@@ -988,6 +1361,10 @@ export class QuestionsService {
 
       parsedRows.push({
         rowNumber: i + 2,
+        questionId,
+        title: title || (question ? question.slice(0, 100) : 'Untitled Question'),
+        slug,
+        problemStatement: problemStatement || question,
         question,
         questionType,
         unknownType,
@@ -1010,28 +1387,55 @@ export class QuestionsService {
         correctAnswerRaw,
         explanation,
         codeSnippet,
+        starterCode,
+        referenceSolutions,
+        supportedLanguages,
+        examples,
         language,
         tags,
         constraints,
+        inputFormat,
+        outputFormat,
+        hints,
+        approach,
+        expectedTimeComplexity,
+        expectedSpaceComplexity,
         timeLimit,
         memoryLimit,
+        executionMode,
+        entryPoint,
+        functionName,
+        returnType,
+        inputType,
+        outputType,
+        allowCustomInput,
+        compareMode,
+        partialScoring,
+        isActive,
+        createdByAuthor,
+        version,
         testCases,
         isCoding,
       });
     }
 
     const allFileQuestions = parsedRows.map((r) => r.question).filter(Boolean);
+    const allFileTitles = parsedRows.map((r) => r.title).filter(Boolean);
     const existingDbQuestions = await this.questionRepository.find({
-      where: {
-        question: In(allFileQuestions),
-      },
-      select: { question: true, topic: true },
+      where: [
+        { question: In(allFileQuestions) },
+        ...(allFileTitles.length > 0 ? [{ title: In(allFileTitles) }] : []),
+      ],
+      select: { question: true, title: true, topic: true },
     });
 
     const dbQuestionMap = new Set(
-      existingDbQuestions.map(
-        (q) => `${q.topic.toLowerCase()}:::${q.question.toLowerCase().trim()}`,
-      ),
+      existingDbQuestions.flatMap((q) => [
+        `${q.topic.toLowerCase()}:::${q.question.toLowerCase().trim()}`,
+        ...(q.title
+          ? [`${q.topic.toLowerCase()}:::${q.title.toLowerCase().trim()}`]
+          : []),
+      ]),
     );
 
     const errors: { row: number; question?: string; error: string }[] = [];
@@ -1166,6 +1570,10 @@ export class QuestionsService {
       } else {
         validRows.push({
           rowNumber: row.rowNumber,
+          questionId: row.questionId,
+          title: row.title,
+          slug: row.slug,
+          problemStatement: row.problemStatement,
           question: row.question,
           questionType: row.questionType,
           topic: row.topic,
@@ -1176,14 +1584,36 @@ export class QuestionsService {
           options: isChoice ? formattedOptions : undefined,
           explanation: row.explanation || undefined,
           codeSnippet: row.codeSnippet || undefined,
+          starterCode: row.starterCode,
+          referenceSolutions: row.referenceSolutions,
+          supportedLanguages: row.supportedLanguages,
+          examples: row.examples,
           language: row.language !== 'general' ? row.language : undefined,
           tags: row.tags,
           constraints: row.constraints,
+          inputFormat: row.inputFormat,
+          outputFormat: row.outputFormat,
+          hints: row.hints,
+          approach: row.approach,
+          expectedTimeComplexity: row.expectedTimeComplexity,
+          expectedSpaceComplexity: row.expectedSpaceComplexity,
           timeLimit: row.timeLimit,
           memoryLimit: row.memoryLimit,
+          executionMode: row.executionMode,
+          entryPoint: row.entryPoint,
+          functionName: row.functionName,
+          returnType: row.returnType,
+          inputType: row.inputType,
+          outputType: row.outputType,
+          allowCustomInput: row.allowCustomInput,
+          compareMode: row.compareMode,
+          partialScoring: row.partialScoring,
+          isActive: row.isActive,
+          createdByAuthor: row.createdByAuthor,
+          version: row.version,
           testCases: row.testCases,
           isUpdate: row.isUpdate,
-          status: 'approved',
+          status: row.isActive === false ? 'draft' : 'approved',
         });
       }
     }
@@ -1226,6 +1656,20 @@ export class QuestionsService {
       }
 
       const isCodingRow = r.questionType === 'coding';
+      const cleanSlug = r.slug
+        ? r.slug
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9_-]/g, '-')
+        : r.title
+          ? r.title
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/(^-|-$)+/g, '') +
+            '-' +
+            Math.random().toString(36).substring(2, 7)
+          : undefined;
+
       const correctIndices = Array.isArray(r.options)
         ? r.options
             .map((o: any, idx: number) =>
@@ -1245,13 +1689,17 @@ export class QuestionsService {
       const constraintList = Array.isArray(r.constraints)
         ? r.constraints
         : String(r.constraints || '')
-            .split('\n')
+            .split(/[\n;]/)
             .map((c: string) => c.trim())
             .filter(Boolean);
 
       return {
+        questionId: r.questionId,
+        title:
+          r.title || (r.question ? r.question.slice(0, 100) : 'Untitled Question'),
+        slug: cleanSlug,
         question: r.question,
-        questionType: r.questionType || 'single_choice',
+        questionType: r.questionType || (isCodingRow ? 'coding' : 'single_choice'),
         topic: r.topic,
         subtopic: r.subtopic || '',
         difficulty: r.difficulty || 'medium',
@@ -1261,25 +1709,64 @@ export class QuestionsService {
         correctAnswer: correctAnswerIndex,
         correctAnswers: correctIndices,
         explanation: r.explanation || '',
-        codeSnippet: r.codeSnippet || '',
+        codeSnippet:
+          r.codeSnippet ||
+          (r.starterCode && r.starterCode[0] ? r.starterCode[0].code : ''),
         language: r.language || 'general',
         tags: r.tags || [],
-        status: 'approved',
+        status: r.isActive === false ? 'draft' : 'approved',
         createdBy_id: adminUser?.id || adminUser?._id,
         approvedBy_id: adminUser?.id || adminUser?._id,
         approvedAt: new Date(),
+        hints: r.hints || [],
+        constraints: constraintList,
+        inputFormat: r.inputFormat || undefined,
+        outputFormat: r.outputFormat || undefined,
         ...(isCodingRow
           ? {
-              problemStatement: r.question,
+              problemStatement: r.problemStatement || r.question,
+              description: r.problemStatement || r.question,
               constraints: constraintList,
+              inputFormat: r.inputFormat || undefined,
+              outputFormat: r.outputFormat || undefined,
               timeLimit: r.timeLimit || 2000,
               memoryLimit: r.memoryLimit || 256,
               testCases: normalizedTestCases,
+              starterCode: r.starterCode || [],
+              referenceSolutions: r.referenceSolutions || [],
+              supportedLanguages:
+                r.supportedLanguages && r.supportedLanguages.length > 0
+                  ? r.supportedLanguages
+                  : ['c', 'cpp', 'java', 'python', 'javascript', 'go', 'rust'],
+              examples: r.examples || [],
+              hints: r.hints || [],
             }
           : {}),
         metadata: {
           importedVia: 'bulk_csv',
           originalRow: r.rowNumber,
+          questionId: r.questionId,
+          title: r.title,
+          slug: r.slug,
+          approach: r.approach,
+          expectedTimeComplexity: r.expectedTimeComplexity,
+          expectedSpaceComplexity: r.expectedSpaceComplexity,
+          executionMode: r.executionMode,
+          entryPoint: r.entryPoint,
+          functionName: r.functionName,
+          returnType: r.returnType,
+          inputType: r.inputType,
+          outputType: r.outputType,
+          allowCustomInput: r.allowCustomInput,
+          compareMode: r.compareMode,
+          partialScoring: r.partialScoring,
+          isActive: r.isActive,
+          createdByAuthor: r.createdByAuthor,
+          version: r.version,
+          starterCode: r.starterCode,
+          referenceSolutions: r.referenceSolutions,
+          supportedLanguages: r.supportedLanguages,
+          examples: r.examples,
         },
       };
     });
@@ -1288,15 +1775,52 @@ export class QuestionsService {
     let totalModified = 0;
 
     for (const doc of docs) {
-      const existing = await this.questionRepository.findOne({
-        where: { question: doc.question, topic: doc.topic }
-      });
+      let existing: QuestionEntity | null = null;
+      if (doc.questionId) {
+        const isUuid =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            doc.questionId,
+          );
+        if (isUuid) {
+          existing = await this.questionRepository.findOne({
+            where: { id: doc.questionId },
+          });
+        }
+      }
+      if (!existing && doc.slug) {
+        existing = await this.questionRepository.findOne({
+          where: { slug: doc.slug },
+        });
+      }
+      if (!existing) {
+        existing = await this.questionRepository.findOne({
+          where: doc.title
+            ? [
+                { question: doc.question, topic: doc.topic },
+                { title: doc.title, topic: doc.topic },
+              ]
+            : [{ question: doc.question, topic: doc.topic }],
+        });
+      }
+
+      const { questionId, ...savePayload } = doc;
       if (existing) {
-        Object.assign(existing, doc);
+        if (existing.slug && !doc.slug) {
+          savePayload.slug = existing.slug;
+        }
+        Object.assign(existing, savePayload);
         await this.questionRepository.save(existing);
         totalModified++;
       } else {
-        const newDoc = this.questionRepository.create(doc as any);
+        const newDoc = this.questionRepository.create({
+          ...savePayload,
+          ...(questionId &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            questionId,
+          )
+            ? { id: questionId }
+            : {}),
+        } as any);
         await this.questionRepository.save(newDoc);
         totalUpserted++;
       }

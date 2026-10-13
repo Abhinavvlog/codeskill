@@ -84,6 +84,8 @@ export default function TakeAssessmentPage({
       string,
       {
         selectedAnswer: number;
+        selectedAnswers?: number[];
+        answerText?: string;
         code?: string;
         language?: string;
         testCasesPassed?: number;
@@ -149,6 +151,8 @@ export default function TakeAssessmentPage({
         return {
           questionId: q._id,
           selectedAnswer: r ? r.selectedAnswer : -1,
+          selectedAnswers: r?.selectedAnswers || (r?.selectedAnswer !== undefined && r.selectedAnswer >= 0 ? [r.selectedAnswer] : []),
+          answerText: r?.answerText || "",
           code: r?.code || "",
           language: r?.language || "python",
           testCasesPassed: r?.testCasesPassed || 0,
@@ -200,6 +204,8 @@ export default function TakeAssessmentPage({
           string,
           {
             selectedAnswer: number;
+            selectedAnswers?: number[];
+            answerText?: string;
             code?: string;
             language?: string;
             testCasesPassed?: number;
@@ -211,13 +217,15 @@ export default function TakeAssessmentPage({
           if (r.questionId) {
             initialResponses[r.questionId.toString()] = {
               selectedAnswer: r.selectedAnswer ?? -1,
+              selectedAnswers: r.selectedAnswers || (r.selectedAnswer !== undefined && r.selectedAnswer >= 0 ? [r.selectedAnswer] : []),
+              answerText: r.answerText || "",
               code: r.code || "",
               language: r.language || "python",
               testCasesPassed: r.testCasesPassed || 0,
               totalTestCases: r.totalTestCases || 0,
               status:
                 r.status ||
-                (r.selectedAnswer >= 0 || (r.code && r.code.trim().length > 0)
+                (r.selectedAnswer >= 0 || (r.selectedAnswers && r.selectedAnswers.length > 0) || (r.answerText && r.answerText.trim().length > 0) || (r.code && r.code.trim().length > 0)
                   ? "answered"
                   : "unvisited"),
             };
@@ -257,6 +265,8 @@ export default function TakeAssessmentPage({
         return {
           questionId: q._id,
           selectedAnswer: r ? r.selectedAnswer : -1,
+          selectedAnswers: r?.selectedAnswers || (r?.selectedAnswer !== undefined && r.selectedAnswer >= 0 ? [r.selectedAnswer] : []),
+          answerText: r?.answerText || "",
           code: r?.code || "",
           language: r?.language || "python",
           testCasesPassed: r?.testCasesPassed || 0,
@@ -362,14 +372,49 @@ export default function TakeAssessmentPage({
   const currentQ = questions[currentIndex];
   const currentResponse = currentQ ? responses[currentQ._id] : null;
   const selectedAnswer = currentResponse ? currentResponse.selectedAnswer : -1;
+  const selectedAnswers = currentResponse?.selectedAnswers || (selectedAnswer >= 0 ? [selectedAnswer] : []);
+  const answerText = currentResponse?.answerText || "";
 
   const handleSelectOption = (optionIndex: number) => {
     if (!currentQ) return;
     setResponses((prev) => ({
       ...prev,
       [currentQ._id]: {
+        ...prev[currentQ._id],
         selectedAnswer: optionIndex,
+        selectedAnswers: [optionIndex],
         status: "answered",
+      },
+    }));
+  };
+
+  const handleToggleMultiOption = (optionIndex: number) => {
+    if (!currentQ) return;
+    const currentList = currentResponse?.selectedAnswers || (selectedAnswer >= 0 ? [selectedAnswer] : []);
+    const exists = currentList.includes(optionIndex);
+    const updated = exists
+      ? currentList.filter((idx: number) => idx !== optionIndex)
+      : [...currentList, optionIndex].sort((a, b) => a - b);
+    setResponses((prev) => ({
+      ...prev,
+      [currentQ._id]: {
+        ...prev[currentQ._id],
+        selectedAnswer: updated.length > 0 ? updated[0] : -1,
+        selectedAnswers: updated,
+        status: updated.length > 0 ? "answered" : "skipped",
+      },
+    }));
+  };
+
+  const handleAnswerTextChange = (val: string) => {
+    if (!currentQ) return;
+    setResponses((prev) => ({
+      ...prev,
+      [currentQ._id]: {
+        ...prev[currentQ._id],
+        selectedAnswer: -1,
+        answerText: val,
+        status: val.trim().length > 0 ? "answered" : "skipped",
       },
     }));
   };
@@ -615,10 +660,14 @@ export default function TakeAssessmentPage({
 
       {/* Main Workspace Layout */}
       {(() => {
+        const isCodeOutputQuestion = currentQ.questionType === "code_output";
         const isCodingQuestion =
-          currentQ.questionType === "coding" ||
-          currentQ.questionType === "algorithmic" ||
-          (!currentQ.options?.length && (!!currentQ.starterCode || !!currentQ.codeSnippet));
+          (currentQ.questionType === "coding" ||
+            currentQ.questionType === "algorithmic" ||
+            currentQ.questionType === "dsa") &&
+          !isCodeOutputQuestion;
+        const isMultiChoiceQuestion =
+          currentQ.questionType === "multiple_choice";
 
         return (
           <div
@@ -687,7 +736,11 @@ export default function TakeAssessmentPage({
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-4">
                     <div className="flex items-center gap-2">
                       <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase bg-primary/10 text-primary border border-primary/20">
-                        {currentQ.questionType === "multiple_choice" ? "Multiple Choice" : "Single Choice"}
+                        {isCodeOutputQuestion
+                          ? "Output Prediction"
+                          : isMultiChoiceQuestion
+                          ? "Multiple Choice (Select All That Apply)"
+                          : "Single Choice"}
                       </span>
                       <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-muted text-muted-foreground border border-border capitalize">
                         {currentQ.difficulty}
@@ -725,46 +778,67 @@ export default function TakeAssessmentPage({
                     )}
                   </div>
 
-                  {/* Options Selection (4 Cards) */}
-                  <div className="space-y-3 pt-2">
-                    {(currentQ.options ?? []).map((optionText, optIndex) => {
-                      const isSelected = selectedAnswer === optIndex;
-                      const letter = String.fromCharCode(65 + optIndex); // A, B, C, D
+                  {/* Interactive Input: Code Output Textarea or MCQ Options */}
+                  {isCodeOutputQuestion ? (
+                    <div className="space-y-2 pt-2">
+                      <label className="text-xs font-semibold text-foreground">
+                        Your Predicted Output:
+                      </label>
+                      <textarea
+                        value={answerText}
+                        onChange={(e) => handleAnswerTextChange(e.target.value)}
+                        placeholder="Type the exact expected program output here..."
+                        rows={4}
+                        className="w-full p-3.5 rounded-2xl border border-border bg-[#0d0d10] font-mono text-xs text-emerald-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-3 pt-2">
+                      {(currentQ.options ?? []).map((optionText, optIndex) => {
+                        const isSelected = isMultiChoiceQuestion
+                          ? selectedAnswers.includes(optIndex)
+                          : selectedAnswer === optIndex;
+                        const letter = String.fromCharCode(65 + optIndex); // A, B, C, D
 
-                      return (
-                        <button
-                          key={optIndex}
-                          type="button"
-                          onClick={() => handleSelectOption(optIndex)}
-                          className={`w-full text-left p-4 sm:p-4 rounded-2xl border transition-all flex items-start gap-3.5 group relative ${
-                            isSelected
-                              ? "border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(37,99,235,0.25)]"
-                              : "border-border bg-card hover:bg-muted/40 hover:border-muted-foreground/30"
-                          }`}
-                        >
-                          {/* Option Radio Letter Pill */}
-                          <div
-                            className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                        return (
+                          <button
+                            key={optIndex}
+                            type="button"
+                            onClick={() =>
+                              isMultiChoiceQuestion
+                                ? handleToggleMultiOption(optIndex)
+                                : handleSelectOption(optIndex)
+                            }
+                            className={`w-full text-left p-4 sm:p-4 rounded-2xl border transition-all flex items-start gap-3.5 group relative ${
                               isSelected
-                                ? "bg-primary text-primary-foreground shadow-sm"
-                                : "bg-muted text-muted-foreground border border-border group-hover:border-primary/50 group-hover:text-foreground"
+                                ? "border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(37,99,235,0.25)]"
+                                : "border-border bg-card hover:bg-muted/40 hover:border-muted-foreground/30"
                             }`}
                           >
-                            {letter}
-                          </div>
+                            {/* Option Radio Letter Pill */}
+                            <div
+                              className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                                isSelected
+                                  ? "bg-primary text-primary-foreground shadow-sm"
+                                  : "bg-muted text-muted-foreground border border-border group-hover:border-primary/50 group-hover:text-foreground"
+                              }`}
+                            >
+                              {letter}
+                            </div>
 
-                          <div className="flex-1 text-xs sm:text-sm font-medium text-foreground pt-0.5 leading-relaxed">
-                            {optionText}
-                          </div>
+                            <div className="flex-1 text-xs sm:text-sm font-medium text-foreground pt-0.5 leading-relaxed">
+                              {optionText}
+                            </div>
 
-                          {/* Checkmark when chosen */}
-                          {isSelected && (
-                            <CheckCircle2 className="w-5 h-5 text-primary shrink-0 self-center" />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                            {/* Checkmark when chosen */}
+                            {isSelected && (
+                              <CheckCircle2 className="w-5 h-5 text-primary shrink-0 self-center" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {/* Keyboard shortcut hint */}
                   <div className="text-[11px] text-muted-foreground text-right hidden sm:block">

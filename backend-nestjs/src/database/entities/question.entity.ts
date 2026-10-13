@@ -175,6 +175,13 @@ export class Question {
   @Column('text', { array: true, default: '{}' })
   hints?: string[];
 
+  @Index()
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  fingerprint?: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  subjectId?: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

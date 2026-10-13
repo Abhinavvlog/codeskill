@@ -195,12 +195,12 @@ export function AdminSidebar() {
       </div>
 
       {/* Footer */}
-      <div className="p-3 border-t border-border">
+      <div className="p-3 pb-8 border-t border-border bg-card/40">
         <button 
           onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-[13px] font-medium text-muted-foreground hover:bg-muted/40 hover:text-rose-500 transition-colors"
+          className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-[13px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-800 transition-colors shadow-xs cursor-pointer"
         >
-          <LogOut className="w-4 h-4" />
+          <LogOut className="w-4 h-4 text-rose-500" />
           Log out
         </button>
       </div>

@@ -36,6 +36,10 @@ export class QuestionAnswerDto {
   @IsString()
   @IsOptional()
   language?: string;
+
+  @IsString()
+  @IsOptional()
+  answerText?: string;
   // NOTE (AUD-002): testCasesPassed, totalTestCases, isCorrect, and marksAwarded
   // are deliberately excluded. All evaluation is performed strictly server-side.
 }
