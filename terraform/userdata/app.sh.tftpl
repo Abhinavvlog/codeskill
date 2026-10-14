@@ -26,12 +26,18 @@ fi
 echo "[1/8] Installing core system packages..."
 if command -v dnf &>/dev/null; then
     dnf update -y
-    dnf install -y git curl wget jq unzip tar nginx
+    dnf install -y git curl wget jq unzip tar nginx docker
+    systemctl enable docker
+    systemctl start docker
+    usermod -aG docker "$APP_USER" || true
     systemctl enable amazon-ssm-agent || true
     systemctl start amazon-ssm-agent || true
 else
     apt-get update -y
-    apt-get install -y git curl wget jq unzip tar nginx
+    apt-get install -y git curl wget jq unzip tar nginx docker.io
+    systemctl enable docker
+    systemctl start docker
+    usermod -aG docker "$APP_USER" || true
     systemctl enable amazon-ssm-agent || true
     systemctl start amazon-ssm-agent || true
 fi

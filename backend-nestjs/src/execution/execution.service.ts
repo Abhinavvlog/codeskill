@@ -721,8 +721,17 @@ export class ExecutionService {
       Math.min(1_024, Number(opts.memoryLimit) || 256),
     );
     const cpu = Math.max(0.25, Math.min(2, Number(opts.cpuLimit) || 1));
+    const dockerCmd =
+      process.env.DOCKER_PATH ||
+      (fs.existsSync('/usr/local/bin/docker')
+        ? '/usr/local/bin/docker'
+        : fs.existsSync('/opt/homebrew/bin/docker')
+          ? '/opt/homebrew/bin/docker'
+          : fs.existsSync('/usr/bin/docker')
+            ? '/usr/bin/docker'
+            : 'docker');
     return {
-      cmd: 'docker',
+      cmd: dockerCmd,
       args: [
         'run',
         '--rm',
@@ -1015,9 +1024,24 @@ export class ExecutionService {
    * Prevents user code from accessing server secrets.
    */
   private getSafeEnv(): Record<string, string> {
+    const standardPaths = [
+      '/usr/local/bin',
+      '/opt/homebrew/bin',
+      '/usr/bin',
+      '/bin',
+      '/usr/sbin',
+      '/sbin',
+      `${process.env.HOME || ''}/.docker/bin`,
+      '/Applications/Docker.app/Contents/Resources/bin',
+    ].filter(Boolean);
+    const existingPaths = (process.env.PATH || '').split(':').filter(Boolean);
+    const combinedPath = Array.from(
+      new Set([...existingPaths, ...standardPaths]),
+    ).join(':');
+
     // Only pass PATH and essential runtime variables
     return {
-      PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin',
+      PATH: combinedPath,
       HOME: os.tmpdir(),
       LANG: 'en_US.UTF-8',
       LC_ALL: 'en_US.UTF-8',
