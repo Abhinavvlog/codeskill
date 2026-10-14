@@ -35,8 +35,8 @@ module "vpc" {
 }
 
 resource "aws_security_group" "alb" {
-  name        = "${local.name_prefix}-alb-sg"
-  vpc_id      = module.vpc.vpc_id
+  name   = "${local.name_prefix}-alb-sg"
+  vpc_id = module.vpc.vpc_id
 
   ingress {
     from_port   = 80
