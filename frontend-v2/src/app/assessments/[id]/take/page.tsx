@@ -68,6 +68,8 @@ interface ViolationEvent {
   details: string;
 }
 
+const MAX_FACE_WARNINGS = 5;
+
 export default function TakeAssessmentPage({
   params,
 }: {
@@ -99,6 +101,7 @@ export default function TakeAssessmentPage({
   const [isLoading, setIsLoading] = useState(true);
   const [loadedAssessmentId, setLoadedAssessmentId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submissionRequestedRef = useRef(false);
   const [assessmentTitle, setAssessmentTitle] = useState("Proctored Assessment");
   const [assessmentCode, setAssessmentCode] = useState("");
   const [startError, setStartError] = useState<string | null>(null);
@@ -158,7 +161,9 @@ export default function TakeAssessmentPage({
       // Temporary visual toast
       setWarningToast({
         id: Date.now(),
-        message: details,
+        message: type === "multiple_faces_detected"
+          ? `Warning ${updated.filter(event => event.type === "multiple_faces_detected").length}/${MAX_FACE_WARNINGS}: ${details} The test will end at warning ${MAX_FACE_WARNINGS}.`
+          : details,
         type: type === "tab_switch" ? "alert" : "warning",
       });
 
@@ -257,14 +262,25 @@ export default function TakeAssessmentPage({
   }, [id, router]);
 
   // Media starts only for a loaded, active session; stopping is permanent for this assessment.
-  const { videoRef, attachVideo, cameraActive, micActive, audioLevel, cameraError, stopCamera } = useAssessmentMedia(
+  const {
+    videoRef,
+    attachVideo,
+    cameraActive,
+    micActive,
+    audioLevel,
+    cameraError,
+    faceCount,
+    faceDetectionStatus,
+    stopCamera,
+  } = useAssessmentMedia(
     id, loadedAssessmentId === id && questions.length > 0 && !isLoading && !isSubmitting && timeLeftSeconds > 0, recordViolation,
   );
 
   // 3. Submit Attempt Handler
   const submitExam = useCallback(
     async (isAuto = false) => {
-      if (isSubmitting) return;
+      if (isSubmitting || submissionRequestedRef.current) return;
+      submissionRequestedRef.current = true;
       stopCamera();
       // Also release any preflight stream that was handed off but not adopted
       // by the exam media hook (for example, after a quick route transition).
@@ -299,6 +315,13 @@ export default function TakeAssessmentPage({
     },
     [id, isSubmitting, questions, startedAt, router, stopCamera]
   );
+
+  const faceWarningCount = violations.filter(event => event.type === "multiple_faces_detected").length;
+  useEffect(() => {
+    if (faceWarningCount >= MAX_FACE_WARNINGS && loadedAssessmentId === id && !isLoading) {
+      void submitExam(true);
+    }
+  }, [faceWarningCount, loadedAssessmentId, id, isLoading, submitExam]);
 
   // 4. Countdown Clock
   useEffect(() => {
@@ -563,9 +586,9 @@ export default function TakeAssessmentPage({
       onTerminate={() => submitExam(true)}
       onViolation={recordViolation}
     >
-      <div className="flex-1 bg-background text-foreground font-sans min-h-screen flex flex-col select-none relative">
+      <div className="h-dvh overflow-hidden bg-background text-foreground font-sans flex flex-col select-none relative">
       {/* Top Test Header Bar */}
-      <header className="h-16 border-b border-border bg-card px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 shadow-xs">
+      <header className="h-16 shrink-0 border-b border-border bg-card/95 backdrop-blur-xl px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 shadow-sm">
         <div className="flex items-center gap-3">
           {/* CU Official Logo */}
           <div className="w-9 h-9 rounded-xl overflow-hidden bg-muted/40 shrink-0 border border-border p-1 flex items-center justify-center">
@@ -672,13 +695,13 @@ export default function TakeAssessmentPage({
 
         return (
           <div
-            className={`flex-1 flex flex-col lg:flex-row mx-auto w-full p-3 sm:p-6 gap-4 sm:gap-6 ${
+            className={`flex-1 min-h-0 overflow-hidden flex flex-col lg:flex-row mx-auto w-full p-3 sm:p-6 gap-4 sm:gap-6 ${
               isCodingQuestion ? "max-w-[1700px]" : "max-w-7xl"
             }`}
           >
             {/* Left Column: Question Area / DSA Code Editor */}
             {isCodingQuestion ? (
-              <main className="flex-1 flex flex-col justify-between space-y-4 min-w-0">
+              <main className="assessment-scroll flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col space-y-4 min-w-0">
                 <DSAAssessmentEditor
                   question={currentQ}
                   savedResponse={responses[currentQ._id]}
@@ -731,8 +754,8 @@ export default function TakeAssessmentPage({
                 </div>
               </main>
             ) : (
-              <main className="flex-1 flex flex-col justify-between space-y-4">
-                <div className="bg-card border border-border rounded-2xl sm:rounded-3xl p-5 sm:p-8 space-y-6 shadow-sm">
+              <main className="flex-1 min-h-0 min-w-0 flex flex-col gap-4 overflow-hidden">
+                <div key={currentQ._id} role="region" aria-label="Question and answer options" tabIndex={0} className="assessment-scroll flex-1 min-h-0 overflow-y-auto overscroll-contain bg-card border border-border rounded-2xl sm:rounded-3xl p-5 sm:p-8 space-y-6 shadow-sm">
                   {/* Question Metadata Ribbon */}
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-4">
                     <div className="flex items-center gap-2">
@@ -768,7 +791,7 @@ export default function TakeAssessmentPage({
                         <div className="text-[10px] text-muted-foreground uppercase font-sans mb-2 font-bold tracking-wider">
                           {currentQ.language || "Code"}
                         </div>
-                        <pre className="overflow-x-auto whitespace-pre leading-5">
+                        <pre className="assessment-scroll max-h-[45vh] overflow-auto whitespace-pre leading-5" tabIndex={0} aria-label="Question code snippet">
                           {currentQ.codeSnippet}
                         </pre>
                       </div>
@@ -823,7 +846,7 @@ export default function TakeAssessmentPage({
                 </div>
 
                 {/* Bottom Action Ribbon */}
-                <div className="flex flex-wrap items-center justify-between gap-3 bg-card border border-border p-3 sm:p-4 rounded-2xl shadow-sm">
+                <div className="shrink-0 z-20 flex flex-wrap items-center justify-between gap-3 bg-card/95 backdrop-blur-xl border border-border p-3 sm:p-4 rounded-2xl shadow-lg">
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -878,7 +901,7 @@ export default function TakeAssessmentPage({
             )}
 
         {/* Right Column: Proctoring Feed & Question Palette Sidebar */}
-        <aside className="w-full lg:w-80 flex flex-col gap-4">
+        <aside className="assessment-scroll w-full lg:w-80 shrink-0 min-h-0 max-h-[35vh] lg:max-h-full overflow-y-auto overscroll-contain flex flex-col gap-4 [&>div]:shrink-0">
           
           {/* Live Proctoring Camera & Mic PIP Card */}
           <div className="bg-card border border-border rounded-2xl p-4 shadow-sm space-y-3 relative overflow-hidden">
@@ -895,6 +918,14 @@ export default function TakeAssessmentPage({
               >
                 {isPipMinimized ? "Show Feed" : "Collapse"}
               </button>
+            </div>
+
+            <div role="status" className={`rounded-xl border px-3 py-2 text-xs ${faceWarningCount > 0 ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300" : "border-border bg-muted/30 text-muted-foreground"}`}>
+              <div className="flex items-center justify-between gap-2 font-semibold">
+                <span>Multiple-face warnings</span>
+                <span className="font-mono">{faceWarningCount} / {MAX_FACE_WARNINGS}</span>
+              </div>
+              <p className="mt-1 text-[11px] leading-relaxed">Stay alone in the camera frame. Warning 5 ends and submits your test.</p>
             </div>
 
             {!isPipMinimized && (
@@ -949,6 +980,40 @@ export default function TakeAssessmentPage({
                     {audioLevel > 40 ? "Loud" : "Quiet"}
                   </span>
                 </div>
+
+                <div
+                  className={`flex items-center justify-between gap-2 p-2 border rounded-xl text-[11px] ${
+                    faceCount > 1
+                      ? "bg-rose-500/10 border-rose-500/40 text-rose-400"
+                      : "bg-muted/30 border-border text-muted-foreground"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        faceDetectionStatus === "active"
+                          ? faceCount > 1
+                            ? "bg-rose-400 animate-pulse"
+                            : "bg-emerald-400"
+                          : faceDetectionStatus === "initializing"
+                            ? "bg-amber-400 animate-pulse"
+                            : "bg-zinc-400"
+                      }`}
+                    />
+                    <span>Face Check</span>
+                  </div>
+                  <span className="font-mono text-[10px] font-semibold">
+                    {faceDetectionStatus === "active"
+                      ? faceCount > 1
+                        ? `${faceCount} faces — warning`
+                        : faceCount === 1
+                          ? "1 face detected"
+                          : "Scanning"
+                      : faceDetectionStatus === "initializing"
+                        ? "Starting"
+                        : "Unavailable"}
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -981,7 +1046,7 @@ export default function TakeAssessmentPage({
               </div>
 
               {/* Numbered Palette Buttons */}
-              <div className="grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-5 gap-2 max-h-56 sm:max-h-64 overflow-y-auto pr-1">
+              <div className="assessment-scroll grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-5 gap-2 max-h-56 sm:max-h-64 overflow-y-auto p-1">
                 {questions.map((q, idx) => {
                   const resp = responses[q._id];
                   const isCurrent = idx === currentIndex;
@@ -1001,9 +1066,11 @@ export default function TakeAssessmentPage({
                     <button
                       key={q._id}
                       type="button"
+                      aria-current={isCurrent ? "step" : undefined}
+                      aria-label={`Question ${idx + 1}${isCurrent ? ", current" : ""}${isAnswered ? ", answered" : ""}${isReview ? ", marked for review" : ""}`}
                       onClick={() => setCurrentIndex(idx)}
                       className={`h-9 rounded-xl font-mono text-xs font-bold border transition-all flex items-center justify-center relative ${btnStyle} ${
-                        isCurrent ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-background" : ""
+                        isCurrent ? "!bg-emerald-500 !text-slate-950 !border-emerald-300 shadow-md shadow-emerald-500/20 ring-2 ring-inset ring-emerald-200" : ""
                       }`}
                     >
                       {idx + 1}
