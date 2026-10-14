@@ -1,10 +1,21 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, X, Check, Filter } from "lucide-react";
+import { Search, X, Check, Filter, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 import { adminQuestionsAPI } from "@/config/api";
 import { Spinner } from "@/components/ui/spinner";
-import { useAssessmentStore, AssessmentQuestionConfig } from "../_store/useAssessmentStore";
+import { useAssessmentStore } from "../_store/useAssessmentStore";
+
+type PickerQuestion = {
+  _id: string;
+  question: string;
+  topic: string;
+  subtopic?: string;
+  difficulty?: string;
+  questionType?: string;
+  marks?: number;
+  negativeMarks?: number;
+};
 
 interface QuestionPickerProps {
   sectionId: string;
@@ -13,52 +24,102 @@ interface QuestionPickerProps {
 
 export default function QuestionPicker({ sectionId, onClose }: QuestionPickerProps) {
   const store = useAssessmentStore();
-  const [questions, setQuestions] = useState<any[]>([]);
+  const [questions, setQuestions] = useState<PickerQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [subjectFilter, setSubjectFilter] = useState("");
+  const [topicFilter, setTopicFilter] = useState("");
+  const [difficultyFilter, setDifficultyFilter] = useState("");
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [topics, setTopics] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   
   // To avoid duplicate adds, get existing ones
   const section = store.sections.find(s => s.id === sectionId);
   const existingIds = new Set(section?.questions.map(q => q.questionId) || []);
 
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedQuestions, setSelectedQuestions] = useState<Map<string, PickerQuestion>>(new Map());
 
   useEffect(() => {
+    let active = true;
+    adminQuestionsAPI.getTopics()
+      .then(({ data }) => {
+        if (!active) return;
+        const rows = data?.topics || data?.data || [];
+        const approvedSubjects: string[] = rows
+          .filter((row: { topic?: string; approved?: number }) => Number(row.approved) > 0)
+          .map((row: { topic?: string }) => row.topic)
+          .filter((topic: string | undefined): topic is string => Boolean(topic));
+        setSubjects([...new Set(approvedSubjects)].sort());
+      })
+      .catch((err) => console.error(err));
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!subjectFilter) return;
+
+    let active = true;
+    const fetchTopics = async () => {
+      try {
+        const { data } = await adminQuestionsAPI.getTopics(subjectFilter);
+        if (!active) return;
+        const rows = data?.topics || data?.data || [];
+        const availableTopics: string[] = rows
+          .map((row: string | { topic?: string }) => typeof row === "string" ? row : row.topic)
+          .filter((topic: string | undefined): topic is string => Boolean(topic));
+        setTopics([...new Set(availableTopics)].sort());
+      } catch (err) {
+        if (active) console.error(err);
+      }
+    };
+    fetchTopics();
+    return () => { active = false; };
+  }, [subjectFilter]);
+
+  useEffect(() => {
+    const controller = new AbortController();
     const fetchQ = async () => {
       setLoading(true);
       try {
         const res = await adminQuestionsAPI.getAll({
-          limit: 100,
+          page,
+          limit: 25,
           status: "approved",
           search: search || undefined,
-          questionType: typeFilter || undefined
-        });
+          questionType: typeFilter || undefined,
+          topic: subjectFilter || undefined,
+          subtopic: topicFilter || undefined,
+          difficulty: difficultyFilter || undefined,
+        }, controller.signal);
         setQuestions(res.data.questions || []);
+        setTotalPages(res.data.pagination?.totalPages || 1);
       } catch (err) {
-        console.error(err);
+        if (!controller.signal.aborted) console.error(err);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
     fetchQ();
-  }, [search, typeFilter]);
+    return () => controller.abort();
+  }, [search, typeFilter, subjectFilter, topicFilter, difficultyFilter, page]);
 
-  const toggleSelect = (q: any) => {
+  const toggleSelect = (q: PickerQuestion) => {
     if (existingIds.has(q._id)) return; // Already in section
     
-    const newSet = new Set(selectedIds);
-    if (newSet.has(q._id)) {
-      newSet.delete(q._id);
+    const newSelection = new Map(selectedQuestions);
+    if (newSelection.has(q._id)) {
+      newSelection.delete(q._id);
     } else {
-      newSet.add(q._id);
+      newSelection.set(q._id, q);
     }
-    setSelectedIds(newSet);
+    setSelectedQuestions(newSelection);
   };
 
   const handleAdd = () => {
-    selectedIds.forEach(id => {
-      const q = questions.find(x => x._id === id);
+    selectedQuestions.forEach(q => {
       if (q) {
         store.addQuestionToSection(sectionId, {
           questionId: q._id,
@@ -74,6 +135,17 @@ export default function QuestionPicker({ sectionId, onClose }: QuestionPickerPro
     });
     onClose();
   };
+
+  const clearFilters = () => {
+    setSearch("");
+    setTypeFilter("");
+    setSubjectFilter("");
+    setTopicFilter("");
+    setDifficultyFilter("");
+    setPage(1);
+  };
+
+  const hasFilters = Boolean(search || typeFilter || subjectFilter || topicFilter || difficultyFilter);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
@@ -91,20 +163,57 @@ export default function QuestionPicker({ sectionId, onClose }: QuestionPickerPro
           </button>
         </div>
 
-        <div className="p-5 border-b border-border bg-card flex gap-3 items-center">
+        <div className="p-5 border-b border-border bg-card flex flex-wrap gap-3 items-center">
           <div className="relative flex-1">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input 
               type="text"
-              placeholder="Search by title..."
+              placeholder="Search questions..."
+              aria-label="Search questions"
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
               className="w-full pl-9 pr-4 py-2 bg-muted border border-border rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
+          <select
+            aria-label="Subject"
+            value={subjectFilter}
+            onChange={e => {
+              setSubjectFilter(e.target.value);
+              setTopicFilter("");
+              setTopics([]);
+              setPage(1);
+            }}
+            className="px-4 py-2 bg-muted border border-border rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="">All Subjects</option>
+            {subjects.map(subject => <option key={subject} value={subject}>{subject}</option>)}
+          </select>
+          <select
+            aria-label="Topic"
+            value={topicFilter}
+            onChange={e => { setTopicFilter(e.target.value); setPage(1); }}
+            disabled={!subjectFilter}
+            className="px-4 py-2 bg-muted border border-border rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+          >
+            <option value="">All Topics</option>
+            {topics.map(topic => <option key={topic} value={topic}>{topic}</option>)}
+          </select>
+          <select
+            aria-label="Difficulty Level"
+            value={difficultyFilter}
+            onChange={e => { setDifficultyFilter(e.target.value); setPage(1); }}
+            className="px-4 py-2 bg-muted border border-border rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="">All Difficulties</option>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
           <select 
+            aria-label="Question type"
             value={typeFilter}
-            onChange={e => setTypeFilter(e.target.value)}
+            onChange={e => { setTypeFilter(e.target.value); setPage(1); }}
             className="px-4 py-2 bg-muted border border-border rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           >
             <option value="">All Types</option>
@@ -113,6 +222,15 @@ export default function QuestionPicker({ sectionId, onClose }: QuestionPickerPro
             <option value="CODE_OUTPUT">Code Output</option>
             <option value="DSA">DSA</option>
           </select>
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+            >
+              <RotateCcw className="w-4 h-4" />Clear filters
+            </button>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-2 bg-muted/10">
@@ -129,7 +247,7 @@ export default function QuestionPicker({ sectionId, onClose }: QuestionPickerPro
             <div className="space-y-1.5 p-3">
               {questions.map(q => {
                 const isExisting = existingIds.has(q._id);
-                const isSelected = selectedIds.has(q._id);
+                const isSelected = selectedQuestions.has(q._id);
                 return (
                   <div 
                     key={q._id}
@@ -179,15 +297,36 @@ export default function QuestionPicker({ sectionId, onClose }: QuestionPickerPro
 
         <div className="p-5 border-t border-border bg-card flex justify-between items-center">
           <span className="text-sm font-semibold text-muted-foreground">
-            {selectedIds.size} selected
+            {selectedQuestions.size} selected
           </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Previous questions page"
+              onClick={() => setPage(current => Math.max(1, current - 1))}
+              disabled={page <= 1 || loading}
+              className="p-2 rounded-lg border border-border hover:bg-muted disabled:opacity-40"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
+            <button
+              type="button"
+              aria-label="Next questions page"
+              onClick={() => setPage(current => Math.min(totalPages, current + 1))}
+              disabled={page >= totalPages || loading}
+              className="p-2 rounded-lg border border-border hover:bg-muted disabled:opacity-40"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
           <div className="flex gap-3">
             <button onClick={onClose} className="px-5 py-2.5 rounded-xl border border-border hover:bg-muted text-sm font-semibold transition-colors">
               Cancel
             </button>
             <button 
               onClick={handleAdd}
-              disabled={selectedIds.size === 0}
+              disabled={selectedQuestions.size === 0}
               className="px-6 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-semibold rounded-xl shadow-md transition-all disabled:opacity-50"
             >
               Add to Section

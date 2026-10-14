@@ -379,7 +379,7 @@ export const adminQuestionsAPI = {
   delete: (id: string) => api.delete(`/admin/questions/${id}`),
   approve: (id: string) => api.put(`/admin/questions/${id}/approve`),
   reject: (id: string, reason: string) => api.put(`/admin/questions/${id}/reject`, { reason }),
-  getTopics: () => api.get("/admin/questions/topics"),
+  getTopics: (topic?: string) => api.get("/admin/questions/topics", { params: { topic } }),
   importPreview: (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
