@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { adminAssessmentsAPI } from "@/config/api";
+import { adminAssessmentsAPI, adminUsersAPI } from "@/config/api";
 import { useAssessmentStore } from "./_store/useAssessmentStore";
 import QuestionPicker from "./_components/QuestionPicker";
 import { 
@@ -12,6 +12,71 @@ import {
 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { ToastProvider, useToast } from "../../questions/create/_components/Toast"; // Reuse toast
+
+type StudentCohort = { semester: string; section: string };
+
+function yearLabel(year: string) {
+  const suffix = Number(year) % 10 === 1 && Number(year) !== 11 ? "st"
+    : Number(year) % 10 === 2 && Number(year) !== 12 ? "nd"
+    : Number(year) % 10 === 3 && Number(year) !== 13 ? "rd" : "th";
+  return `${year}${suffix} Year`;
+}
+
+function optionLabel(label: string, value: string) {
+  if (label === "Year") return yearLabel(value);
+  if (label === "Semester") return `Semester ${value}`;
+  return value;
+}
+
+function toggleValue(values: string[], value: string) {
+  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+}
+
+function MultiSelectDropdown({
+  label,
+  placeholder,
+  options,
+  selected,
+  onChange,
+  disabled = false,
+}: {
+  label: string;
+  placeholder: string;
+  options: string[];
+  selected: string[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative space-y-1.5">
+      <label className="text-xs font-semibold">{label}</label>
+      <button
+        type="button"
+        disabled={disabled}
+        aria-expanded={open}
+        aria-label={`Choose ${label.toLowerCase()}`}
+        onClick={() => setOpen((value) => !value)}
+        className="w-full min-h-11 px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm text-left flex items-center justify-between gap-3 disabled:opacity-50 disabled:cursor-not-allowed focus:ring-1 focus:ring-primary"
+      >
+        <span className={selected.length ? "text-foreground truncate" : "text-muted-foreground truncate"}>
+          {selected.length ? selected.map((value) => optionLabel(label, value)).join(", ") : placeholder}
+        </span>
+        <span aria-hidden="true" className="text-muted-foreground">{open ? "▴" : "▾"}</span>
+      </button>
+      {open && !disabled && (
+        <div className="absolute z-30 mt-1 w-full max-h-52 overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow-lg">
+          {options.length ? options.map((option) => (
+            <label key={option} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm hover:bg-muted/60">
+              <input type="checkbox" checked={selected.includes(option)} onChange={() => onChange(option)} className="rounded text-primary focus:ring-primary" />
+              <span>{optionLabel(label, option)}</span>
+            </label>
+          )) : <p className="px-2.5 py-2 text-xs text-muted-foreground">No {label.toLowerCase()} options found in student profiles.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AssessmentBuilderWrapper() {
   return (
@@ -29,6 +94,72 @@ function AssessmentBuilder() {
   const [activePicker, setActivePicker] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [cohorts, setCohorts] = useState<StudentCohort[]>([]);
+  const [selectedYears, setSelectedYears] = useState<string[]>([]);
+  const [targetSemesters, setTargetSemesters] = useState<string[]>([]);
+  const [targetSections, setTargetSections] = useState<string[]>([]);
+  const [targetGroup, setTargetGroup] = useState<"" | "a" | "b" | "both">("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const loadCohorts = async () => {
+      try {
+        const firstPage = await adminUsersAPI.getAll("", false, 1, 100);
+        const payload = firstPage.data?.users ? firstPage.data : firstPage.data?.data || {};
+        const users = [...(payload.users || [])];
+        const pageCount = Number(payload.pages) || 1;
+        const remainingPages = await Promise.all(Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) =>
+          adminUsersAPI.getAll("", false, index + 2, 100),
+        ));
+        remainingPages.forEach((response) => {
+          const pagePayload = response.data?.users ? response.data : response.data?.data || {};
+          users.push(...(pagePayload.users || []));
+        });
+        const rows = users
+          .filter((user: any) => user.role === "student" || user.isAssessmentStudent)
+          .map((user: any) => {
+            const profile = user.studentProfile || {};
+            const semester = profile.semester == null ? "" : String(profile.semester);
+            return { semester, section: profile.section == null ? "" : String(profile.section).trim() };
+          })
+          .filter((row: StudentCohort) => /^\d+$/.test(row.semester));
+        if (active) setCohorts(rows);
+      } catch {
+        if (active) setCohorts([]);
+      }
+    };
+    void loadCohorts();
+    return () => { active = false; };
+  }, []);
+
+  const years = ["1", "2", "3", "4"];
+  const visibleSemesters = Array.from(new Set(selectedYears.flatMap((year) => {
+    const firstSemester = (Number(year) - 1) * 2 + 1;
+    return [String(firstSemester), String(firstSemester + 1)];
+  }))).sort((a, b) => Number(a) - Number(b));
+  const visibleSections = Array.from(new Set(cohorts
+    .filter((cohort) => targetSemesters.includes(cohort.semester))
+    .map((cohort) => cohort.section).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const sectionOptions = visibleSections;
+
+  const updateYears = (year: string) => {
+    setSelectedYears((current) => toggleValue(current, year));
+    setTargetSemesters([]);
+    setTargetSections([]);
+    setTargetGroup("");
+  };
+
+  const updateSemesters = (semester: string) => {
+    setTargetSemesters((current) => toggleValue(current, semester));
+    setTargetSections([]);
+    setTargetGroup("");
+  };
+
+  const updateGroup = (group: "a" | "b" | "both") => {
+    setTargetGroup(group);
+  };
 
   // Calculate totals
   const totalQuestions = store.sections.reduce((acc, sec) => acc + sec.questions.length, 0);
@@ -66,6 +197,11 @@ function AssessmentBuilder() {
         passingMarks: store.passingMarks ? Number(store.passingMarks) : Math.ceil(totalMarks * 0.4),
         category: store.category,
         allowedAttempts: store.allowedAttempts,
+        targetSemesters: targetSemesters.length ? targetSemesters : selectedYears.length ? visibleSemesters : [],
+        targetSections,
+        targetGroups: targetGroup === "both" ? ["A", "B"] : targetGroup ? [targetGroup.toUpperCase()] : [],
+        startTime: startTime ? new Date(startTime).toISOString() : undefined,
+        endTime: endTime ? new Date(endTime).toISOString() : undefined,
         negativeMarking: store.negativeMarking,
         proctoring: store.proctoring,
         instructions: store.instructions,
@@ -193,6 +329,41 @@ function AssessmentBuilder() {
               <input type="checkbox" checked={store.proctoring.detectTabSwitch} onChange={e => store.setProctoring({ detectTabSwitch: e.target.checked })} className="rounded text-primary focus:ring-primary w-4 h-4" />
               <span className="text-sm font-semibold">Detect Tab Switches</span>
             </label>
+          </div>
+        </section>
+
+        {/* Audience and availability */}
+        <section className="bg-card border border-border rounded-2xl p-6 space-y-5 shadow-sm">
+          <div>
+            <h2 className="text-base font-bold flex items-center gap-2"><Settings className="w-4 h-4 text-primary" /> Student access & timing</h2>
+            <p className="text-xs text-muted-foreground mt-1">Leave a filter empty to make the assessment available to everyone in that category.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+            <MultiSelectDropdown label="Year" placeholder="Choose student year(s)" options={years} selected={selectedYears} onChange={updateYears} />
+            <MultiSelectDropdown label="Semester" placeholder={selectedYears.length ? "Choose semester(s)" : "Choose year first"} options={visibleSemesters} selected={targetSemesters} onChange={updateSemesters} disabled={!visibleSemesters.length} />
+            <MultiSelectDropdown label="Section" placeholder={targetSemesters.length ? "Choose section(s)" : "Choose semester first"} options={sectionOptions} selected={targetSections} onChange={(section) => {
+              setTargetSections((current) => toggleValue(current, section));
+              setTargetGroup("");
+            }} disabled={!targetSemesters.length} />
+            <div className="space-y-1.5">
+              <label htmlFor="assessment-target-group" className="text-xs font-semibold">Group</label>
+              <select id="assessment-target-group" value={targetGroup} onChange={(event) => updateGroup(event.target.value as "a" | "b" | "both")} disabled={!targetSections.length} className="w-full min-h-11 px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm focus:ring-1 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed">
+                <option value="" disabled>Choose section first</option>
+                <option value="a">Group A</option>
+                <option value="b">Group B</option>
+                <option value="both">Both</option>
+              </select>
+            </div>
+            <p className="md:col-span-4 -mt-2 text-[11px] text-muted-foreground">Choose year, semester, section, then group. Section options come from matching student profiles.</p>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold">Available from</label>
+              <input type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="w-full px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm focus:ring-1 focus:ring-primary" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold">Available until</label>
+              <input type="datetime-local" value={endTime} onChange={(event) => setEndTime(event.target.value)} className="w-full px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm focus:ring-1 focus:ring-primary" />
+            </div>
           </div>
         </section>
 
