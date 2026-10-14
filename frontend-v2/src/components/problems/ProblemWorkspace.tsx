@@ -337,7 +337,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
     if (data.status === "queued" && data.jobId) {
       const deadline = Date.now() + 60_000;
       while (Date.now() < deadline) {
-        await new Promise((resolve) => window.setTimeout(resolve, 800));
+        await new Promise((resolve) => window.setTimeout(resolve, 400));
         const jobResponse = await runAPI.getJob(data.jobId);
         data = jobResponse.data;
         if (!["waiting", "active", "delayed", "prioritized", "queued"].includes(data.status)) {

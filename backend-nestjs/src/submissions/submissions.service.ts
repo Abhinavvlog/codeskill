@@ -174,13 +174,7 @@ export class SubmissionsService {
         'Unable to queue this submission. Please retry.';
       submission.completedAt = new Date();
       await this.submissionRepo.save(submission);
-      if (client) {
-        await client.eval(
-          "local n = tonumber(redis.call('GET', KEYS[1]) or '0'); if n > 0 then return redis.call('DECR', KEYS[1]) end; return 0",
-          1,
-          `active:submissions:${userId}`,
-        );
-      }
+      if (client) await client.decr(`active:submissions:${userId}`);
       throw new ServiceUnavailableException(
         'Unable to queue this submission. Please retry.',
       );
@@ -312,11 +306,7 @@ export class SubmissionsService {
 
     const client = this.redisService.getClient();
     if (client) {
-      await client.eval(
-        "local n = tonumber(redis.call('GET', KEYS[1]) or '0'); if n > 0 then return redis.call('DECR', KEYS[1]) end; return 0",
-        1,
-        `active:submissions:${userId}`,
-      );
+      await client.decr(`active:submissions:${userId}`);
     }
 
     this.appGateway.emitToUser(userId, 'submission_status', {

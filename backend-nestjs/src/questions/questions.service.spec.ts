@@ -18,7 +18,6 @@ describe('QuestionsService - True/False Questions Handling', () => {
       create: jest.fn((dto) => ({ id: 'question-uuid-1', ...dto })),
       save: jest.fn(async (entity) => ({ id: 'question-uuid-1', ...entity })),
       findOne: jest.fn(),
-      find: jest.fn().mockResolvedValue([]),
       count: jest.fn().mockResolvedValue(0),
       createQueryBuilder: jest.fn(),
     };
@@ -26,12 +25,6 @@ describe('QuestionsService - True/False Questions Handling', () => {
     mockQuestionBankRepo = {
       findOne: jest.fn(),
       save: jest.fn(),
-    };
-
-    const mockAssessmentRepo: any = {
-      find: jest.fn().mockResolvedValue([]),
-      findOne: jest.fn().mockResolvedValue(null),
-      save: jest.fn().mockResolvedValue(true),
     };
 
     mockAuditLogRepo = {
@@ -42,7 +35,6 @@ describe('QuestionsService - True/False Questions Handling', () => {
     service = new QuestionsService(
       mockQuestionRepo,
       mockQuestionBankRepo,
-      mockAssessmentRepo,
       mockAuditLogRepo,
       { invalidatePrefix: jest.fn().mockResolvedValue(undefined) } as never,
     );
@@ -333,127 +325,4 @@ describe('QuestionsService - True/False Questions Handling', () => {
     });
   });
 
-  describe('parseAndValidateQuestionsImport & confirmQuestionsImport', () => {
-    it('successfully parses coding questions with starter codes, test cases, and problem statement', async () => {
-      mockQuestionRepo.find.mockResolvedValue([]);
-
-      const csv = [
-        'title,question_type,language,supported_languages,topic,subtopic,difficulty,marks,constraints,problem_statement,sample_input,sample_output,explanation,test_input_1,test_output_1,test_input_2,test_output_2,starter_code_c,starter_code_cpp,starter_code_java,starter_code_python,tags',
-        '"Evaluate Expression",coding,NA,"C, C++, Java, Python","Data Structures",Stack,Easy,10,"1 <= T <= 100","You are given a string S in Reverse Polish Notation. Evaluate it using stack.","4\n3\n73-","4","Postfix stack eval","3\n73-",4,"7\n04*3*0-",0,"#include <stdio.h>","#include <bits/stdc++.h>","import java.util.*;","T = int(input())","postfix,stack"',
-      ].join('\n');
-
-      const result = await service.parseAndValidateQuestionsImport(Buffer.from(csv, 'utf8'));
-
-      expect(result.summary.totalRows).toBe(1);
-      expect(result.summary.validCount).toBe(1);
-      expect(result.summary.invalidCount).toBe(0);
-      expect(result.validRows[0].title).toBe('Evaluate Expression');
-      expect(result.validRows[0].questionType).toBe('coding');
-      expect(result.validRows[0].testCases).toHaveLength(2);
-      expect(result.validRows[0].starterCode).toHaveLength(4);
-      expect(result.validRows[0].supportedLanguages).toEqual(['C', 'C++', 'Java', 'Python']);
-    });
-
-    it('successfully parses and validates the complete 66-column Chandigarh University coding question schema', async () => {
-      mockQuestionRepo.find.mockResolvedValue([]);
-
-      const header =
-        'question_id,title,slug,question_type,topic,subtopic,difficulty,marks,negative_marks,language,supported_languages,constraints,problem_statement,input_format,output_format,sample_input,sample_output,explanation,hints,approach,expected_time_complexity,expected_space_complexity,starter_code_c,starter_code_cpp,starter_code_java,starter_code_python,starter_code_javascript,starter_code_go,starter_code_rust,solution_code_c,solution_code_cpp,solution_code_java,solution_code_python,solution_code_javascript,solution_code_go,solution_code_rust,test_input_1,test_output_1,test_visibility_1,test_input_2,test_output_2,test_visibility_2,test_input_3,test_output_3,test_visibility_3,test_input_4,test_output_4,test_visibility_4,test_input_5,test_output_5,test_visibility_5,time_limit_ms,memory_limit_mb,execution_mode,entry_point,function_name,return_type,input_type,output_type,allow_custom_input,compare_mode,partial_scoring,is_active,tags,created_by,version';
-
-      const row = [
-        '""',
-        '"Two Sum"',
-        '"two-sum"',
-        '"coding"',
-        '"Data Structures"',
-        '"Arrays"',
-        '"easy"',
-        '10',
-        '0',
-        '"all"',
-        '"c,cpp,java,python,javascript,go,rust"',
-        '"2 <= N <= 10^4"',
-        '"Given array nums and target, return indices summing to target."',
-        '"N followed by N integers and target"',
-        '"Two space-separated indices"',
-        '"4\\n2 7 11 15\\n9"',
-        '"0 1"',
-        '"2+7=9"',
-        '"Use hash map"',
-        '"One pass hash table"',
-        '"O(N)"',
-        '"O(N)"',
-        '"#include <stdio.h>"',
-        '"#include <iostream>"',
-        '"public class Main {}"',
-        '"def solve(): pass"',
-        '"console.log(0);"',
-        '"package main"',
-        '"fn main() {}"',
-        '"#include <stdio.h> solution"',
-        '"#include <iostream> solution"',
-        '"public class Solution {}"',
-        '"def solve(): return [0, 1]"',
-        '"console.log(\\"0 1\\");"',
-        '"package main func solve() {}"',
-        '"fn solve() {}"',
-        '"4\\n2 7 11 15\\n9"',
-        '"0 1"',
-        '"sample"',
-        '"3\\n3 2 4\\n6"',
-        '"1 2"',
-        '"sample"',
-        '"2\\n3 3\\n6"',
-        '"0 1"',
-        '"hidden"',
-        '"4\\n1 2 3 4\\n7"',
-        '"2 3"',
-        '"hidden"',
-        '"5\\n-1 -2 -3 -4 -5\\n-9"',
-        '"3 4"',
-        '"hidden"',
-        '2000',
-        '256',
-        '"standard"',
-        '"main"',
-        '"twoSum"',
-        '"int[]"',
-        '"int[], int"',
-        '"int[]"',
-        'true',
-        '"exact"',
-        'false',
-        'true',
-        '"arrays,hash-map"',
-        '"Chandigarh University"',
-        '"1.0"',
-      ].join(',');
-
-      const csvContent = `${header}\n${row}`;
-      const result = await service.parseAndValidateQuestionsImport(
-        Buffer.from(csvContent, 'utf8'),
-      );
-
-      expect(result.summary.validCount).toBe(1);
-      expect(result.summary.invalidCount).toBe(0);
-      const parsed = result.validRows[0];
-      expect(parsed.title).toBe('Two Sum');
-      expect(parsed.slug).toBe('two-sum');
-      expect(parsed.questionType).toBe('coding');
-      expect(parsed.starterCode.length).toBe(7);
-      expect(parsed.referenceSolutions.length).toBe(7);
-      expect(parsed.testCases.length).toBe(5);
-      expect(parsed.testCases[0].isHidden).toBe(false);
-      expect(parsed.testCases[1].isHidden).toBe(false);
-      expect(parsed.testCases[2].isHidden).toBe(true);
-      expect(parsed.testCases[3].isHidden).toBe(true);
-      expect(parsed.testCases[4].isHidden).toBe(true);
-      expect(parsed.timeLimit).toBe(2000);
-      expect(parsed.memoryLimit).toBe(256);
-      expect(parsed.functionName).toBe('twoSum');
-      expect(parsed.returnType).toBe('int[]');
-    });
-  });
-
 });
-

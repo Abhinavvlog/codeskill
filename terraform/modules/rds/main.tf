@@ -32,10 +32,9 @@ resource "aws_db_instance" "main" {
   multi_az               = var.multi_az
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [aws_security_group.rds.id]
-
-  skip_final_snapshot       = false
-  final_snapshot_identifier = "${var.name_prefix}-postgres-final-snapshot"
-  deletion_protection       = true
-
+  
+  skip_final_snapshot  = true # Set to false for prod
+  deletion_protection  = false # Set to true for prod
+  
   performance_insights_enabled = true
 }
