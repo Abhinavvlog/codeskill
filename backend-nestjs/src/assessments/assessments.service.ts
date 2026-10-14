@@ -899,13 +899,35 @@ export class AssessmentsService {
     const assessment = await this.assessmentRepo.findOne({
       where: [{ id }, { mongoId: id }],
     });
-    const targetAssessmentId = assessment?.id || id;
+    if (!assessment) {
+      throw new NotFoundException('Assessment not found');
+    }
 
-    await this.attemptRepo.delete({
-      assessmentId: targetAssessmentId,
-      studentId,
-      status: 'in_progress',
+    const targetAssessmentId = assessment?.id || id;
+    const assessmentIds = [...new Set([targetAssessmentId, id])];
+    const attemptConditions: any[] = [
+      { assessmentId: In(assessmentIds), studentId },
+    ];
+    if (studentUser.uid) {
+      attemptConditions.push({
+        assessmentId: In(assessmentIds),
+        studentUid: studentUser.uid,
+      });
+    }
+
+    // Older attempts can be stored against the Mongo ID, the canonical UUID,
+    // or the student's UID. Clear every matching stale session before starting
+    // the requested redo so startStudentAttempt cannot silently resume it.
+    const existingAttempts = await this.attemptRepo.find({
+      where: attemptConditions,
     });
+    const staleAttemptIds = existingAttempts
+      .filter((attempt) => attempt.status === 'in_progress')
+      .map((attempt) => attempt.id);
+    if (staleAttemptIds.length > 0) {
+      await this.attemptRepo.delete({ id: In(staleAttemptIds) });
+    }
+
     return this.startStudentAttempt(id, studentUser);
   }
 

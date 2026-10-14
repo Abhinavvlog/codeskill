@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getPreferredAssessmentCamera, releaseAssessmentStream, takeAssessmentStream, trackAssessmentStream } from "@/lib/assessment-media-session";
 
 type ViolationHandler = (type: string, details: string) => void;
 
@@ -46,8 +47,8 @@ export function useAssessmentMedia(sessionId: string, enabled: boolean, onViolat
     session.audioFrame = null;
     session.analyser?.disconnect();
     session.analyser = null;
-    session.stream?.getTracks().forEach(track => track.stop());
     session.stream = null;
+    releaseAssessmentStream(session.id);
     const video = videoRef.current;
     if (video) {
       video.pause();
@@ -80,8 +81,11 @@ export function useAssessmentMedia(sessionId: string, enabled: boolean, onViolat
           violationRef.current("media_unsupported", "Browser does not support getUserMedia proctoring");
           return;
         }
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 320 }, height: { ideal: 240 }, facingMode: "user" },
+        const preferredCamera = getPreferredAssessmentCamera(sessionId);
+        const stream = takeAssessmentStream(sessionId, preferredCamera) || await navigator.mediaDevices.getUserMedia({
+          video: preferredCamera
+            ? { deviceId: { exact: preferredCamera }, width: { ideal: 320 }, height: { ideal: 240 } }
+            : { width: { ideal: 320 }, height: { ideal: 240 }, facingMode: "user" },
           audio: true,
         });
         // A permission prompt may settle after submission, navigation or a StrictMode cleanup.
@@ -90,6 +94,7 @@ export function useAssessmentMedia(sessionId: string, enabled: boolean, onViolat
           return;
         }
         session.stream = stream;
+        trackAssessmentStream(sessionId, stream);
         setCameraActive(true);
         setMicActive(true);
         setCameraError(null);
