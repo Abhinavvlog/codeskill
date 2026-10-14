@@ -4,6 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type ViolationHandler = (type: string, details: string) => void;
 
+function playVideo(video: HTMLVideoElement) {
+  try {
+    const playback = video.play();
+    if (playback && typeof playback.catch === "function") void playback.catch(() => {});
+  } catch {
+    // Browsers may reject playback, and test DOMs may not implement it.
+  }
+}
+
 export function useAssessmentMedia(sessionId: string, enabled: boolean, onViolation: ViolationHandler) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const violationRef = useRef(onViolation);
@@ -28,7 +37,7 @@ export function useAssessmentMedia(sessionId: string, enabled: boolean, onViolat
     if (!video || !stream || sessionRef.current.ended) return;
 
     video.srcObject = stream;
-    void video.play().catch(() => {});
+    playVideo(video);
   }, []);
 
   const releaseMedia = useCallback(() => {
@@ -86,7 +95,7 @@ export function useAssessmentMedia(sessionId: string, enabled: boolean, onViolat
         setCameraError(null);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          void videoRef.current.play().catch(() => {});
+          playVideo(videoRef.current);
         }
         const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (AudioCtx) {
