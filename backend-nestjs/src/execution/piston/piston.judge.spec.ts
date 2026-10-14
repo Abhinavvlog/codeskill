@@ -23,7 +23,7 @@ describe('Piston judge normalization (mock execution responses)', () => {
       });
     service = new ExecutionService({
       execute,
-      config: { outputLimit: 65536 },
+      config: { outputLimit: 65536, testCaseConcurrency: 1 },
     } as unknown as PistonService);
   });
   afterEach(() => {

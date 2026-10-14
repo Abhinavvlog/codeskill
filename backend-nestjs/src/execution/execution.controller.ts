@@ -21,6 +21,7 @@ import { Queue } from 'bullmq';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { SubmissionRateLimitGuard } from '../common/guards/submission-rate-limit.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { ExecutionAdmissionService } from './admission/execution-admission.service';
 
 @ApiTags('Execution')
 @UseGuards(JwtAuthGuard, SubmissionRateLimitGuard)
@@ -30,6 +31,7 @@ export class ExecutionController {
     private readonly executionService: ExecutionService,
     private readonly azureExecutionService: AzureExecutionService,
     @InjectQueue('submissions') private readonly submissionQueue: Queue,
+    private readonly admission: ExecutionAdmissionService,
   ) {}
 
   @Get('health')
@@ -194,15 +196,34 @@ export class ExecutionController {
         throw new BadRequestException('Invalid execution limits');
     }
     this.executionService.validateRequest(code, testCases);
-    const job = await this.submissionQueue.add(
-      'run-code',
-      { code, language, testCases, config, userId },
-      {
-        attempts: 1,
-        removeOnComplete: { age: 15 * 60, count: 2000 },
-        removeOnFail: { age: 60 * 60, count: 2000 },
-      },
-    );
+    await this.assertQueueCapacity();
+    const admissionId = await this.admission.reserve(userId, {
+      kind: 'run',
+      language: canonicalLanguage(language),
+      code,
+      testCases,
+      config,
+    });
+    let job;
+    try {
+      job = await this.submissionQueue.add(
+        'run-code',
+        { code, language, testCases, config, userId, admissionId },
+        {
+          attempts: 2,
+          jobId: admissionId,
+          backoff: { type: 'exponential', delay: 2_000, jitter: 0.25 },
+          priority: 1,
+          removeOnComplete: { age: 15 * 60, count: 2000 },
+          removeOnFail: { age: 60 * 60, count: 2000 },
+        },
+      );
+    } catch {
+      await this.admission.release(userId, admissionId);
+      throw new ServiceUnavailableException(
+        'Unable to queue this execution; retry shortly',
+      );
+    }
     return {
       success: true,
       status: 'queued',
@@ -244,15 +265,33 @@ export class ExecutionController {
   }
 
   /**
-   * Azure-backed code execution endpoint.
-   * For 3000+ concurrent students — routes to Microsoft Azure ACI via Judge0.
-   * Falls back to BullMQ queue if Azure is not configured.
+   * Reject-fast when the runner queue is already saturated, instead of letting
+   * a burst of submissions grow an unbounded backlog (and unbounded latency).
+   */
+  private async assertQueueCapacity(): Promise<void> {
+    const maxWaiting = Number(process.env.MAX_QUEUE_WAITING) || 500;
+    try {
+      const counts = await this.submissionQueue.getJobCounts('waiting');
+      if ((counts.waiting ?? 0) >= maxWaiting) {
+        throw new ServiceUnavailableException(
+          'The execution queue is at capacity. Please retry shortly.',
+        );
+      }
+    } catch (err) {
+      if (err instanceof ServiceUnavailableException) throw err;
+      throw new ServiceUnavailableException(
+        'Execution queue status is unavailable',
+      );
+    }
+  }
+
+  /**
+   * Compatibility alias. Every execution uses the same admission and judge queue.
    */
   @Post('azure-run')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary:
-      'Execute code via Azure Container Instances (Microsoft-powered, high scale)',
+    summary: 'Compatibility alias for queued code execution',
   })
   async azureRun(
     @CurrentUser('id') userId: string,
@@ -275,88 +314,18 @@ export class ExecutionController {
       throw new BadRequestException('code and language are required');
     }
 
-    // If Azure is not configured, route to isolated BullMQ worker queue
-    if (
-      this.executionService.provider === 'piston' ||
-      !this.azureExecutionService.isAvailable
-    ) {
-      const isSingleRun = !body.testCases || body.testCases.length === 0;
-      const testCases = isSingleRun
+    const isSingleRun = !body.testCases?.length;
+    return this.runCode(userId, {
+      code: body.code,
+      language: body.language,
+      testCases: isSingleRun
         ? [{ id: 'run', input: body.stdin || '', expected: '' }]
-        : body.testCases!;
-
-      this.executionService.validateRequest(body.code, testCases);
-      if (
-        !(await this.executionService.availableLanguages()).some(
-          (r) => r.language === canonicalLanguage(body.language) && r.enabled,
-        )
-      )
-        throw new BadRequestException('This language runtime is unavailable');
-      const job = await this.submissionQueue.add(
-        'run-code',
-        {
-          code: body.code,
-          language: body.language,
-          testCases,
-          config: {
-            customInput: isSingleRun,
-            timeLimit: body.timeoutMs || 3000,
-            memoryLimit: body.memoryMB || 256,
-          },
-          userId,
-        },
-        {
-          attempts: 1,
-          removeOnComplete: { age: 15 * 60, count: 2000 },
-          removeOnFail: { age: 60 * 60, count: 2000 },
-        },
-      );
-
-      return {
-        success: true,
-        engine: 'queue',
-        status: 'queued',
-        jobId: job.id,
-        message: 'Execution queued to isolated runner pool',
-      };
-    }
-
-    try {
-      if (body.testCases && body.testCases.length > 0) {
-        const results = await this.azureExecutionService.executeWithTestCases(
-          body.code,
-          body.language,
-          body.testCases,
-          { timeoutMs: body.timeoutMs, memoryMB: body.memoryMB },
-        );
-        const passedCount = results.filter((r) => r.passed).length;
-        return {
-          success: true,
-          engine: 'azure',
-          passedCount,
-          totalCount: results.length,
-          results,
-        };
-      } else {
-        const result = await this.azureExecutionService.execute({
-          code: body.code,
-          language: body.language,
-          stdin: body.stdin,
-          timeoutMs: body.timeoutMs,
-          memoryMB: body.memoryMB,
-        });
-        return {
-          success: true,
-          engine: 'azure',
-          result,
-        };
-      }
-    } catch (err: any) {
-      return {
-        success: false,
-        engine: 'azure',
-        error: 'Code execution is temporarily unavailable.',
-      };
-    }
+        : body.testCases,
+      config: {
+        customInput: isSingleRun,
+        timeLimit: body.timeoutMs || 3000,
+        memoryLimit: body.memoryMB || 256,
+      },
+    });
   }
 }

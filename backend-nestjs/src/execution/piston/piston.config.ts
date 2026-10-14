@@ -1,3 +1,5 @@
+import { providerUrls } from '../providers/provider.config';
+
 function integer(
   name: string,
   fallback: number,
@@ -9,8 +11,14 @@ function integer(
     throw new Error(`Invalid ${name}`);
   return value;
 }
+function bool(name: string, fallback: boolean): boolean {
+  const value = process.env[name];
+  if (value === undefined) return fallback;
+  return value === '1' || value === 'true';
+}
 export function pistonConfig() {
-  const baseURL = process.env.PISTON_BASE_URL || 'http://piston:2000/api/v2';
+  const urls = providerUrls('PISTON_BASE_URL', 'http://127.0.0.1:2001/api/v2');
+  const baseURL = urls[0];
   const url = new URL(baseURL);
   if (
     !['http:', 'https:'].includes(url.protocol) ||
@@ -25,7 +33,7 @@ export function pistonConfig() {
     'PISTON_DEFAULT_COMPILE_TIMEOUT_MS',
     10000,
     100,
-    60000,
+    120000,
   );
   const requestTimeout = integer(
     'PISTON_REQUEST_TIMEOUT_MS',
@@ -51,10 +59,32 @@ export function pistonConfig() {
     throw new Error('PISTON_RUNTIME_VERSIONS requires exact versions');
   return {
     baseURL: baseURL.replace(/\/$/, ''),
+    urls,
+    apiKey: process.env.PISTON_API_KEY,
     runTimeout,
+    timeMultiplier: integer('JUDGE_TIME_LIMIT_MULTIPLIER', 1, 1, 20),
     compileTimeout,
     requestTimeout,
     concurrency: integer('PISTON_MAX_CONCURRENT_EXECUTIONS', 10, 1, 100),
+    // Authoritative, Redis-backed cap shared across every worker process/host.
+    // Sized for a single c6i.xlarge (4 vCPU) Piston host; raise when the fleet grows.
+    globalConcurrency: integer('PISTON_GLOBAL_MAX_CONCURRENT', 8, 1, 500),
+    nodeConcurrency: integer('PISTON_NODE_MAX_CONCURRENT', 8, 1, 500),
+    keepAlive: bool('PISTON_KEEP_ALIVE', true),
+    circuitFailureThreshold: integer(
+      'PISTON_CIRCUIT_FAILURE_THRESHOLD',
+      3,
+      1,
+      100,
+    ),
+    circuitCooldownMs: integer(
+      'PISTON_CIRCUIT_COOLDOWN_MS',
+      15000,
+      100,
+      300000,
+    ),
+    testCaseConcurrency: integer('PISTON_TEST_CASE_CONCURRENCY', 4, 1, 100),
+    maxQueueWaiting: integer('MAX_QUEUE_WAITING', 500, 1, 1000000),
     memory: integer(
       'PISTON_DEFAULT_MEMORY_LIMIT_BYTES',
       268435456,

@@ -17,6 +17,8 @@ import { CreateAssessmentDto } from './dto/create-assessment.dto';
 import { UpdateAssessmentDto } from './dto/update-assessment.dto';
 import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
 import { ExecutionService } from '../execution/execution.service';
+import { ExecutionAdmissionService } from '../execution/admission/execution-admission.service';
+import { randomUUID } from 'node:crypto';
 
 @Injectable()
 export class AssessmentsService {
@@ -31,6 +33,7 @@ export class AssessmentsService {
     private readonly auditLogRepo: Repository<AuditLog>,
     @Optional()
     private readonly executionService?: ExecutionService,
+    @Optional() private readonly admission?: ExecutionAdmissionService,
   ) {}
 
   // -------------------------------------------------------------
@@ -215,9 +218,7 @@ export class AssessmentsService {
       });
     }
 
-    const qMap = new Map(
-      questionsList.map((q) => [q.id, { ...q, _id: q.id }]),
-    );
+    const qMap = new Map(questionsList.map((q) => [q.id, { ...q, _id: q.id }]));
 
     // Populate questions in sections if present
     const sections = (assessment.sections || []).map((sec) => ({
@@ -269,7 +270,9 @@ export class AssessmentsService {
     if (dto.negativeMarking !== undefined)
       assessment.negativeMarking = dto.negativeMarking;
     if (dto.startTime !== undefined)
-      assessment.startTime = dto.startTime ? new Date(dto.startTime) : undefined;
+      assessment.startTime = dto.startTime
+        ? new Date(dto.startTime)
+        : undefined;
     if (dto.endTime !== undefined)
       assessment.endTime = dto.endTime ? new Date(dto.endTime) : undefined;
     if (dto.status !== undefined) assessment.status = dto.status;
@@ -568,11 +571,20 @@ export class AssessmentsService {
       order: { score: 'DESC', createdAt: 'DESC' },
     });
 
-    const questionIds = [...new Set(filteredAssessments.flatMap(a => a.questions || []))];
-    const questionMetadata = questionIds.length ? await this.questionRepo.find({
-      where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
-      select: { id: true, mongoId: true, questionType: true, difficulty: true },
-    }) : [];
+    const questionIds = [
+      ...new Set(filteredAssessments.flatMap((a) => a.questions || [])),
+    ];
+    const questionMetadata = questionIds.length
+      ? await this.questionRepo.find({
+          where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
+          select: {
+            id: true,
+            mongoId: true,
+            questionType: true,
+            difficulty: true,
+          },
+        })
+      : [];
 
     const items = filteredAssessments.map((a) => {
       const allForAssessment = existingAttempts.filter(
@@ -608,8 +620,28 @@ export class AssessmentsService {
         allowedAttempts,
         completedAttemptsCount: completedCount,
         questionCount: a.questions?.length || 0,
-        questionTypes: [...new Set(questionMetadata.filter(q => a.questions?.includes(q.id) || (!!q.mongoId && a.questions?.includes(q.mongoId))).map(q => q.questionType))],
-        difficulties: [...new Set(questionMetadata.filter(q => a.questions?.includes(q.id) || (!!q.mongoId && a.questions?.includes(q.mongoId))).map(q => q.difficulty))],
+        questionTypes: [
+          ...new Set(
+            questionMetadata
+              .filter(
+                (q) =>
+                  a.questions?.includes(q.id) ||
+                  (!!q.mongoId && a.questions?.includes(q.mongoId)),
+              )
+              .map((q) => q.questionType),
+          ),
+        ],
+        difficulties: [
+          ...new Set(
+            questionMetadata
+              .filter(
+                (q) =>
+                  a.questions?.includes(q.id) ||
+                  (!!q.mongoId && a.questions?.includes(q.mongoId)),
+              )
+              .map((q) => q.difficulty),
+          ),
+        ],
         attemptStatus: isCompleted
           ? 'submitted'
           : inProgressAttempt
@@ -635,14 +667,15 @@ export class AssessmentsService {
     }
 
     const studentId = String(studentUser.id || studentUser._id);
-    const whereConditions: any[] = [
-      { assessmentId: assessment.id, studentId },
-    ];
+    const whereConditions: any[] = [{ assessmentId: assessment.id, studentId }];
     if (id && id !== assessment.id) {
       whereConditions.push({ assessmentId: id, studentId });
     }
     if (studentUser.uid) {
-      whereConditions.push({ assessmentId: assessment.id, studentUid: studentUser.uid });
+      whereConditions.push({
+        assessmentId: assessment.id,
+        studentUid: studentUser.uid,
+      });
     }
     const allAttempts = await this.attemptRepo.find({
       where: whereConditions,
@@ -977,6 +1010,48 @@ export class AssessmentsService {
   }
 
   async submitAttempt(id: string, dto: SubmitAssessmentDto, studentUser: any) {
+    const hasCode = dto.responses?.some(
+      (response) =>
+        typeof response.code === 'string' && response.code.trim().length > 0,
+    );
+    if (!hasCode) return this.evaluateAttempt(id, dto, studentUser);
+    if (!this.admission) throw new PistonUnavailableError();
+    const userId = String(studentUser.id || studentUser._id);
+    const reservation = await this.admission.reserve(userId, {
+      kind: 'assessment',
+      id,
+      responses: dto.responses,
+    });
+    const owner = randomUUID();
+    let heartbeat: NodeJS.Timeout | undefined;
+    try {
+      if (
+        (await this.admission.claim(userId, reservation, owner)) !== 'claimed'
+      )
+        throw new PistonUnavailableError();
+      let renewing = false;
+      heartbeat = setInterval(() => {
+        if (renewing) return;
+        renewing = true;
+        void this.admission!.renew(userId, reservation, owner)
+          .catch(() => {})
+          .finally(() => {
+            renewing = false;
+          });
+      }, this.admission.heartbeatMs);
+      heartbeat.unref();
+      return await this.evaluateAttempt(id, dto, studentUser);
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+      await this.admission.release(userId, reservation, owner);
+    }
+  }
+
+  private async evaluateAttempt(
+    id: string,
+    dto: SubmitAssessmentDto,
+    studentUser: any,
+  ) {
     const assessment = await this.assessmentRepo.findOne({
       where: [{ id }, { mongoId: id }],
     });
@@ -1012,7 +1087,9 @@ export class AssessmentsService {
     if (assessment.endTime) {
       const deadline = new Date(assessment.endTime);
       if (now > deadline) {
-        throw new BadRequestException('The examination submission deadline has expired.');
+        throw new BadRequestException(
+          'The examination submission deadline has expired.',
+        );
       }
     }
 
@@ -1034,7 +1111,7 @@ export class AssessmentsService {
 
     const evaluatedResponses: any[] = [];
 
-    for (const r of (dto.responses || [])) {
+    for (const r of dto.responses || []) {
       const q = questionMap.get(String(r.questionId));
       if (!q) {
         evaluatedResponses.push({
@@ -1049,7 +1126,8 @@ export class AssessmentsService {
       }
 
       const qType = (q.questionType || '').toLowerCase();
-      const isCoding = qType === 'coding' || qType === 'algorithmic' || qType === 'dsa';
+      const isCoding =
+        qType === 'coding' || qType === 'algorithmic' || qType === 'dsa';
       let isAttempted = false;
       let isCorrect = false;
       let marksAwarded = 0;
@@ -1063,8 +1141,16 @@ export class AssessmentsService {
           totalAttempted++;
 
           const submittedLanguage = canonicalLanguage(r.language || 'python');
-          if (!submittedLanguage || (q.supportedLanguages?.length && !q.supportedLanguages.some(lang => canonicalLanguage(lang) === submittedLanguage))) {
-            throw new BadRequestException('This language is not enabled for the assessment question');
+          if (
+            !submittedLanguage ||
+            (q.supportedLanguages?.length &&
+              !q.supportedLanguages.some(
+                (lang) => canonicalLanguage(lang) === submittedLanguage,
+              ))
+          ) {
+            throw new BadRequestException(
+              'This language is not enabled for the assessment question',
+            );
           }
           // Server-side code execution against verified test cases (AUD-002)
           const testCases = Array.isArray(q.testCases) ? q.testCases : [];
@@ -1092,7 +1178,10 @@ export class AssessmentsService {
             testCasesPassed = 0;
           }
 
-          const ratio = totalTestCases > 0 ? Math.min(1, Math.max(0, testCasesPassed / totalTestCases)) : 0;
+          const ratio =
+            totalTestCases > 0
+              ? Math.min(1, Math.max(0, testCasesPassed / totalTestCases))
+              : 0;
           marksAwarded = Math.round(ratio * (q.marks || 5) * 10) / 10;
           isCorrect = ratio >= 0.99;
 
@@ -1104,7 +1193,9 @@ export class AssessmentsService {
         }
       } else {
         // MCQ (single choice or multiple choice)
-        const isMulti = qType === 'multiple_choice' || (Array.isArray(q.correctAnswers) && q.correctAnswers.length > 0);
+        const isMulti =
+          qType === 'multiple_choice' ||
+          (Array.isArray(q.correctAnswers) && q.correctAnswers.length > 0);
 
         if (isMulti) {
           const selectedList = Array.isArray(r.selectedAnswers)
@@ -1128,7 +1219,9 @@ export class AssessmentsService {
               marksAwarded = q.marks || 1;
               totalCorrect++;
             } else {
-              const negMarks = assessment.negativeMarking ? (q.negativeMarks || 0) : 0;
+              const negMarks = assessment.negativeMarking
+                ? q.negativeMarks || 0
+                : 0;
               marksAwarded = negMarks > 0 ? -negMarks : 0;
               totalWrong++;
             }
@@ -1145,7 +1238,9 @@ export class AssessmentsService {
               marksAwarded = q.marks || 1;
               totalCorrect++;
             } else {
-              const negMarks = assessment.negativeMarking ? (q.negativeMarks || 0) : 0;
+              const negMarks = assessment.negativeMarking
+                ? q.negativeMarks || 0
+                : 0;
               marksAwarded = negMarks > 0 ? -negMarks : 0;
               totalWrong++;
             }
@@ -1345,7 +1440,10 @@ export class AssessmentsService {
       canRetake:
         assessment.allowedAttempts === 0
           ? true
-          : submittedCount < (assessment.allowedAttempts !== undefined ? assessment.allowedAttempts : 1),
+          : submittedCount <
+            (assessment.allowedAttempts !== undefined
+              ? assessment.allowedAttempts
+              : 1),
       assessment: {
         title: assessment.title,
         code: assessment.code,

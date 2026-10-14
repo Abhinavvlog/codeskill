@@ -161,6 +161,7 @@ async function main() {
           },
         }),
     };
+    const admission = { reserve: () => Promise.resolve(randomUUID()), release: () => Promise.resolve(), claim: () => Promise.resolve('claimed'), renew: () => Promise.resolve(), unclaim: () => Promise.resolve(), heartbeatMs: 15000 };
     const service = new SubmissionsService(
       store,
       users,
@@ -168,6 +169,8 @@ async function main() {
       gateway as never,
       redis as never,
       problems as never,
+      undefined,
+      admission as never,
     );
     const submitted = await service.createSubmission(chosen[0], {
       code: 'print(5)',
@@ -186,6 +189,7 @@ async function main() {
       users,
       gateway as never,
       redis as never,
+      admission as never,
     );
     await judge.process({
       name: 'evaluate-code',

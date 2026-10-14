@@ -22,9 +22,12 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "admin:bootstrap": "ts-node -r tsconfig-paths/register src/create-admins.ts",
     "seed:os-test1": "node -r dotenv/config -r ts-node/register -r tsconfig-paths/register src/seeds/seed-os-test1.ts",
+    "seed:local": "node ../scripts/seed_local_platform.js",
     "db:shards:migrate": "ts-node src/database/run-submission-sharding.ts",
     "db:shards:verify": "ts-node src/database/verify-submission-sharding.ts",
-    "test:shards:integration": "ts-node test/submission-sharding.integration.ts"
+    "test:shards:integration": "ts-node test/submission-sharding.integration.ts",
+    "test:judges:integration": "ts-node test/judge-resilience.integration.ts",
+    "test:judges:live": "ts-node test/judges-live.integration.ts"
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",

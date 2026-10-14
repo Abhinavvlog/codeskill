@@ -288,3 +288,39 @@ it('only permits registered authenticated students to read private contest ranki
     [],
   );
 });
+
+it('scores contest submission from the owning shard and does not query the primary snapshot', async () => {
+  const submissions = {
+    isSharded: true,
+    contestSolvedProblems: jest
+      .fn()
+      .mockResolvedValue([{ userId, problemId: id, solvedAt: new Date() }]),
+  };
+  const { service, attempts, builder } = setup(submissions);
+  const result = await service.submitAttempt(id, userId, 'real-session');
+  expect(result).toEqual(
+    expect.objectContaining({ score: 100, problemsSolved: 1 }),
+  );
+  expect(submissions.contestSolvedProblems).toHaveBeenCalledWith(
+    [id],
+    [expect.objectContaining({ userId, start: contest.startTime })],
+  );
+  expect(attempts.query).not.toHaveBeenCalled();
+  expect(builder.set).toHaveBeenCalledWith(
+    expect.objectContaining({ score: 100, problemsSolved: 1 }),
+  );
+});
+
+it('leaves the contest attempt open when shard scoring fails', async () => {
+  const submissions = {
+    isSharded: true,
+    contestSolvedProblems: jest
+      .fn()
+      .mockRejectedValue(new Error('shard unavailable')),
+  };
+  const { service, builder } = setup(submissions);
+  await expect(
+    service.submitAttempt(id, userId, 'real-session'),
+  ).rejects.toThrow('shard unavailable');
+  expect(builder.update).not.toHaveBeenCalled();
+});
