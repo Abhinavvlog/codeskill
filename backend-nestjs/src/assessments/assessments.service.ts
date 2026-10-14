@@ -31,7 +31,189 @@ export class AssessmentsService {
     private readonly auditLogRepo: Repository<AuditLog>,
     @Optional()
     private readonly executionService?: ExecutionService,
-  ) {}
+  ) { }
+
+  private shuffleList<T>(items: T[]): T[] {
+    const next = [...items];
+    for (let i = next.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [next[i], next[j]] = [next[j], next[i]];
+    }
+    return next;
+  }
+
+  private isOptionShuffledQuestion(question: Question | null | undefined): boolean {
+    if (!question || !Array.isArray(question.options) || question.options.length < 2) {
+      return false;
+    }
+
+    const qType = String(question.questionType || '').toLowerCase();
+    if (['coding', 'algorithmic', 'dsa', 'subjective', 'descriptive', 'essay', 'short_answer', 'fill_in_the_blank', 'matching'].includes(qType)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private buildOptionOrder(question: Question | null | undefined): number[] | null {
+    if (!this.isOptionShuffledQuestion(question)) {
+      return null;
+    }
+
+    const options = question?.options ?? [];
+    const order = options.map((_, index) => index);
+    return this.shuffleList(order);
+  }
+
+  private getQuestionOptionOrderByQuestionId(attempt: any, questionId: string): number[] | null {
+    const response = (attempt?.responses || []).find((item: any) => String(item.questionId) === String(questionId));
+    const optionOrder = response?.optionOrder;
+    return Array.isArray(optionOrder) && optionOrder.length > 0 ? optionOrder : null;
+  }
+
+  private mapDisplayedAnswerToCanonical(
+    selectedAnswer: number | number[] | undefined,
+    optionOrder: number[] | null,
+  ): number | number[] | undefined {
+    if (selectedAnswer === undefined || selectedAnswer === null) {
+      return selectedAnswer;
+    }
+
+    if (Array.isArray(selectedAnswer)) {
+      return selectedAnswer.map((value) => {
+        if (value === undefined || value === null || value < 0) return value;
+        if (optionOrder && value < optionOrder.length) return optionOrder[value];
+        return value;
+      });
+    }
+
+    if (selectedAnswer < 0) {
+      return selectedAnswer;
+    }
+
+    if (optionOrder && selectedAnswer < optionOrder.length) {
+      return optionOrder[selectedAnswer];
+    }
+
+    return selectedAnswer;
+  }
+
+  private validateNoDuplicateQuestionIds(questionIds: string[]) {
+    const seen = new Set<string>();
+    const duplicates = new Set<string>();
+
+    questionIds.forEach((questionId) => {
+      const normalized = String(questionId || '').trim();
+      if (!normalized) return;
+      if (seen.has(normalized)) {
+        duplicates.add(normalized);
+        return;
+      }
+      seen.add(normalized);
+    });
+
+    if (duplicates.size > 0) {
+      throw new BadRequestException(
+        `Duplicate questions detected across the assessment: ${Array.from(duplicates).join(', ')}`,
+      );
+    }
+  }
+
+  private normalizeDifficulty(value?: string): 'easy' | 'medium' | 'hard' {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized.startsWith('e')) return 'easy';
+    if (normalized.startsWith('h')) return 'hard';
+    return 'medium';
+  }
+
+  private calculateDifficultyTargets(total: number): Record<'easy' | 'medium' | 'hard', number> {
+    const raw = {
+      easy: total * 0.3,
+      medium: total * 0.4,
+      hard: total * 0.3,
+    };
+
+    const targets = {
+      easy: Math.floor(raw.easy),
+      medium: Math.floor(raw.medium),
+      hard: Math.floor(raw.hard),
+    };
+
+    let remainder = total - (targets.easy + targets.medium + targets.hard);
+    const levelOrder: Array<'easy' | 'medium' | 'hard'> = ['easy', 'medium', 'hard'];
+    const order = [...levelOrder].sort(
+      (left: 'easy' | 'medium' | 'hard', right: 'easy' | 'medium' | 'hard') =>
+        (raw[right] - Math.floor(raw[right])) - (raw[left] - Math.floor(raw[left])),
+    );
+
+    while (remainder > 0) {
+      const nextLevel =
+        order[(targets.easy + targets.medium + targets.hard + remainder) % order.length] ?? 'medium';
+      targets[nextLevel] += 1;
+      remainder -= 1;
+    }
+
+    return targets;
+  }
+
+  private buildDifficultyBalancedQuestionIds(
+    questions: Array<Pick<Question, 'id' | 'difficulty'>>,
+    targetCount: number,
+  ): string[] {
+    const safeTarget = Math.max(0, Math.min(targetCount, questions.length));
+    if (safeTarget === 0 || questions.length === 0) {
+      return [];
+    }
+
+    const grouped = {
+      easy: [] as Array<Pick<Question, 'id' | 'difficulty'>>,
+      medium: [] as Array<Pick<Question, 'id' | 'difficulty'>>,
+      hard: [] as Array<Pick<Question, 'id' | 'difficulty'>>,
+    };
+
+    questions.forEach((question) => {
+      const difficulty = this.normalizeDifficulty(question.difficulty);
+      grouped[difficulty].push(question);
+    });
+
+    const targets = this.calculateDifficultyTargets(safeTarget);
+    const selected: Array<Pick<Question, 'id' | 'difficulty'>> = [];
+
+    (['easy', 'medium', 'hard'] as const).forEach((level) => {
+      const quota = Math.min(targets[level], grouped[level].length);
+      const tierChoices = this.shuffleList(grouped[level]).slice(0, quota);
+      selected.push(...tierChoices);
+      grouped[level] = grouped[level].filter((question) => !tierChoices.some((choice) => choice.id === question.id));
+    });
+
+    if (selected.length < safeTarget) {
+      const remaining = this.shuffleList(
+        questions.filter((question) => !selected.some((choice) => choice.id === question.id)),
+      );
+      selected.push(...remaining.slice(0, safeTarget - selected.length));
+    }
+
+    const finalSelected = this.shuffleList(selected);
+    const counts = { easy: 0, medium: 0, hard: 0 };
+    finalSelected.forEach((question) => {
+      const level = this.normalizeDifficulty(question.difficulty);
+      counts[level] += 1;
+    });
+
+    const targetMatch = counts.easy === targets.easy && counts.medium === targets.medium && counts.hard === targets.hard;
+    if (!targetMatch) {
+      console.warn(
+        '[Assessment] Difficulty-balanced question selection could not fully match the 30/40/30 target. ' +
+        `Targeted=${JSON.stringify(targets)} Actual=${JSON.stringify(counts)} Available=${JSON.stringify({
+          easy: grouped.easy.length + counts.easy,
+          medium: grouped.medium.length + counts.medium,
+          hard: grouped.hard.length + counts.hard,
+        })}`,
+      );
+    }
+
+    return finalSelected.map((question) => question.id);
+  }
 
   // -------------------------------------------------------------
   // ADMIN METHODS
@@ -77,6 +259,8 @@ export class AssessmentsService {
         'At least one section or question must be provided.',
       );
     }
+
+    this.validateNoDuplicateQuestionIds(questionObjIds);
 
     if (questionObjIds.length > 0) {
       const qCount = await this.questionRepo.count({
@@ -427,10 +611,10 @@ export class AssessmentsService {
           submitted.length > 0
             ? [...submitted].sort((a, b) => (b.score || 0) - (a.score || 0))[0]
             : [...studentAttempts].sort(
-                (a, b) =>
-                  new Date(b.createdAt || 0).getTime() -
-                  new Date(a.createdAt || 0).getTime(),
-              )[0];
+              (a, b) =>
+                new Date(b.createdAt || 0).getTime() -
+                new Date(a.createdAt || 0).getTime(),
+            )[0];
 
         const maxScore =
           submitted.length > 0
@@ -480,11 +664,11 @@ export class AssessmentsService {
     const avgScore =
       submittedCount > 0
         ? Number(
-            (
-              submittedCandidates.reduce((sum, c) => sum + (c.score || 0), 0) /
-              submittedCount
-            ).toFixed(1),
-          )
+          (
+            submittedCandidates.reduce((sum, c) => sum + (c.score || 0), 0) /
+            submittedCount
+          ).toFixed(1),
+        )
         : 0;
 
     return {
@@ -753,15 +937,15 @@ export class AssessmentsService {
       },
       attempt: latestAttempt
         ? {
-            _id: latestAttempt.id,
-            status: latestAttempt.status,
-            score: latestAttempt.score,
-            percentage: latestAttempt.percentage,
-            passed: latestAttempt.passed,
-            startedAt: latestAttempt.startedAt,
-            submittedAt: latestAttempt.submittedAt,
-            attemptNumber: latestAttempt.attemptNumber,
-          }
+          _id: latestAttempt.id,
+          status: latestAttempt.status,
+          score: latestAttempt.score,
+          percentage: latestAttempt.percentage,
+          passed: latestAttempt.passed,
+          startedAt: latestAttempt.startedAt,
+          submittedAt: latestAttempt.submittedAt,
+          attemptNumber: latestAttempt.attemptNumber,
+        }
         : null,
       canRetake,
       completedAttemptsCount: completedCount,
@@ -801,8 +985,8 @@ export class AssessmentsService {
     const questionsList =
       questionIds.length > 0
         ? await this.questionRepo.find({
-            where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
-          })
+          where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
+        })
         : [];
 
     const studentId = String(studentUser.id || studentUser._id);
@@ -846,10 +1030,10 @@ export class AssessmentsService {
         previousSubmitted.length > 0 ? previousSubmitted[0].score || 0 : 0;
       const attemptNum = previousSubmitted.length + 1;
 
-      let orderedIds = questionsList.map((q) => q.id);
-      if (assessment.shuffleQuestions) {
-        orderedIds = [...orderedIds].sort(() => Math.random() - 0.5);
-      }
+      const orderedIds = this.buildDifficultyBalancedQuestionIds(
+        questionsList,
+        Math.min(questionsList.length, assessment.questions?.length || questionsList.length),
+      );
 
       attempt = this.attemptRepo.create({
         assessmentId: assessment.id,
@@ -894,8 +1078,8 @@ export class AssessmentsService {
           negativeMarks: assessment.negativeMarking ? q.negativeMarks || 0 : 0,
           options: Array.isArray(q.options)
             ? q.options.map((opt: any) =>
-                typeof opt === 'string' ? opt : opt?.text || String(opt || ''),
-              )
+              typeof opt === 'string' ? opt : opt?.text || String(opt || ''),
+            )
             : [],
           codeSnippet: q.codeSnippet,
           starterCode:
@@ -946,29 +1130,17 @@ export class AssessmentsService {
     }
 
     const targetAssessmentId = assessment?.id || id;
-    const assessmentIds = [...new Set([targetAssessmentId, id])];
-    const attemptConditions: any[] = [
-      { assessmentId: In(assessmentIds), studentId },
-    ];
-    if (studentUser.uid) {
-      attemptConditions.push({
-        assessmentId: In(assessmentIds),
-        studentUid: studentUser.uid,
-      });
-    }
 
-    // Older attempts can be stored against the Mongo ID, the canonical UUID,
-    // or the student's UID. Clear every matching stale session before starting
-    // the requested redo so startStudentAttempt cannot silently resume it.
-    const existingAttempts = await this.attemptRepo.find({
-      where: attemptConditions,
+    await this.attemptRepo.delete({
+      assessmentId: targetAssessmentId,
+      studentId,
+      status: 'in_progress',
     });
-    const staleAttemptIds = existingAttempts
-      .filter((attempt) => attempt.status === 'in_progress')
-      .map((attempt) => attempt.id);
-    if (staleAttemptIds.length > 0) {
-      await this.attemptRepo.delete({ id: In(staleAttemptIds) });
-    }
+    await this.attemptRepo.delete({
+      assessmentId: id,
+      studentId,
+      status: 'in_progress',
+    });
 
     return this.startStudentAttempt(id, studentUser);
   }
@@ -1018,7 +1190,7 @@ export class AssessmentsService {
         status:
           r.status ||
           ((r.selectedAnswer !== undefined && r.selectedAnswer >= 0) ||
-          (r.code && r.code.trim().length > 0)
+            (r.code && r.code.trim().length > 0)
             ? 'answered'
             : 'unvisited'),
       }));
@@ -1091,8 +1263,8 @@ export class AssessmentsService {
     const questions =
       questionIds.length > 0
         ? await this.questionRepo.find({
-            where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
-          })
+          where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
+        })
         : [];
     const questionMap = new Map(questions.map((q) => [q.id, q]));
 
@@ -1354,8 +1526,8 @@ export class AssessmentsService {
     const questions =
       questionIds.length > 0
         ? await this.questionRepo.find({
-            where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
-          })
+          where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
+        })
         : [];
     const questionMap = new Map(questions.map((q) => [q.id, q]));
 
