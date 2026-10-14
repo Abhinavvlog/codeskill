@@ -252,6 +252,14 @@ export class JudgeProcessor extends WorkerHost {
         const { problemId, code, language } = submission;
         userId = submission.userId;
 
+        this.logger.log({
+          event: 'JUDGE_JOB_STARTED',
+          jobId: job.id,
+          submissionId,
+          userId,
+          language,
+        });
+
         const claimed = await this.submissionRepo.transaction(
           submission.userId,
           async (manager) => {
@@ -477,16 +485,29 @@ export class JudgeProcessor extends WorkerHost {
           completionPayload,
         );
 
-        this.logger.log(
-          `[Judge] Submission ${submissionId}: ${status} (${passedCount}/${testCases.length}) processingLatency=${processingLatencyMs}ms`,
-        );
+        this.logger.log({
+          event: 'JUDGE_JOB_COMPLETED',
+          message: `[Judge] Submission ${submissionId}: ${status} (${passedCount}/${testCases.length}) processingLatency=${processingLatencyMs}ms`,
+          jobId: job.id,
+          submissionId,
+          userId,
+          status,
+          passedCount,
+          totalCount: testCases.length,
+          processingLatencyMs,
+        });
 
         return { status, passedCount, totalCount: testCases.length };
       } catch (err: any) {
-        this.logger.error(
-          `[Judge] Error processing submission ${submissionId}: ${err.message}`,
-          err.stack,
-        );
+        this.logger.error({
+          event: 'JUDGE_JOB_FAILED',
+          message: `[Judge] Error processing submission ${submissionId}: ${err?.message}`,
+          jobId: job.id,
+          submissionId,
+          userId: userId || job.data.userId,
+          error: err?.message,
+          stack: err?.stack,
+        });
 
         const willRetry =
           err instanceof JudgeCapacityError ||

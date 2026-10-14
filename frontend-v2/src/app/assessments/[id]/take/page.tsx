@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, use, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Clock,
   CheckCircle2,
@@ -31,6 +31,7 @@ import DSAAssessmentEditor from "@/components/assessment/DSAAssessmentEditor";
 import SafeExamBrowser from "@/components/assessment/SafeExamBrowser";
 import { Spinner } from "@/components/ui/spinner";
 import { useAssessmentMedia } from "@/hooks/useAssessmentMedia";
+import { releaseAssessmentStream } from "@/lib/assessment-media-session";
 
 interface TestCase {
   id?: string;
@@ -67,6 +68,8 @@ interface ViolationEvent {
   details: string;
 }
 
+const MAX_FACE_WARNINGS = 5;
+
 export default function TakeAssessmentPage({
   params,
 }: {
@@ -75,6 +78,8 @@ export default function TakeAssessmentPage({
   const resolvedParams = use(params);
   const id = resolvedParams.id;
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const attemptKey = searchParams.get("attempt") ?? "initial";
 
   // Test Session State
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -98,8 +103,27 @@ export default function TakeAssessmentPage({
   const [isLoading, setIsLoading] = useState(true);
   const [loadedAssessmentId, setLoadedAssessmentId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submissionRequestedRef = useRef(false);
   const [assessmentTitle, setAssessmentTitle] = useState("Proctored Assessment");
   const [assessmentCode, setAssessmentCode] = useState("");
+  const [startError, setStartError] = useState<string | null>(null);
+  const mediaCleanupRef = useRef<{ assessmentId: string; timer: number } | null>(null);
+
+  // Stop any handed-off preflight stream when this route is really left. Defer
+  // one event turn so React Strict Mode's development-only remount can cancel it.
+  useEffect(() => {
+    if (mediaCleanupRef.current?.assessmentId === id) {
+      window.clearTimeout(mediaCleanupRef.current.timer);
+      mediaCleanupRef.current = null;
+    }
+    return () => {
+      const timer = window.setTimeout(() => {
+        releaseAssessmentStream(id);
+        if (mediaCleanupRef.current?.timer === timer) mediaCleanupRef.current = null;
+      }, 0);
+      mediaCleanupRef.current = { assessmentId: id, timer };
+    };
+  }, [id]);
 
   // Proctoring & Integrity Telemetry
   const [tabSwitches, setTabSwitches] = useState(0);
@@ -139,7 +163,9 @@ export default function TakeAssessmentPage({
       // Temporary visual toast
       setWarningToast({
         id: Date.now(),
-        message: details,
+        message: type === "multiple_faces_detected"
+          ? `Warning ${updated.filter(event => event.type === "multiple_faces_detected").length}/${MAX_FACE_WARNINGS}: ${details} The test will end at warning ${MAX_FACE_WARNINGS}.`
+          : details,
         type: type === "tab_switch" ? "alert" : "warning",
       });
 
@@ -161,7 +187,7 @@ export default function TakeAssessmentPage({
         responses: formattedResponses,
         timeSpentSeconds: Math.floor((Date.now() - startedAt.getTime()) / 1000),
         violations: updated,
-      }).catch(() => {});
+      }).catch(() => { });
     },
     [id, questions, startedAt]
   );
@@ -173,6 +199,9 @@ export default function TakeAssessmentPage({
     const initTest = async () => {
       setIsLoading(true);
       setLoadedAssessmentId(null);
+      setQuestions([]);
+      setResponses({});
+      setCurrentIndex(0);
       try {
         const res = await studentAssessmentsAPI.startAttempt(id);
         const data = res.data;
@@ -188,8 +217,7 @@ export default function TakeAssessmentPage({
 
         const totalSecs = (data.durationMinutes || 45) * 60;
         const elapsedSecs = Math.floor((Date.now() - start.getTime()) / 1000);
-        const remaining = Math.max(0, totalSecs - elapsedSecs);
-        setTimeLeftSeconds(remaining);
+        setTimeLeftSeconds(Math.max(0, totalSecs - elapsedSecs));
 
         if (data.proctoring?.maxTabSwitches) {
           setMaxTabSwitches(data.proctoring.maxTabSwitches);
@@ -238,18 +266,32 @@ export default function TakeAssessmentPage({
     return () => {
       isMounted = false;
     };
-  }, [id, router]);
+  }, [id, router, attemptKey]);
 
   // Media starts only for a loaded, active session; stopping is permanent for this assessment.
-  const { videoRef, cameraActive, micActive, audioLevel, cameraError, stopCamera } = useAssessmentMedia(
+  const {
+    videoRef,
+    attachVideo,
+    cameraActive,
+    micActive,
+    audioLevel,
+    cameraError,
+    faceCount,
+    faceDetectionStatus,
+    stopCamera,
+  } = useAssessmentMedia(
     id, loadedAssessmentId === id && questions.length > 0 && !isLoading && !isSubmitting && timeLeftSeconds > 0, recordViolation,
   );
 
   // 3. Submit Attempt Handler
   const submitExam = useCallback(
     async (isAuto = false) => {
-      if (isSubmitting) return;
+      if (isSubmitting || submissionRequestedRef.current) return;
+      submissionRequestedRef.current = true;
       stopCamera();
+      // Also release any preflight stream that was handed off but not adopted
+      // by the exam media hook (for example, after a quick route transition).
+      releaseAssessmentStream(id);
       setIsSubmitting(true);
 
       const formattedResponses = questions.map((q) => {
@@ -280,6 +322,13 @@ export default function TakeAssessmentPage({
     },
     [id, isSubmitting, questions, startedAt, router, stopCamera]
   );
+
+  const faceWarningCount = violations.filter(event => event.type === "multiple_faces_detected").length;
+  useEffect(() => {
+    if (faceWarningCount >= MAX_FACE_WARNINGS && loadedAssessmentId === id && !isLoading) {
+      void submitExam(true);
+    }
+  }, [faceWarningCount, loadedAssessmentId, id, isLoading, submitExam]);
 
   // 4. Countdown Clock
   useEffect(() => {
@@ -352,9 +401,9 @@ export default function TakeAssessmentPage({
   // Fullscreen trigger helper
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
+      document.documentElement.requestFullscreen().catch(() => { });
     } else {
-      document.exitFullscreen().catch(() => {});
+      document.exitFullscreen().catch(() => { });
     }
   };
 
@@ -439,7 +488,7 @@ export default function TakeAssessmentPage({
       responses: formatted,
       timeSpentSeconds: Math.floor((Date.now() - startedAt.getTime()) / 1000),
       violations: violationsRef.current,
-    }).catch(() => {});
+    }).catch(() => { });
   };
 
   const handleSaveAndNext = () => {
@@ -491,15 +540,45 @@ export default function TakeAssessmentPage({
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
+  if (startError) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-5 py-12">
+        <section className="w-full max-w-xl rounded-2xl border border-border bg-card p-7 text-center shadow-sm">
+          <ShieldAlert className="mx-auto mb-4 h-10 w-10 text-amber-500" />
+          <h1 className="text-xl font-bold text-foreground">Assessment could not be started</h1>
+          <p role="alert" className="mt-3 text-sm text-muted-foreground">{startError}</p>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => setStartError(null)}
+              className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push(`/assessments/${id}/result`)}
+              className="rounded-lg border border-border px-4 py-2.5 text-sm font-semibold text-foreground"
+            >
+              View previous result
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   if (isLoading || !currentQ) {
     return (
-      <div className="flex-1 min-h-screen bg-background flex items-center justify-center font-sans">
-        <div className="text-center space-y-3">
-          <Spinner className="w-9 h-9 animate-spin text-primary mx-auto" />
-          <h2 className="text-sm font-semibold text-foreground">Preparing Secure Assessment Environment</h2>
-          <p className="text-xs text-muted-foreground">Initializing question set, proctoring sensors, and anti-cheat monitors...</p>
+      <SafeExamBrowser isEnabled={!isSubmitting} onFullscreenEntered={beginAssessmentAfterFullscreen}>
+        <div className="flex-1 min-h-screen bg-background flex items-center justify-center font-sans">
+          <div className="text-center space-y-3">
+            <Spinner className="w-9 h-9 animate-spin text-primary mx-auto" />
+            <h2 className="text-sm font-semibold text-foreground">Preparing Secure Assessment Environment</h2>
+            <p className="text-xs text-muted-foreground">The test will start after you enter fullscreen.</p>
+          </div>
         </div>
-      </div>
+      </SafeExamBrowser>
     );
   }
 
@@ -507,107 +586,70 @@ export default function TakeAssessmentPage({
   const isTimeCritical = timeLeftSeconds < 300; // < 5 mins
 
   return (
-    <SafeExamBrowser 
-      isEnabled={!isLoading && !isSubmitting}
-      maxWarnings={maxTabSwitches} 
+    <SafeExamBrowser
+      isEnabled={!isSubmitting}
+      onFullscreenEntered={beginAssessmentAfterFullscreen}
+      maxWarnings={maxTabSwitches}
       onTerminate={() => submitExam(true)}
       onViolation={recordViolation}
     >
       <div className="flex-1 bg-background text-foreground font-sans min-h-screen flex flex-col select-none relative">
-      {/* Top Test Header Bar */}
-      <header className="h-16 border-b border-border bg-card px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 shadow-xs">
-        <div className="flex items-center gap-3">
-          {/* CU Official Logo */}
-          <div className="w-9 h-9 rounded-xl overflow-hidden bg-muted/40 shrink-0 border border-border p-1 flex items-center justify-center">
-            <img
-              src="https://images.seeklogo.com/logo-png/43/1/chandigarh-university-cu-logo-png_seeklogo-432515.png"
-              alt="Chandigarh University"
-              className="w-full h-full object-contain"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = "/cu-logo.png";
-              }}
-            />
-          </div>
-          <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs font-mono shadow-xs">
-            Q{currentIndex + 1}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xs sm:text-sm font-bold text-foreground">
-                Question {currentIndex + 1} <span className="text-muted-foreground font-normal">of {questions.length}</span>
-              </h1>
-              <span className="hidden sm:inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted text-foreground border border-border">
-                Chandigarh University
-              </span>
-              {assessmentCode && (
-                <span className="hidden md:inline px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold bg-muted text-foreground border border-border">
-                  {assessmentCode}
+        {/* Top Test Header Bar */}
+        <header className="h-16 border-b border-border bg-card px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 shadow-xs">
+          <div className="flex items-center gap-3">
+            {/* CU Official Logo */}
+            <div className="w-9 h-9 rounded-xl overflow-hidden bg-muted/40 shrink-0 border border-border p-1 flex items-center justify-center">
+              <img
+                src="https://images.seeklogo.com/logo-png/43/1/chandigarh-university-cu-logo-png_seeklogo-432515.png"
+                alt="Chandigarh University"
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "/cu-logo.png";
+                }}
+              />
+            </div>
+            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs font-mono shadow-xs">
+              Q{currentIndex + 1}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xs sm:text-sm font-bold text-foreground">
+                  Question {currentIndex + 1} <span className="text-muted-foreground font-normal">of {questions.length}</span>
+                </h1>
+                <span className="hidden sm:inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted text-foreground border border-border">
+                  Chandigarh University
                 </span>
-              )}
+                {assessmentCode && (
+                  <span className="hidden md:inline px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold bg-muted text-foreground border border-border">
+                    {assessmentCode}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground font-medium truncate max-w-[140px] sm:max-w-none">
+                {currentQ.topic} {currentQ.subtopic ? `• ${currentQ.subtopic}` : ""}
+              </p>
             </div>
-            <p className="text-[11px] text-muted-foreground font-medium truncate max-w-[140px] sm:max-w-none">
-              {currentQ.topic} {currentQ.subtopic ? `• ${currentQ.subtopic}` : ""}
-            </p>
-          </div>
-        </div>
-
-        {/* Center: Live Countdown Clock */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div
-            className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-md border text-xs sm:text-sm font-mono font-bold transition-all ${
-              isTimeCritical
-                ? "bg-rose-50 text-rose-700 border-rose-300 animate-pulse shadow-xs"
-                : "bg-slate-50 text-slate-800 border-slate-200"
-            }`}
-          >
-            <Clock className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isTimeCritical ? "text-rose-600" : "text-primary"}`} />
-            <span>{formatTime(timeLeftSeconds)}</span>
           </div>
 
-          {/* Fullscreen Button */}
-          <button
-            onClick={toggleFullscreen}
-            className="hidden sm:flex items-center justify-center p-2 rounded-md border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors"
-            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-          >
-            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          </button>
-
-          {/* Tab Switch Strike Counter */}
-          {tabSwitches > 0 && (
-            <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold">
-              <ShieldAlert className="w-3.5 h-3.5" />
-              <span>{tabSwitches}/{maxTabSwitches}</span>
-            </div>
-          )}
-
-          {/* Permanent Top Submit Test Button */}
-          <button
-            onClick={() => setShowSubmitModal(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-md bg-primary hover:bg-primary/90 active:bg-primary/80 text-white text-xs font-semibold uppercase tracking-wider transition-all shadow-xs"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Submit Test</span>
-          </button>
-        </div>
-      </header>
-
-      {/* Warning Toast Floating Notification */}
-      {warningToast && (
-        <div className="fixed top-20 right-6 z-50 animate-in slide-in-from-top-3 fade-in duration-200">
-          <div className="bg-card border border-rose-500/40 text-foreground px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-xs max-w-sm">
-            <div className="w-7 h-7 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center shrink-0">
-              <ShieldAlert className="w-4 h-4" />
-            </div>
-            <div className="flex-1">
-              <div className="font-bold text-rose-400">Proctoring Notice</div>
-              <div className="text-[11px] text-muted-foreground">{warningToast.message}</div>
-            </div>
-            <button
-              onClick={() => setWarningToast(null)}
-              className="text-muted-foreground hover:text-foreground p-1"
+          {/* Center: Live Countdown Clock */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div
+              className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-md border text-xs sm:text-sm font-mono font-bold transition-all ${isTimeCritical
+                  ? "bg-rose-50 text-rose-700 border-rose-300 animate-pulse shadow-xs"
+                  : "bg-slate-50 text-slate-800 border-slate-200"
+                }`}
             >
-              <X className="w-3.5 h-3.5" />
+              <Clock className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isTimeCritical ? "text-rose-600" : "text-primary"}`} />
+              <span>{formatTime(timeLeftSeconds)}</span>
+            </div>
+
+            {/* Fullscreen Button */}
+            <button
+              onClick={toggleFullscreen}
+              className="hidden sm:flex items-center justify-center p-2 rounded-md border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors"
+              title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+            >
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
           </div>
         </div>
@@ -622,13 +664,13 @@ export default function TakeAssessmentPage({
 
         return (
           <div
-            className={`flex-1 flex flex-col lg:flex-row mx-auto w-full p-3 sm:p-6 gap-4 sm:gap-6 ${
+            className={`flex-1 min-h-0 overflow-hidden flex flex-col lg:flex-row mx-auto w-full p-3 sm:p-6 gap-4 sm:gap-6 ${
               isCodingQuestion ? "max-w-[1700px]" : "max-w-7xl"
             }`}
           >
             {/* Left Column: Question Area / DSA Code Editor */}
             {isCodingQuestion ? (
-              <main className="flex-1 flex flex-col justify-between space-y-4 min-w-0">
+              <main className="assessment-scroll flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col space-y-4 min-w-0">
                 <DSAAssessmentEditor
                   question={currentQ}
                   savedResponse={responses[currentQ._id]}
@@ -650,39 +692,98 @@ export default function TakeAssessmentPage({
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-                      disabled={currentIndex === 0}
-                      className="inline-flex items-center gap-1 px-3 sm:px-4 py-2 rounded-xl border border-border hover:bg-muted text-xs font-semibold text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft className="w-4 h-4" /> Previous
-                    </button>
+            {/* Tab Switch Strike Counter */}
+            {tabSwitches > 0 && (
+              <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold">
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>{tabSwitches}/{maxTabSwitches}</span>
+              </div>
+            )}
 
-                    {isLastQuestion ? (
+            {/* Permanent Top Submit Test Button */}
+            <button
+              onClick={() => setShowSubmitModal(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-md bg-primary hover:bg-primary/90 active:bg-primary/80 text-white text-xs font-semibold uppercase tracking-wider transition-all shadow-xs"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Submit Test</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Warning Toast Floating Notification */}
+        {warningToast && (
+          <div className="fixed top-20 right-6 z-50 animate-in slide-in-from-top-3 fade-in duration-200">
+            <div className="bg-card border border-rose-500/40 text-foreground px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-xs max-w-sm">
+              <div className="w-7 h-7 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-4 h-4" />
+              </div>
+              <div className="flex-1">
+                <div className="font-bold text-rose-400">Proctoring Notice</div>
+                <div className="text-[11px] text-muted-foreground">{warningToast.message}</div>
+              </div>
+              <button
+                onClick={() => setWarningToast(null)}
+                className="text-muted-foreground hover:text-foreground p-1"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main Workspace Layout */}
+        {(() => {
+          const isCodingQuestion =
+            currentQ.questionType === "coding" ||
+            currentQ.questionType === "algorithmic" ||
+            (!currentQ.options?.length && (!!currentQ.starterCode || !!currentQ.codeSnippet));
+
+          return (
+            <div
+              className={`flex-1 flex flex-col lg:flex-row mx-auto w-full p-3 sm:p-6 gap-4 sm:gap-6 ${isCodingQuestion ? "max-w-[1700px]" : "max-w-7xl"
+                }`}
+            >
+              {/* Left Column: Question Area / DSA Code Editor */}
+              {isCodingQuestion ? (
+                <main className="flex-1 flex flex-col justify-between space-y-4 min-w-0">
+                  <DSAAssessmentEditor
+                    question={currentQ}
+                    savedResponse={responses[currentQ._id]}
+                    onSave={handleSaveCodingQuestion}
+                    onNext={handleSaveAndNext}
+                    isLastQuestion={isLastQuestion}
+                  />
+
+                  {/* Bottom Action Ribbon */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 bg-card border border-border p-3 sm:p-4 rounded-2xl shadow-sm">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setShowSubmitModal(true)}
-                        className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-md shadow-primary/20"
+                        onClick={handleMarkForReview}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 text-xs font-semibold text-amber-400 transition-colors"
+                        title="Mark for later review"
                       >
-                        <Send className="w-3.5 h-3.5" /> Submit Assessment
+                        <Bookmark className="w-3.5 h-3.5" /> Review Later
                       </button>
-                    ) : (
+                    </div>
+
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={handleSaveAndNext}
-                        className="inline-flex items-center gap-1 px-4 sm:px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-sm shadow-primary/20"
+                        onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+                        disabled={currentIndex === 0}
+                        className="inline-flex items-center gap-1 px-3 sm:px-4 py-2 rounded-xl border border-border hover:bg-muted text-xs font-semibold text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                       >
-                        Save & Next <ChevronRight className="w-4 h-4" />
+                        <ChevronLeft className="w-4 h-4" /> Previous
                       </button>
                     )}
                   </div>
                 </div>
               </main>
             ) : (
-              <main className="flex-1 flex flex-col justify-between space-y-4">
-                <div className="bg-card border border-border rounded-2xl sm:rounded-3xl p-5 sm:p-8 space-y-6 shadow-sm">
+              <main className="flex-1 min-h-0 min-w-0 flex flex-col gap-4 overflow-hidden">
+                <div key={currentQ._id} role="region" aria-label="Question and answer options" tabIndex={0} className="assessment-scroll flex-1 min-h-0 overflow-y-auto overscroll-contain bg-card border border-border rounded-2xl sm:rounded-3xl p-5 sm:p-8 space-y-6 shadow-sm">
                   {/* Question Metadata Ribbon */}
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-4">
                     <div className="flex items-center gap-2">
@@ -693,24 +794,91 @@ export default function TakeAssessmentPage({
                         {currentQ.difficulty}
                       </span>
                     </div>
-
-                    <div className="flex items-center gap-3 text-xs">
-                      <div className="flex items-center gap-1 text-emerald-400 font-mono font-bold">
-                        <span>+{currentQ.marks || 1} mark</span>
+                  </div>
+                </main>
+              ) : (
+                <main className="flex-1 flex flex-col justify-between space-y-4">
+                  <div className="bg-card border border-border rounded-2xl sm:rounded-3xl p-5 sm:p-8 space-y-6 shadow-sm">
+                    {/* Question Metadata Ribbon */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-4">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase bg-primary/10 text-primary border border-primary/20">
+                          {currentQ.questionType === "multiple_choice" ? "Multiple Choice" : "Single Choice"}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-muted text-muted-foreground border border-border capitalize">
+                          {currentQ.difficulty}
+                        </span>
                       </div>
-                      {currentQ.negativeMarks > 0 && (
-                        <div className="flex items-center gap-1 text-rose-400 font-mono font-bold">
-                          <span>-{currentQ.negativeMarks} negative</span>
+
+                      <div className="flex items-center gap-3 text-xs">
+                        <div className="flex items-center gap-1 text-emerald-400 font-mono font-bold">
+                          <span>+{currentQ.marks || 1} mark</span>
+                        </div>
+                        {currentQ.negativeMarks > 0 && (
+                          <div className="flex items-center gap-1 text-rose-400 font-mono font-bold">
+                            <span>-{currentQ.negativeMarks} negative</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Question Text */}
+                    <div className="space-y-4">
+                      <h2 className="text-base sm:text-lg font-semibold text-foreground leading-relaxed whitespace-pre-wrap">
+                        {currentQ.question}
+                      </h2>
+
+                      {/* Code Snippet Box (If present in question) */}
+                      {currentQ.codeSnippet && (
+                        <div className="rounded-xl overflow-hidden border border-border bg-[#0d0d10] p-4 text-xs font-mono text-emerald-300">
+                          <div className="text-[10px] text-muted-foreground uppercase font-sans mb-2 font-bold tracking-wider">
+                            {currentQ.language || "Code"}
+                          </div>
+                          <pre className="overflow-x-auto whitespace-pre leading-5">
+                            {currentQ.codeSnippet}
+                          </pre>
                         </div>
                       )}
                     </div>
-                  </div>
 
-                  {/* Question Text */}
-                  <div className="space-y-4">
-                    <h2 className="text-base sm:text-lg font-semibold text-foreground leading-relaxed whitespace-pre-wrap">
-                      {currentQ.question}
-                    </h2>
+                    {/* Options Selection (4 Cards) */}
+                    <div className="space-y-3 pt-2">
+                      {(currentQ.options ?? []).map((optionText, optIndex) => {
+                        const isSelected = selectedAnswer === optIndex;
+                        const letter = String.fromCharCode(65 + optIndex); // A, B, C, D
+
+                        return (
+                          <button
+                            key={optIndex}
+                            type="button"
+                            onClick={() => handleSelectOption(optIndex)}
+                            className={`w-full text-left p-4 sm:p-4 rounded-2xl border transition-all flex items-start gap-3.5 group relative ${isSelected
+                                ? "border-emerald-400 bg-emerald-500/15 ring-2 ring-emerald-400/35 shadow-[0_0_0_2px_rgba(52,211,153,0.22)]"
+                                : "border-border bg-card hover:bg-muted/40 hover:border-muted-foreground/30"
+                              }`}
+                          >
+                            {/* Option Radio Letter Pill */}
+                            <div
+                              className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${isSelected
+                                  ? "bg-emerald-500 text-slate-950 shadow-sm ring-2 ring-emerald-300/50"
+                                  : "bg-muted text-muted-foreground border border-border group-hover:border-primary/50 group-hover:text-foreground"
+                                }`}
+                            >
+                              {letter}
+                            </div>
+
+                            <div className="flex-1 text-xs sm:text-sm font-medium text-foreground pt-0.5 leading-relaxed">
+                              {optionText}
+                            </div>
+
+                            {/* Checkmark when chosen */}
+                            {isSelected && (
+                              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 self-center" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
 
                     {/* Code Snippet Box (If present in question) */}
                     {currentQ.codeSnippet && (
@@ -718,53 +886,67 @@ export default function TakeAssessmentPage({
                         <div className="text-[10px] text-muted-foreground uppercase font-sans mb-2 font-bold tracking-wider">
                           {currentQ.language || "Code"}
                         </div>
-                        <pre className="overflow-x-auto whitespace-pre leading-5">
+                        <pre className="assessment-scroll max-h-[45vh] overflow-auto whitespace-pre leading-5" tabIndex={0} aria-label="Question code snippet">
                           {currentQ.codeSnippet}
                         </pre>
                       </div>
                     )}
                   </div>
 
-                  {/* Options Selection (4 Cards) */}
-                  <div className="space-y-3 pt-2">
-                    {(currentQ.options ?? []).map((optionText, optIndex) => {
-                      const isSelected = selectedAnswer === optIndex;
-                      const letter = String.fromCharCode(65 + optIndex); // A, B, C, D
+                  {/* Bottom Action Ribbon */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 bg-card border border-border p-3 sm:p-4 rounded-2xl shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleClearSelection}
+                        disabled={selectedAnswer < 0}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border hover:bg-muted text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="Clear current answer choice"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" /> Clear
+                      </button>
 
-                      return (
+                      <button
+                        type="button"
+                        onClick={handleMarkForReview}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 text-xs font-semibold text-amber-400 transition-colors"
+                        title="Mark for later review"
+                      >
+                        <Bookmark className="w-3.5 h-3.5" /> Review
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+                        disabled={currentIndex === 0}
+                        className="inline-flex items-center gap-1 px-3 sm:px-4 py-2 rounded-xl border border-border hover:bg-muted text-xs font-semibold text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <ChevronLeft className="w-4 h-4" /> Previous
+                      </button>
+
+                      {isLastQuestion ? (
                         <button
-                          key={optIndex}
                           type="button"
-                          onClick={() => handleSelectOption(optIndex)}
-                          className={`w-full text-left p-4 sm:p-4 rounded-2xl border transition-all flex items-start gap-3.5 group relative ${
-                            isSelected
-                              ? "border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(37,99,235,0.25)]"
-                              : "border-border bg-card hover:bg-muted/40 hover:border-muted-foreground/30"
-                          }`}
+                          onClick={() => setShowSubmitModal(true)}
+                          className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-md shadow-primary/20"
                         >
-                          {/* Option Radio Letter Pill */}
-                          <div
-                            className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
-                              isSelected
-                                ? "bg-primary text-primary-foreground shadow-sm"
-                                : "bg-muted text-muted-foreground border border-border group-hover:border-primary/50 group-hover:text-foreground"
-                            }`}
-                          >
-                            {letter}
-                          </div>
-
-                          <div className="flex-1 text-xs sm:text-sm font-medium text-foreground pt-0.5 leading-relaxed">
-                            {optionText}
-                          </div>
-
-                          {/* Checkmark when chosen */}
-                          {isSelected && (
-                            <CheckCircle2 className="w-5 h-5 text-primary shrink-0 self-center" />
-                          )}
+                          <Send className="w-3.5 h-3.5" /> Submit Assessment
                         </button>
-                      );
-                    })}
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleSaveAndNext}
+                          className="inline-flex items-center gap-1 px-4 sm:px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-sm shadow-primary/20"
+                        >
+                          Save & Next <ChevronRight className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
+                </main>
+              )}
 
                   {/* Keyboard shortcut hint */}
                   <div className="text-[11px] text-muted-foreground text-right hidden sm:block">
@@ -773,7 +955,7 @@ export default function TakeAssessmentPage({
                 </div>
 
                 {/* Bottom Action Ribbon */}
-                <div className="flex flex-wrap items-center justify-between gap-3 bg-card border border-border p-3 sm:p-4 rounded-2xl shadow-sm">
+                <div className="shrink-0 z-20 flex flex-wrap items-center justify-between gap-3 bg-card/95 backdrop-blur-xl border border-border p-3 sm:p-4 rounded-2xl shadow-lg">
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -785,50 +967,52 @@ export default function TakeAssessmentPage({
                       <RotateCcw className="w-3.5 h-3.5" /> Clear
                     </button>
 
+                {/* Live Proctoring Camera & Mic PIP Card */}
+                <div className="bg-card border border-border rounded-2xl p-4 shadow-sm space-y-3 relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+                        Proctoring Monitor
+                      </span>
+                    </div>
                     <button
-                      type="button"
-                      onClick={handleMarkForReview}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 text-xs font-semibold text-amber-400 transition-colors"
-                      title="Mark for later review"
+                      onClick={() => setIsPipMinimized(!isPipMinimized)}
+                      className="text-[11px] text-muted-foreground hover:text-foreground px-2 py-0.5 rounded border border-border"
                     >
-                      <Bookmark className="w-3.5 h-3.5" /> Review
+                      {isPipMinimized ? "Show Feed" : "Collapse"}
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-                      disabled={currentIndex === 0}
-                      className="inline-flex items-center gap-1 px-3 sm:px-4 py-2 rounded-xl border border-border hover:bg-muted text-xs font-semibold text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft className="w-4 h-4" /> Previous
-                    </button>
+                  {!isPipMinimized && (
+                    <div className="space-y-2.5">
+                      <div className="relative aspect-video bg-black/60 rounded-xl overflow-hidden border border-border/80 flex items-center justify-center">
+                        <video
+                          ref={attachVideo}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="w-full h-full object-cover mirror"
+                          style={{ transform: "scaleX(-1)" }}
+                        />
 
-                    {isLastQuestion ? (
-                      <button
-                        type="button"
-                        onClick={() => setShowSubmitModal(true)}
-                        className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-md shadow-primary/20"
-                      >
-                        <Send className="w-3.5 h-3.5" /> Submit Assessment
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleSaveAndNext}
-                        className="inline-flex items-center gap-1 px-4 sm:px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-sm shadow-primary/20"
-                      >
-                        Save & Next <ChevronRight className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </main>
-            )}
+                        {(!cameraActive || cameraError) && (
+                          <div className="absolute inset-0 bg-card/90 flex flex-col items-center justify-center p-3 text-center space-y-2">
+                            <Camera className="w-6 h-6 text-muted-foreground" />
+                            <p className="text-[11px] text-muted-foreground leading-tight">
+                              {cameraError || "Waiting for camera authorization..."}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Status Overlay Badges */}
+                        <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[10px] font-mono font-bold text-white border border-white/10">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> REC
+                        </div>
+                      </div>
 
         {/* Right Column: Proctoring Feed & Question Palette Sidebar */}
-        <aside className="w-full lg:w-80 flex flex-col gap-4">
+        <aside className="assessment-scroll w-full lg:w-80 shrink-0 min-h-0 max-h-[35vh] lg:max-h-full overflow-y-auto overscroll-contain flex flex-col gap-4 [&>div]:shrink-0">
           
           {/* Live Proctoring Camera & Mic PIP Card */}
           <div className="bg-card border border-border rounded-2xl p-4 shadow-sm space-y-3 relative overflow-hidden">
@@ -847,11 +1031,19 @@ export default function TakeAssessmentPage({
               </button>
             </div>
 
+            <div role="status" className={`rounded-xl border px-3 py-2 text-xs ${faceWarningCount > 0 ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300" : "border-border bg-muted/30 text-muted-foreground"}`}>
+              <div className="flex items-center justify-between gap-2 font-semibold">
+                <span>Multiple-face warnings</span>
+                <span className="font-mono">{faceWarningCount} / {MAX_FACE_WARNINGS}</span>
+              </div>
+              <p className="mt-1 text-[11px] leading-relaxed">Stay alone in the camera frame. Warning 5 ends and submits your test.</p>
+            </div>
+
             {!isPipMinimized && (
               <div className="space-y-2.5">
                 <div className="relative aspect-video bg-black/60 rounded-xl overflow-hidden border border-border/80 flex items-center justify-center">
                   <video
-                    ref={videoRef}
+                    ref={attachVideo}
                     autoPlay
                     playsInline
                     muted
@@ -859,79 +1051,102 @@ export default function TakeAssessmentPage({
                     style={{ transform: "scaleX(-1)" }}
                   />
 
-                  {(!cameraActive || cameraError) && (
-                    <div className="absolute inset-0 bg-card/90 flex flex-col items-center justify-center p-3 text-center space-y-2">
-                      <Camera className="w-6 h-6 text-muted-foreground" />
-                      <p className="text-[11px] text-muted-foreground leading-tight">
-                        {cameraError || "Waiting for camera authorization..."}
-                      </p>
+                        <span className="text-[10px] font-mono text-muted-foreground">
+                          {audioLevel > 40 ? "Loud" : "Quiet"}
+                        </span>
+                      </div>
                     </div>
                   )}
-
-                  {/* Status Overlay Badges */}
-                  <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[10px] font-mono font-bold text-white border border-white/10">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> REC
-                  </div>
                 </div>
 
-                {/* Mic & Audio Sensitivity Indicator */}
-                <div className="flex items-center justify-between gap-2 p-2 bg-muted/30 border border-border rounded-xl text-[11px]">
-                  <div className="flex items-center gap-1.5 text-muted-foreground">
-                    {micActive ? (
-                      <Mic className="w-3.5 h-3.5 text-emerald-400" />
-                    ) : (
-                      <MicOff className="w-3.5 h-3.5 text-rose-400" />
-                    )}
-                    <span>Mic Level</span>
-                  </div>
+                {/* Question Palette Sidebar */}
+                <div className="bg-card border border-border rounded-2xl p-5 flex flex-col justify-between shadow-sm space-y-4">
+                  <div className="space-y-4">
+                    <h2 className="text-xs sm:text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-primary" /> Question Palette
+                    </h2>
 
-                  {/* Voice level meter */}
-                  <div className="flex-1 max-w-[120px] h-2 bg-muted rounded-full overflow-hidden border border-border">
-                    <div
-                      className={`h-full transition-all duration-100 ${
-                        audioLevel > 40 ? "bg-rose-500" : "bg-emerald-500"
-                      }`}
-                      style={{ width: `${audioLevel}%` }}
-                    />
-                  </div>
+                    {/* Status Legend */}
+                    <div className="grid grid-cols-2 gap-2 text-[11px] p-3 rounded-xl bg-muted/30 border border-border">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                        <span className="text-muted-foreground">Answered ({answeredCount})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                        <span className="text-muted-foreground">Review ({reviewCount})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-zinc-600" />
+                        <span className="text-muted-foreground">Unvisited ({unattemptedCount})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full border-2 border-primary" />
+                        <span className="text-muted-foreground">Current</span>
+                      </div>
+                    </div>
 
                   <span className="text-[10px] font-mono text-muted-foreground">
                     {audioLevel > 40 ? "Loud" : "Quiet"}
+                  </span>
+                </div>
+
+                <div
+                  className={`flex items-center justify-between gap-2 p-2 border rounded-xl text-[11px] ${
+                    faceCount > 1
+                      ? "bg-rose-500/10 border-rose-500/40 text-rose-400"
+                      : "bg-muted/30 border-border text-muted-foreground"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        faceDetectionStatus === "active"
+                          ? faceCount > 1
+                            ? "bg-rose-400 animate-pulse"
+                            : "bg-emerald-400"
+                          : faceDetectionStatus === "initializing"
+                            ? "bg-amber-400 animate-pulse"
+                            : "bg-zinc-400"
+                      }`}
+                    />
+                    <span>Face Check</span>
+                  </div>
+                  <span className="font-mono text-[10px] font-semibold">
+                    {faceDetectionStatus === "active"
+                      ? faceCount > 1
+                        ? `${faceCount} faces — warning`
+                        : faceCount === 1
+                          ? "1 face detected"
+                          : "Scanning"
+                      : faceDetectionStatus === "initializing"
+                        ? "Starting"
+                        : "Unavailable"}
                   </span>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Question Palette Sidebar */}
-          <div className="bg-card border border-border rounded-2xl p-5 flex flex-col justify-between shadow-sm space-y-4">
-            <div className="space-y-4">
-              <h2 className="text-xs sm:text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
-                <Layers className="w-4 h-4 text-primary" /> Question Palette
-              </h2>
-
-              {/* Status Legend */}
-              <div className="grid grid-cols-2 gap-2 text-[11px] p-3 rounded-xl bg-muted/30 border border-border">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                  <span className="text-muted-foreground">Answered ({answeredCount})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                  <span className="text-muted-foreground">Review ({reviewCount})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-zinc-600" />
-                  <span className="text-muted-foreground">Unvisited ({unattemptedCount})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full border-2 border-primary" />
-                  <span className="text-muted-foreground">Current</span>
-                </div>
-              </div>
+                  {/* Quick Summary & Final Submit Trigger */}
+                  <div className="pt-3 border-t border-border space-y-3">
+                    <div className="text-[11px] text-muted-foreground space-y-1">
+                      <div className="flex justify-between">
+                        <span>Attempted:</span>
+                        <strong className="text-emerald-400">{answeredCount}</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Marked for Review:</span>
+                        <strong className="text-amber-400">{reviewCount}</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Unattempted:</span>
+                        <strong className="text-muted-foreground">{unattemptedCount}</strong>
+                      </div>
+                    </div>
 
               {/* Numbered Palette Buttons */}
-              <div className="grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-5 gap-2 max-h-56 sm:max-h-64 overflow-y-auto pr-1">
+              <div className="assessment-scroll grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-5 gap-2 max-h-56 sm:max-h-64 overflow-y-auto p-1">
                 {questions.map((q, idx) => {
                   const resp = responses[q._id];
                   const isCurrent = idx === currentIndex;
@@ -951,112 +1166,83 @@ export default function TakeAssessmentPage({
                     <button
                       key={q._id}
                       type="button"
+                      aria-current={isCurrent ? "step" : undefined}
+                      aria-label={`Question ${idx + 1}${isCurrent ? ", current" : ""}${isAnswered ? ", answered" : ""}${isReview ? ", marked for review" : ""}`}
                       onClick={() => setCurrentIndex(idx)}
                       className={`h-9 rounded-xl font-mono text-xs font-bold border transition-all flex items-center justify-center relative ${btnStyle} ${
-                        isCurrent ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
+                        isCurrent ? "!bg-emerald-500 !text-slate-950 !border-emerald-300 shadow-md shadow-emerald-500/20 ring-2 ring-inset ring-emerald-200" : ""
                       }`}
                     >
-                      {idx + 1}
-                      {isReview && (
-                        <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400" />
-                      )}
+                      Finish & Submit Test
                     </button>
-                  );
-                })}
-              </div>
+                  </div>
+                </div>
+              </aside>
             </div>
+          );
+        })()}
 
-            {/* Quick Summary & Final Submit Trigger */}
-            <div className="pt-3 border-t border-border space-y-3">
-              <div className="text-[11px] text-muted-foreground space-y-1">
-                <div className="flex justify-between">
-                  <span>Attempted:</span>
-                  <strong className="text-emerald-400">{answeredCount}</strong>
+        {/* Confirmation Modal */}
+        {showSubmitModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-card border border-border rounded-3xl p-6 max-w-md w-full space-y-5 animate-in fade-in zoom-in-95 shadow-2xl">
+              <div className="flex items-center gap-3 text-primary">
+                <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+                  <Send className="w-5 h-5" />
                 </div>
-                <div className="flex justify-between">
-                  <span>Marked for Review:</span>
-                  <strong className="text-amber-400">{reviewCount}</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span>Unattempted:</span>
-                  <strong className="text-muted-foreground">{unattemptedCount}</strong>
+                <div>
+                  <h3 className="text-lg font-bold text-foreground">Submit Assessment?</h3>
+                  <p className="text-xs text-muted-foreground">Once submitted, your answers will be finalized for evaluation.</p>
                 </div>
               </div>
 
-              <button
-                onClick={() => setShowSubmitModal(true)}
-                className="w-full py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold rounded-xl transition-all shadow-md shadow-primary/20"
-              >
-                Finish & Submit Test
-              </button>
+              <div className="p-4 bg-muted/40 border border-border rounded-2xl grid grid-cols-3 gap-2 text-center text-xs font-mono">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold">Answered</span>
+                  <div className="text-xl font-bold text-emerald-400">{answeredCount}</div>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold">Review</span>
+                  <div className="text-xl font-bold text-amber-400">{reviewCount}</div>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold">Unattempted</span>
+                  <div className="text-xl font-bold text-muted-foreground">{unattemptedCount}</div>
+                </div>
+              </div>
+
+              {violations.length > 0 && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-400 flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 shrink-0" />
+                  <span>Notice: {violations.length} proctoring event(s) logged and submitted with attempt.</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSubmitModal(false)}
+                  className="px-4 py-2.5 rounded-xl border border-border hover:bg-muted text-xs font-semibold text-foreground transition-colors"
+                >
+                  Return to Exam
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => submitExam(false)}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold rounded-xl transition-all shadow-md shadow-primary/20 disabled:opacity-50"
+                >
+                  {isSubmitting ? <Spinner className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  Yes, Submit Now
+                </button>
+              </div>
             </div>
           </div>
-        </aside>
+        )}
+
+        {/* Proctoring Violation Warning Modal is removed in favor of SafeExamBrowser overlay */}
       </div>
-    );
-  })()}
-
-      {/* Confirmation Modal */}
-      {showSubmitModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl p-6 max-w-md w-full space-y-5 animate-in fade-in zoom-in-95 shadow-2xl">
-            <div className="flex items-center gap-3 text-primary">
-              <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
-                <Send className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-foreground">Submit Assessment?</h3>
-                <p className="text-xs text-muted-foreground">Once submitted, your answers will be finalized for evaluation.</p>
-              </div>
-            </div>
-
-            <div className="p-4 bg-muted/40 border border-border rounded-2xl grid grid-cols-3 gap-2 text-center text-xs font-mono">
-              <div className="space-y-0.5">
-                <span className="text-[10px] text-muted-foreground uppercase font-bold">Answered</span>
-                <div className="text-xl font-bold text-emerald-400">{answeredCount}</div>
-              </div>
-              <div className="space-y-0.5">
-                <span className="text-[10px] text-muted-foreground uppercase font-bold">Review</span>
-                <div className="text-xl font-bold text-amber-400">{reviewCount}</div>
-              </div>
-              <div className="space-y-0.5">
-                <span className="text-[10px] text-muted-foreground uppercase font-bold">Unattempted</span>
-                <div className="text-xl font-bold text-muted-foreground">{unattemptedCount}</div>
-              </div>
-            </div>
-
-            {violations.length > 0 && (
-              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-400 flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 shrink-0" />
-                <span>Notice: {violations.length} proctoring event(s) logged and submitted with attempt.</span>
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowSubmitModal(false)}
-                className="px-4 py-2.5 rounded-xl border border-border hover:bg-muted text-xs font-semibold text-foreground transition-colors"
-              >
-                Return to Exam
-              </button>
-
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={() => submitExam(false)}
-                className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold rounded-xl transition-all shadow-md shadow-primary/20 disabled:opacity-50"
-              >
-                {isSubmitting ? <Spinner className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                Yes, Submit Now
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Proctoring Violation Warning Modal is removed in favor of SafeExamBrowser overlay */}
-    </div>
     </SafeExamBrowser>
   );
 }

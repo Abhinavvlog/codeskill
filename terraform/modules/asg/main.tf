@@ -64,6 +64,10 @@ server {
         proxy_set_header Upgrade $${http_upgrade};
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host $${host};
+        proxy_set_header X-Real-IP $${remote_addr};
+        proxy_set_header X-Forwarded-For $${proxy_add_x_forwarded_for};
+        proxy_set_header X-Forwarded-Proto $${scheme};
+        proxy_set_header X-Request-ID $${request_id};
         proxy_cache_bypass $${http_upgrade};
     }
 
@@ -74,6 +78,10 @@ server {
         proxy_set_header Upgrade $${http_upgrade};
         proxy_set_header Connection "Upgrade";
         proxy_set_header Host $${host};
+        proxy_set_header X-Real-IP $${remote_addr};
+        proxy_set_header X-Forwarded-For $${proxy_add_x_forwarded_for};
+        proxy_set_header X-Forwarded-Proto $${scheme};
+        proxy_set_header X-Request-ID $${request_id};
     }
     
     location /socket.io/ {
@@ -82,6 +90,10 @@ server {
         proxy_set_header Upgrade $${http_upgrade};
         proxy_set_header Connection "Upgrade";
         proxy_set_header Host $${host};
+        proxy_set_header X-Real-IP $${remote_addr};
+        proxy_set_header X-Forwarded-For $${proxy_add_x_forwarded_for};
+        proxy_set_header X-Forwarded-Proto $${scheme};
+        proxy_set_header X-Request-ID $${request_id};
     }
 }
 NGINX
@@ -132,6 +144,12 @@ NODE_ENV=production node dist/database/run-practice-submission-source.js || true
 # Start API server, Judge Worker, and Next.js frontend via ecosystem configuration (AUD-009, AUD-021)
 cd /opt/codeskill
 pm2 start ecosystem.config.js
+
+# Configure pm2-logrotate to prevent EBS disk exhaustion
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 50M
+pm2 set pm2-logrotate:retain 7
+pm2 set pm2-logrotate:compress true
 
 pm2 save
 EOSUDO

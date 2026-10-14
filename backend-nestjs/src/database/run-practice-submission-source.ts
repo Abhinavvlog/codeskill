@@ -10,6 +10,7 @@ import { readShardingState } from './sharding/sharding-state';
 import { parseSubmissionShardingConfig } from './sharding/sharding.config';
 import { validateShardingState } from './sharding/sharding-state';
 import { applyContestSecurityReattemptMigration } from './migrations/contest-security-reattempt';
+import { applyAssessmentAudienceTargetingMigration } from './migrations/assessment-audience-targeting';
 
 export function practiceSubmissionMigrationOptions(): DataSourceOptions {
   const postgres = databaseConfig().postgres;
@@ -54,6 +55,7 @@ export async function runPracticeSubmissionSourceMigration(): Promise<void> {
           skipSubmissions: !!sharding,
         });
         await applyContestSecurityReattemptMigration(queryRunner);
+        await applyAssessmentAudienceTargetingMigration(queryRunner);
         await queryRunner.commitTransaction();
       } catch (error) {
         await queryRunner.rollbackTransaction();
