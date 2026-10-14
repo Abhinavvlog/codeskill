@@ -31,6 +31,7 @@ import DSAAssessmentEditor from "@/components/assessment/DSAAssessmentEditor";
 import SafeExamBrowser from "@/components/assessment/SafeExamBrowser";
 import { Spinner } from "@/components/ui/spinner";
 import { useAssessmentMedia } from "@/hooks/useAssessmentMedia";
+import { releaseAssessmentStream } from "@/lib/assessment-media-session";
 
 interface TestCase {
   id?: string;
@@ -100,6 +101,24 @@ export default function TakeAssessmentPage({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [assessmentTitle, setAssessmentTitle] = useState("Proctored Assessment");
   const [assessmentCode, setAssessmentCode] = useState("");
+  const [startError, setStartError] = useState<string | null>(null);
+  const mediaCleanupRef = useRef<{ assessmentId: string; timer: number } | null>(null);
+
+  // Stop any handed-off preflight stream when this route is really left. Defer
+  // one event turn so React Strict Mode's development-only remount can cancel it.
+  useEffect(() => {
+    if (mediaCleanupRef.current?.assessmentId === id) {
+      window.clearTimeout(mediaCleanupRef.current.timer);
+      mediaCleanupRef.current = null;
+    }
+    return () => {
+      const timer = window.setTimeout(() => {
+        releaseAssessmentStream(id);
+        if (mediaCleanupRef.current?.timer === timer) mediaCleanupRef.current = null;
+      }, 0);
+      mediaCleanupRef.current = { assessmentId: id, timer };
+    };
+  }, [id]);
 
   // Proctoring & Integrity Telemetry
   const [tabSwitches, setTabSwitches] = useState(0);
@@ -166,78 +185,75 @@ export default function TakeAssessmentPage({
     [id, questions, startedAt]
   );
 
-  // 1. Initialize Test Session & Load Assessment
-  useEffect(() => {
-    let isMounted = true;
+  // Start the attempt only after the candidate enters fullscreen from the secure gate.
+  const startAttemptRequestedRef = useRef(false);
+  const beginAssessmentAfterFullscreen = useCallback(async () => {
+    if (startAttemptRequestedRef.current) return;
+    startAttemptRequestedRef.current = true;
+    setIsLoading(true);
+    try {
+      const isExplicitRetake = new URLSearchParams(window.location.search).get("retake") === "1";
+      // A Redo action must discard any stale in-progress attempt and start a
+      // fresh timer. Ordinary assessment entry still resumes an in-progress test.
+      const res = isExplicitRetake
+        ? await studentAssessmentsAPI.retakeAttempt(id)
+        : await studentAssessmentsAPI.startAttempt(id);
+      const data = res.data;
+      setQuestions(data.questions || []);
+      setDurationMinutes(data.durationMinutes || 45);
+      if (data.code) setAssessmentCode(data.code);
+      if (data.title) setAssessmentTitle(data.title);
 
-    const initTest = async () => {
-      setIsLoading(true);
-      setLoadedAssessmentId(null);
-      try {
-        const res = await studentAssessmentsAPI.startAttempt(id);
-        const data = res.data;
-        if (!isMounted) return;
+      const start = new Date(data.startedAt || new Date());
+      setStartedAt(start);
 
-        setQuestions(data.questions || []);
-        setDurationMinutes(data.durationMinutes || 45);
-        if (data.code) setAssessmentCode(data.code);
-        if (data.title) setAssessmentTitle(data.title);
+      const totalSecs = (data.durationMinutes || 45) * 60;
+      const elapsedSecs = Math.floor((Date.now() - start.getTime()) / 1000);
+      setTimeLeftSeconds(Math.max(0, totalSecs - elapsedSecs));
 
-        const start = new Date(data.startedAt || new Date());
-        setStartedAt(start);
-
-        const totalSecs = (data.durationMinutes || 45) * 60;
-        const elapsedSecs = Math.floor((Date.now() - start.getTime()) / 1000);
-        const remaining = Math.max(0, totalSecs - elapsedSecs);
-        setTimeLeftSeconds(remaining);
-
-        if (data.proctoring?.maxTabSwitches) {
-          setMaxTabSwitches(data.proctoring.maxTabSwitches);
-        }
-
-        // Restore saved responses if session resumed
-        const initialResponses: Record<
-          string,
-          {
-            selectedAnswer: number;
-            code?: string;
-            language?: string;
-            testCasesPassed?: number;
-            totalTestCases?: number;
-            status: string;
-          }
-        > = {};
-        (data.savedResponses || []).forEach((r: any) => {
-          if (r.questionId) {
-            initialResponses[r.questionId.toString()] = {
-              selectedAnswer: r.selectedAnswer ?? -1,
-              code: r.code || "",
-              language: r.language || "python",
-              testCasesPassed: r.testCasesPassed || 0,
-              totalTestCases: r.totalTestCases || 0,
-              status:
-                r.status ||
-                (r.selectedAnswer >= 0 || (r.code && r.code.trim().length > 0)
-                  ? "answered"
-                  : "unvisited"),
-            };
-          }
-        });
-        setResponses(initialResponses);
-        setLoadedAssessmentId(id);
-      } catch (err: any) {
-        console.error("Failed to start assessment:", err);
-        router.replace(`/assessments/${id}`);
-      } finally {
-        if (isMounted) setIsLoading(false);
+      if (data.proctoring?.maxTabSwitches) {
+        setMaxTabSwitches(data.proctoring.maxTabSwitches);
       }
-    };
 
-    initTest();
-
-    return () => {
-      isMounted = false;
-    };
+      const initialResponses: Record<
+        string,
+        {
+          selectedAnswer: number;
+          code?: string;
+          language?: string;
+          testCasesPassed?: number;
+          totalTestCases?: number;
+          status: string;
+        }
+      > = {};
+      (data.savedResponses || []).forEach((r: any) => {
+        if (r.questionId) {
+          initialResponses[r.questionId.toString()] = {
+            selectedAnswer: r.selectedAnswer ?? -1,
+            code: r.code || "",
+            language: r.language || "python",
+            testCasesPassed: r.testCasesPassed || 0,
+            totalTestCases: r.totalTestCases || 0,
+            status:
+              r.status ||
+              (r.selectedAnswer >= 0 || (r.code && r.code.trim().length > 0)
+                ? "answered"
+                : "unvisited"),
+          };
+        }
+      });
+      setResponses(initialResponses);
+      setLoadedAssessmentId(id);
+    } catch (err: any) {
+      console.error("Failed to start assessment:", err);
+      releaseAssessmentStream(id);
+      const message = err?.response?.data?.message;
+      setStartError(Array.isArray(message) ? message.join(" ") : message || "We could not start this assessment. Please check your attempt eligibility and try again.");
+      startAttemptRequestedRef.current = false;
+      if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+    } finally {
+      setIsLoading(false);
+    }
   }, [id, router]);
 
   // Media starts only for a loaded, active session; stopping is permanent for this assessment.
@@ -250,6 +266,9 @@ export default function TakeAssessmentPage({
     async (isAuto = false) => {
       if (isSubmitting) return;
       stopCamera();
+      // Also release any preflight stream that was handed off but not adopted
+      // by the exam media hook (for example, after a quick route transition).
+      releaseAssessmentStream(id);
       setIsSubmitting(true);
 
       const formattedResponses = questions.map((q) => {
@@ -491,15 +510,45 @@ export default function TakeAssessmentPage({
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
+  if (startError) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-5 py-12">
+        <section className="w-full max-w-xl rounded-2xl border border-border bg-card p-7 text-center shadow-sm">
+          <ShieldAlert className="mx-auto mb-4 h-10 w-10 text-amber-500" />
+          <h1 className="text-xl font-bold text-foreground">Assessment could not be started</h1>
+          <p role="alert" className="mt-3 text-sm text-muted-foreground">{startError}</p>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => setStartError(null)}
+              className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push(`/assessments/${id}/result`)}
+              className="rounded-lg border border-border px-4 py-2.5 text-sm font-semibold text-foreground"
+            >
+              View previous result
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   if (isLoading || !currentQ) {
     return (
-      <div className="flex-1 min-h-screen bg-background flex items-center justify-center font-sans">
-        <div className="text-center space-y-3">
-          <Spinner className="w-9 h-9 animate-spin text-primary mx-auto" />
-          <h2 className="text-sm font-semibold text-foreground">Preparing Secure Assessment Environment</h2>
-          <p className="text-xs text-muted-foreground">Initializing question set, proctoring sensors, and anti-cheat monitors...</p>
+      <SafeExamBrowser isEnabled={!isSubmitting} onFullscreenEntered={beginAssessmentAfterFullscreen}>
+        <div className="flex-1 min-h-screen bg-background flex items-center justify-center font-sans">
+          <div className="text-center space-y-3">
+            <Spinner className="w-9 h-9 animate-spin text-primary mx-auto" />
+            <h2 className="text-sm font-semibold text-foreground">Preparing Secure Assessment Environment</h2>
+            <p className="text-xs text-muted-foreground">The test will start after you enter fullscreen.</p>
+          </div>
         </div>
-      </div>
+      </SafeExamBrowser>
     );
   }
 
@@ -508,7 +557,8 @@ export default function TakeAssessmentPage({
 
   return (
     <SafeExamBrowser 
-      isEnabled={!isLoading && !isSubmitting}
+      isEnabled={!isSubmitting}
+      onFullscreenEntered={beginAssessmentAfterFullscreen}
       maxWarnings={maxTabSwitches} 
       onTerminate={() => submitExam(true)}
       onViolation={recordViolation}
