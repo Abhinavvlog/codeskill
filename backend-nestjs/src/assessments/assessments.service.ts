@@ -1023,6 +1023,7 @@ export class AssessmentsService {
           where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
         })
         : [];
+    const qMap = new Map(questionsList.map((q) => [q.id, q]));
 
     const studentId = String(studentUser.id || studentUser._id);
     let attempt = await this.attemptRepo.findOne({
@@ -1084,6 +1085,9 @@ export class AssessmentsService {
         maxScore: assessment.totalMarks,
         responses: orderedIds.map((qId) => ({
           questionId: qId,
+          optionOrder: assessment.shuffleOptions
+            ? this.buildOptionOrder(qMap.get(String(qId)))
+            : null,
           selectedAnswer: -1,
           isCorrect: false,
           marksAwarded: 0,
@@ -1095,11 +1099,16 @@ export class AssessmentsService {
       await this.attemptRepo.save(attempt);
     }
 
-    const qMap = new Map(questionsList.map((q) => [q.id, q]));
     const sanitizedQuestions = (attempt.questionOrder || [])
       .map((qId, index) => {
         const q = qMap.get(String(qId));
         if (!q) return null;
+        const options = Array.isArray(q.options)
+          ? q.options.map((opt: any) =>
+            typeof opt === 'string' ? opt : opt?.text || String(opt || ''),
+          )
+          : [];
+        const optionOrder = this.getQuestionOptionOrderByQuestionId(attempt, q.id);
         return {
           _id: q.id,
           id: q.id,
@@ -1111,11 +1120,7 @@ export class AssessmentsService {
           difficulty: q.difficulty,
           marks: q.marks || 1,
           negativeMarks: assessment.negativeMarking ? q.negativeMarks || 0 : 0,
-          options: Array.isArray(q.options)
-            ? q.options.map((opt: any) =>
-              typeof opt === 'string' ? opt : opt?.text || String(opt || ''),
-            )
-            : [],
+          options: optionOrder ? optionOrder.map((index) => options[index]) : options,
           codeSnippet: q.codeSnippet,
           starterCode:
             (q.metadata as any)?.starterCode ||
@@ -1218,8 +1223,10 @@ export class AssessmentsService {
     }
 
     if (dto.responses && Array.isArray(dto.responses)) {
-      attempt.responses = dto.responses.map((r) => ({
+      const previousResponses = attempt.responses || [];
+      const updatedResponses = dto.responses.map((r) => ({
         questionId: String(r.questionId),
+        optionOrder: this.getQuestionOptionOrderByQuestionId(attempt, String(r.questionId)),
         selectedAnswer: r.selectedAnswer ?? -1,
         selectedAnswers: r.selectedAnswers,
         code: r.code || '',
@@ -1237,6 +1244,11 @@ export class AssessmentsService {
             ? 'answered'
             : 'unvisited'),
       }));
+      const updatedIds = new Set(updatedResponses.map((r) => r.questionId));
+      attempt.responses = [
+        ...previousResponses.filter((r) => !updatedIds.has(String(r.questionId))),
+        ...updatedResponses,
+      ];
     }
 
     if (dto.timeSpentSeconds) {
@@ -1389,6 +1401,13 @@ export class AssessmentsService {
       }
 
       const qType = (q.questionType || '').toLowerCase();
+      const optionOrder = this.getQuestionOptionOrderByQuestionId(attempt, q.id);
+      const selectedAnswer = this.mapDisplayedAnswerToCanonical(
+        r.selectedAnswer, optionOrder,
+      ) as number | undefined;
+      const selectedAnswers = this.mapDisplayedAnswerToCanonical(
+        r.selectedAnswers, optionOrder,
+      ) as number[] | undefined;
       const isCoding =
         qType === 'coding' || qType === 'algorithmic' || qType === 'dsa';
       let isAttempted = false;
@@ -1468,10 +1487,10 @@ export class AssessmentsService {
           (Array.isArray(q.correctAnswers) && q.correctAnswers.length > 0);
 
         if (isMulti) {
-          const selectedList = Array.isArray(r.selectedAnswers)
-            ? r.selectedAnswers
-            : r.selectedAnswer !== undefined && r.selectedAnswer >= 0
-              ? [r.selectedAnswer]
+          const selectedList = Array.isArray(selectedAnswers)
+            ? selectedAnswers
+            : selectedAnswer !== undefined && selectedAnswer >= 0
+              ? [selectedAnswer]
               : [];
           isAttempted = selectedList.length > 0;
           if (isAttempted) {
@@ -1500,10 +1519,10 @@ export class AssessmentsService {
           }
         } else {
           // Single-choice MCQ
-          isAttempted = r.selectedAnswer !== undefined && r.selectedAnswer >= 0;
+          isAttempted = selectedAnswer !== undefined && selectedAnswer >= 0;
           if (isAttempted) {
             totalAttempted++;
-            isCorrect = r.selectedAnswer === q.correctAnswer;
+            isCorrect = selectedAnswer === q.correctAnswer;
             if (isCorrect) {
               marksAwarded = q.marks || 1;
               totalCorrect++;
@@ -1524,8 +1543,9 @@ export class AssessmentsService {
 
       evaluatedResponses.push({
         questionId: q.id,
-        selectedAnswer: r.selectedAnswer ?? -1,
-        selectedAnswers: r.selectedAnswers,
+        selectedAnswer: selectedAnswer ?? -1,
+        selectedAnswers,
+        optionOrder,
         code: r.code || '',
         language: r.language || 'python',
         testCasesPassed,
