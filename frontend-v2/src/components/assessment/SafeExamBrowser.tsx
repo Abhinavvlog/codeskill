@@ -25,17 +25,31 @@ export default function SafeExamBrowser({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [warnings, setWarnings] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const warningCountRef = useRef(0);
+  const callbacksRef = useRef({ onViolation, onTerminate, maxWarnings });
+  callbacksRef.current = { onViolation, onTerminate, maxWarnings };
 
   useEffect(() => {
     if (!isEnabled) return;
+    let away = false;
+    let engaged = Boolean(document.fullscreenElement);
+    const warnAway = (message: string) => {
+      if (!engaged || away) return;
+      away = true;
+      handleWarning(message);
+    };
+    const checkReturned = () => {
+      if (!document.hidden && document.hasFocus()) away = false;
+    };
 
     // A route transition can preserve document fullscreen while this component
     // mounts with fresh local state. Sync immediately so the exam is not gated.
     const checkFullscreen = () => {
       const fullscreen = Boolean(document.fullscreenElement);
       setIsFullscreen(fullscreen);
+      if (fullscreen) engaged = true;
       if (!fullscreen) {
-        handleWarning('Exiting fullscreen is not allowed during the exam.');
+        warnAway('Exiting fullscreen is not allowed during the exam.');
       }
     };
 
@@ -46,10 +60,18 @@ export default function SafeExamBrowser({
     // Visibility change (tab switching)
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        handleWarning('Tab switching or minimizing the window is strictly prohibited.');
-      }
+        warnAway('Tab, desktop, or window switching is not allowed during the exam.');
+      } else checkReturned();
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    const handleBlur = () => warnAway('The assessment lost focus. Switching apps, windows, or desktops is not allowed.');
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', checkReturned);
+    // Some desktop transitions omit visibilitychange. Check focus as a fallback.
+    const focusCheck = window.setInterval(() => {
+      if (document.hidden || !document.hasFocus()) handleBlur();
+      else checkReturned();
+    }, 500);
 
     // Prevent Context Menu (Right Click)
     const handleContextMenu = (e: MouseEvent) => {
@@ -95,26 +117,26 @@ export default function SafeExamBrowser({
     return () => {
       document.removeEventListener('fullscreenchange', checkFullscreen);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', checkReturned);
+      window.clearInterval(focusCheck);
       document.removeEventListener('contextmenu', handleContextMenu);
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isEnabled]);
 
   const handleWarning = (message: string) => {
-    if (onViolation) {
-      onViolation("browser_violation", message);
+    const callbacks = callbacksRef.current;
+    if (warningCountRef.current >= callbacks.maxWarnings) return;
+    callbacks.onViolation?.("browser_violation", message);
+    const nextCount = ++warningCountRef.current;
+    setWarnings(nextCount);
+    if (nextCount >= callbacks.maxWarnings) {
+      toast.error('Maximum warnings exceeded. Exam terminated.');
+      callbacks.onTerminate?.();
+    } else {
+      toast.error(`Warning ${nextCount}/${callbacks.maxWarnings}: ${message}`);
     }
-    setWarnings((prev) => {
-      const nextCount = prev + 1;
-      if (nextCount >= maxWarnings) {
-        // Terminate exam
-        toast.error('Maximum warnings exceeded. Exam terminated.');
-        if (onTerminate) onTerminate();
-      } else {
-        toast.error(`Warning ${nextCount}/${maxWarnings}: ${message}`);
-      }
-      return nextCount;
-    });
   };
 
   const requestFullscreen = async () => {
@@ -141,7 +163,7 @@ export default function SafeExamBrowser({
   return (
     <div ref={containerRef} className="relative w-full h-screen overflow-hidden bg-background">
       {/* The actual content */}
-      <div className={`w-full h-full transition-opacity duration-300 ${!isFullscreen ? 'opacity-0 pointer-events-none blur-sm' : 'opacity-100'}`}>
+      <div className={`w-full h-full overflow-hidden transition-opacity duration-300 ${!isFullscreen ? 'opacity-0 pointer-events-none blur-sm' : 'opacity-100'}`}>
         {children}
       </div>
 
