@@ -129,10 +129,10 @@ export default function AssessmentBriefingPage({
         </Link>
 
         {/* Exam Header Card */}
-        <div className="bg-white border border-slate-200 rounded-lg p-6 sm:p-8 space-y-6 shadow-xs">
+        <div className="bg-card text-card-foreground border border-border rounded-lg p-6 sm:p-8 space-y-6 shadow-xs">
           {/* Institutional Branding Header */}
-          <div className="flex items-center gap-3 pb-4 border-b border-slate-200">
-            <div className="w-10 h-10 rounded-md overflow-hidden bg-white shrink-0 border border-slate-200 p-0.5 flex items-center justify-center">
+          <div className="flex items-center gap-3 pb-4 border-b border-border">
+            <div className="w-10 h-10 rounded-md overflow-hidden bg-white shrink-0 border border-border p-0.5 flex items-center justify-center">
               <img
                 src="https://images.seeklogo.com/logo-png/43/1/chandigarh-university-cu-logo-png_seeklogo-432515.png"
                 alt="Chandigarh University"
@@ -143,7 +143,7 @@ export default function AssessmentBriefingPage({
               />
             </div>
             <div>
-              <p className="text-xs font-bold text-slate-900 leading-tight">Chandigarh University</p>
+              <p className="text-xs font-bold text-foreground leading-tight">Chandigarh University</p>
               <p className="text-[10px] text-primary font-semibold uppercase tracking-wider">Official Assessment & Examination Portal</p>
             </div>
           </div>
@@ -151,19 +151,19 @@ export default function AssessmentBriefingPage({
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                <span className="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-muted text-foreground border border-border">
                   {assessment.code}
                 </span>
                 {assessment.isAvailable !== false ? (
-                  <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" /> Available Now
+                  <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400 animate-pulse" /> Available Now
                   </span>
                 ) : (
-                  <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                  <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/20">
                     {assessment.unavailabilityReason || "Currently Closed"}
                   </span>
                 )}
-                <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-muted text-foreground border border-border">
                   {assessment.allowedAttempts === 1
                     ? "1 Attempt Allowed"
                     : assessment.allowedAttempts === 0
@@ -171,20 +171,20 @@ export default function AssessmentBriefingPage({
                     : `${assessment.allowedAttempts} Attempts Allowed`}
                 </span>
               </div>
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
                 {assessment.title}
               </h1>
               {assessment.description && (
-                <p className="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed">
+                <p className="text-xs sm:text-sm text-muted-foreground mt-2 leading-relaxed">
                   {assessment.description}
                 </p>
               )}
             </div>
 
             {user?.uid && (
-              <div className="bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-md text-left sm:text-right shrink-0">
+              <div className="bg-muted/50 border border-border px-4 py-2.5 rounded-md text-left sm:text-right shrink-0">
                 <span className="text-[10px] uppercase font-bold text-muted-foreground">Candidate</span>
-                <div className="text-xs font-bold text-slate-900 mt-0.5">{user.name}</div>
+                <div className="text-xs font-bold text-foreground mt-0.5">{user.name}</div>
                 <div className="text-[11px] font-mono text-primary font-semibold">{user.uid}</div>
               </div>
             )}
@@ -192,10 +192,10 @@ export default function AssessmentBriefingPage({
 
           {/* Timing Window Banner (If configured by Admin) */}
           {(assessment.startTime || assessment.endTime) && (
-            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-md flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 text-slate-600">
+            <div className="p-3.5 bg-muted/40 border border-border rounded-md flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-muted-foreground">
                 <Clock className="w-4 h-4 text-primary" />
-                <span className="font-semibold text-slate-900">Scheduled Window:</span>
+                <span className="font-semibold text-foreground">Scheduled Window:</span>
                 <span>
                   {assessment.startTime ? new Date(assessment.startTime).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : "Immediate"}
                   {" — "}
@@ -212,7 +212,7 @@ export default function AssessmentBriefingPage({
 
           {/* Test Metrics */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-4 border-y border-border">
-            <div className="bg-muted/30 p-3.5 rounded-xl border border-border/50">
+            <div className="bg-muted/45 p-3.5 rounded-xl border border-border">
               <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5 text-primary" /> Duration
               </span>
@@ -221,7 +221,7 @@ export default function AssessmentBriefingPage({
               </div>
             </div>
 
-            <div className="bg-muted/30 p-3.5 rounded-xl border border-border/50">
+            <div className="bg-muted/45 p-3.5 rounded-xl border border-border">
               <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                 <Layers className="w-3.5 h-3.5 text-primary" /> Questions
               </span>
@@ -230,7 +230,7 @@ export default function AssessmentBriefingPage({
               </div>
             </div>
 
-            <div className="bg-muted/30 p-3.5 rounded-xl border border-border/50">
+            <div className="bg-muted/45 p-3.5 rounded-xl border border-border">
               <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                 <Award className="w-3.5 h-3.5 text-emerald-400" /> Total Marks
               </span>
@@ -239,7 +239,7 @@ export default function AssessmentBriefingPage({
               </div>
             </div>
 
-            <div className="bg-muted/30 p-3.5 rounded-xl border border-border/50">
+            <div className="bg-muted/45 p-3.5 rounded-xl border border-border">
               <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                 <ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> Passing Marks
               </span>
