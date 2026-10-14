@@ -14,7 +14,6 @@ import {
   GraduationCap, 
   Settings,
   ShieldCheck,
-  LogOut,
   ExternalLink,
   ClipboardList,
   ListChecks,
@@ -22,9 +21,8 @@ import {
   BookOpen,
   BarChart3,
   Terminal,
+  CircleHelp,
 } from "lucide-react";
-import { useAuth } from "@/context/AuthContext";
-import { useRouter } from "next/navigation";
 import gsap from "gsap";
 
 const navItems = [
@@ -73,6 +71,7 @@ const navItems = [
   },
   { name: "Results & Scores", href: "/admin/candidates", icon: BarChart3 },
   { name: "Contests", href: "/admin/contests", icon: Trophy },
+  { name: "FAQ", href: "/admin/faq", icon: CircleHelp },
   { name: "Contest Results", href: "/admin/contest-results", icon: Award },
   { name: "Companies", href: "/admin/companies", icon: Building2 },
   { name: "Universities", href: "/admin/universities", icon: BookOpen },
@@ -81,16 +80,8 @@ const navItems = [
 
 export function AdminSidebar() {
   const pathname = usePathname();
-  const { logout } = useAuth();
-  const router = useRouter();
-
-  const handleLogout = () => {
-    logout();
-    router.push("/admin/login");
-  };
-
   return (
-    <div className="w-64 bg-sidebar text-sidebar-foreground flex flex-col h-full border-r border-sidebar-border relative z-20">
+    <aside className="admin-sidebar w-64 bg-sidebar text-sidebar-foreground flex flex-col h-full border-r border-sidebar-border relative z-20">
       <div className="h-[72px] flex items-center px-4 border-b border-border bg-card/60 shrink-0">
         <Link href="/admin/dashboard" className="flex items-center gap-3 group select-none">
           <AdminLogo variant="icon" size="md" />
@@ -110,17 +101,17 @@ export function AdminSidebar() {
         </Link>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-4 px-3">
-        <nav className="space-y-0.5">
+      <div className="admin-sidebar-scroll flex-1 overflow-y-auto py-4 px-3">
+        <nav className="space-y-1">
           {navItems.map((item) => {
             const isCategoryActive = pathname === item.href || (item.href !== "/" && Boolean(pathname?.startsWith(item.href)));
             const Icon = item.icon;
             
             return (
-              <div key={item.name} className="space-y-0.5">
+              <div key={item.name} className="admin-nav-group space-y-1">
                 <Link
                   href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium leading-5 transition-colors ${
+                  className={`admin-nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium leading-5 transition-colors ${
                     isCategoryActive 
                       ? "bg-primary/10 text-primary border border-primary/20" 
                       : "hover:bg-muted/40 hover:text-foreground border border-transparent"
@@ -139,14 +130,14 @@ export function AdminSidebar() {
                 </Link>
 
                 {item.subItems && isCategoryActive && (
-                  <div className="pl-8 pr-2 pb-1 space-y-0.5">
+                  <div className="admin-subnav pl-8 pr-2 pb-1 space-y-1">
                     {item.subItems.map((sub) => {
                       const isSubActive = pathname === sub.href;
                       return (
                         <Link
                           key={sub.name}
                           href={sub.href}
-                          className={`block px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                          className={`admin-subnav-link block px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                             isSubActive
                               ? "bg-primary/15 text-primary font-bold"
                               : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
@@ -194,16 +185,6 @@ export function AdminSidebar() {
         </nav>
       </div>
 
-      {/* Footer */}
-      <div className="p-3 border-t border-border">
-        <button 
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-[13px] font-medium text-muted-foreground hover:bg-muted/40 hover:text-rose-500 transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          Log out
-        </button>
-      </div>
-    </div>
+    </aside>
   );
 }
