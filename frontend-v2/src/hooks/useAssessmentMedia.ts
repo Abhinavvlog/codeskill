@@ -22,6 +22,15 @@ export function useAssessmentMedia(sessionId: string, enabled: boolean, onViolat
   const [audioLevel, setAudioLevel] = useState(0);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
+  const attachVideo = useCallback((video: HTMLVideoElement | null) => {
+    videoRef.current = video;
+    const stream = sessionRef.current.stream;
+    if (!video || !stream || sessionRef.current.ended) return;
+
+    video.srcObject = stream;
+    void video.play().catch(() => {});
+  }, []);
+
   const releaseMedia = useCallback(() => {
     const session = sessionRef.current;
     if (session.audioFrame !== null) cancelAnimationFrame(session.audioFrame);
@@ -75,7 +84,10 @@ export function useAssessmentMedia(sessionId: string, enabled: boolean, onViolat
         setCameraActive(true);
         setMicActive(true);
         setCameraError(null);
-        if (videoRef.current) videoRef.current.srcObject = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          void videoRef.current.play().catch(() => {});
+        }
         const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (AudioCtx) {
           const context = new AudioCtx();
@@ -127,5 +139,5 @@ export function useAssessmentMedia(sessionId: string, enabled: boolean, onViolat
     }
   }, [cameraActive, sessionId]);
 
-  return { videoRef, cameraActive: enabled && cameraActive, micActive: enabled && micActive, audioLevel: enabled ? audioLevel : 0, cameraError, stopCamera };
+  return { videoRef, attachVideo, cameraActive: enabled && cameraActive, micActive: enabled && micActive, audioLevel: enabled ? audioLevel : 0, cameraError, stopCamera };
 }

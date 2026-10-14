@@ -241,7 +241,7 @@ export default function TakeAssessmentPage({
   }, [id, router]);
 
   // Media starts only for a loaded, active session; stopping is permanent for this assessment.
-  const { videoRef, cameraActive, micActive, audioLevel, cameraError, stopCamera } = useAssessmentMedia(
+  const { videoRef, attachVideo, cameraActive, micActive, audioLevel, cameraError, stopCamera } = useAssessmentMedia(
     id, loadedAssessmentId === id && questions.length > 0 && !isLoading && !isSubmitting && timeLeftSeconds > 0, recordViolation,
   );
 
@@ -738,7 +738,7 @@ export default function TakeAssessmentPage({
                           onClick={() => handleSelectOption(optIndex)}
                           className={`w-full text-left p-4 sm:p-4 rounded-2xl border transition-all flex items-start gap-3.5 group relative ${
                             isSelected
-                              ? "border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(37,99,235,0.25)]"
+                              ? "border-emerald-400 bg-emerald-500/15 ring-2 ring-emerald-400/35 shadow-[0_0_0_2px_rgba(52,211,153,0.22)]"
                               : "border-border bg-card hover:bg-muted/40 hover:border-muted-foreground/30"
                           }`}
                         >
@@ -746,7 +746,7 @@ export default function TakeAssessmentPage({
                           <div
                             className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
                               isSelected
-                                ? "bg-primary text-primary-foreground shadow-sm"
+                                ? "bg-emerald-500 text-slate-950 shadow-sm ring-2 ring-emerald-300/50"
                                 : "bg-muted text-muted-foreground border border-border group-hover:border-primary/50 group-hover:text-foreground"
                             }`}
                           >
@@ -759,7 +759,7 @@ export default function TakeAssessmentPage({
 
                           {/* Checkmark when chosen */}
                           {isSelected && (
-                            <CheckCircle2 className="w-5 h-5 text-primary shrink-0 self-center" />
+                            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 self-center" />
                           )}
                         </button>
                       );
@@ -851,7 +851,7 @@ export default function TakeAssessmentPage({
               <div className="space-y-2.5">
                 <div className="relative aspect-video bg-black/60 rounded-xl overflow-hidden border border-border/80 flex items-center justify-center">
                   <video
-                    ref={videoRef}
+                    ref={attachVideo}
                     autoPlay
                     playsInline
                     muted
@@ -953,7 +953,7 @@ export default function TakeAssessmentPage({
                       type="button"
                       onClick={() => setCurrentIndex(idx)}
                       className={`h-9 rounded-xl font-mono text-xs font-bold border transition-all flex items-center justify-center relative ${btnStyle} ${
-                        isCurrent ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
+                        isCurrent ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-background" : ""
                       }`}
                     >
                       {idx + 1}
