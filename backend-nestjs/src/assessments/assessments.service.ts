@@ -116,6 +116,9 @@ export class AssessmentsService {
       targetBatches: dto.targetBatches || [],
       targetDepartments: dto.targetDepartments || [],
       targetCourses: dto.targetCourses || [],
+      targetSections: dto.targetSections || [],
+      targetSemesters: dto.targetSemesters || [],
+      targetGroups: this.normalizeTargetGroups(dto.targetGroups || []),
       startTime: dto.startTime ? new Date(dto.startTime) : undefined,
       endTime: dto.endTime ? new Date(dto.endTime) : undefined,
       shuffleQuestions: dto.shuffleQuestions ?? true,
@@ -282,6 +285,12 @@ export class AssessmentsService {
     if (dto.allowReview !== undefined) assessment.allowReview = dto.allowReview;
     if (dto.allowedAttempts !== undefined)
       assessment.allowedAttempts = Number(dto.allowedAttempts);
+    if (dto.targetSections !== undefined)
+      assessment.targetSections = dto.targetSections;
+    if (dto.targetSemesters !== undefined)
+      assessment.targetSemesters = dto.targetSemesters;
+    if (dto.targetGroups !== undefined)
+      assessment.targetGroups = this.normalizeTargetGroups(dto.targetGroups);
     if (!assessment.created_by_id && (adminUser?.id || adminUser?._id)) {
       assessment.created_by_id = adminUser.id || adminUser._id;
     }
@@ -532,10 +541,43 @@ export class AssessmentsService {
   // STUDENT CANDIDATE METHODS
   // -------------------------------------------------------------
 
+  private normalizeTargetGroups(groups: string[]): string[] {
+    return [...new Set((groups || []).map((group) =>
+      String(group).trim().replace(/^group[\s_-]*/i, '').toUpperCase(),
+    ).filter((group) => group === 'A' || group === 'B'))];
+  }
+
+  private isStudentTargeted(assessment: Assessment, studentUser: any): boolean {
+    const profile = studentUser.studentProfile || {};
+    const batch = profile.batch || '';
+    const department = profile.department || '';
+    const studentKeys = [studentUser.id, studentUser._id, studentUser.uid]
+      .filter(Boolean)
+      .map(String);
+    const group = String(profile.group || '')
+      .trim()
+      .replace(/^group[\s_-]*/i, '')
+      .toUpperCase();
+    const matches = (targets: string[] | undefined, value: string) =>
+      !targets?.length || (!!value && targets.includes(String(value)));
+
+    return (
+      (!assessment.targetStudentIds?.length ||
+        studentKeys.some((key) => assessment.targetStudentIds.includes(key))) &&
+      matches(assessment.targetBatches, batch) &&
+      matches(assessment.targetDepartments, department) &&
+      matches(assessment.targetCourses, profile.course || '') &&
+      matches(
+        assessment.targetSemesters,
+        profile.semester == null ? '' : String(profile.semester),
+      ) &&
+      matches(assessment.targetSections, profile.section || '') &&
+      matches(assessment.targetGroups, group)
+    );
+  }
+
   async getStudentAssessments(studentUser: any) {
     const studentProfile = studentUser.studentProfile || {};
-    const batch = studentProfile.batch || '';
-    const dept = studentProfile.department || '';
 
     const assessments = await this.assessmentRepo
       .createQueryBuilder('a')
@@ -545,18 +587,9 @@ export class AssessmentsService {
       .orderBy('a.createdAt', 'DESC')
       .getMany();
 
-    // Cohort filtering: targetBatches empty or includes student's batch, same for department
-    const filteredAssessments = assessments.filter((a) => {
-      const matchBatch =
-        !a.targetBatches ||
-        a.targetBatches.length === 0 ||
-        (batch && a.targetBatches.includes(batch));
-      const matchDept =
-        !a.targetDepartments ||
-        a.targetDepartments.length === 0 ||
-        (dept && a.targetDepartments.includes(dept));
-      return matchBatch && matchDept;
-    });
+    const filteredAssessments = assessments.filter((assessment) =>
+      this.isStudentTargeted(assessment, studentUser),
+    );
 
     const studentId = String(studentUser.id || studentUser._id);
     const attemptWhere: any[] = [{ studentId }];
@@ -632,6 +665,9 @@ export class AssessmentsService {
     });
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
+    }
+    if (!this.isStudentTargeted(assessment, studentUser)) {
+      throw new ForbiddenException('This assessment is not assigned to your student account.');
     }
 
     const studentId = String(studentUser.id || studentUser._id);
@@ -739,6 +775,9 @@ export class AssessmentsService {
     });
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
+    }
+    if (!this.isStudentTargeted(assessment, studentUser)) {
+      throw new ForbiddenException('This assessment is not assigned to your student account.');
     }
 
     if (assessment.status === 'draft' || assessment.status === 'archived') {
@@ -902,6 +941,9 @@ export class AssessmentsService {
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
+    if (!this.isStudentTargeted(assessment, studentUser)) {
+      throw new ForbiddenException('This assessment is not assigned to your student account.');
+    }
 
     const targetAssessmentId = assessment?.id || id;
     const assessmentIds = [...new Set([targetAssessmentId, id])];
@@ -936,6 +978,9 @@ export class AssessmentsService {
     const assessment = await this.assessmentRepo.findOne({
       where: [{ id }, { mongoId: id }],
     });
+    if (assessment && !this.isStudentTargeted(assessment, studentUser)) {
+      throw new ForbiddenException('This assessment is not assigned to your student account.');
+    }
     const targetAssessmentId = assessment?.id || id;
 
     const attempt = await this.attemptRepo.findOne({
@@ -1004,6 +1049,9 @@ export class AssessmentsService {
     });
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
+    }
+    if (!this.isStudentTargeted(assessment, studentUser)) {
+      throw new ForbiddenException('This assessment is not assigned to your student account.');
     }
 
     const studentId = String(studentUser.id || studentUser._id);
@@ -1276,6 +1324,9 @@ export class AssessmentsService {
     });
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
+    }
+    if (!this.isStudentTargeted(assessment, studentUser)) {
+      throw new ForbiddenException('This assessment is not assigned to your student account.');
     }
 
     const studentId = String(studentUser.id || studentUser._id);
