@@ -47,7 +47,6 @@ export function useAssessmentMedia(sessionId: string, enabled: boolean, onViolat
     session.audioFrame = null;
     session.analyser?.disconnect();
     session.analyser = null;
-    session.stream?.getTracks().forEach(track => track.stop());
     session.stream = null;
     releaseAssessmentStream(session.id);
     const video = videoRef.current;
