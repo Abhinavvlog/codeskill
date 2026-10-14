@@ -1,4 +1,10 @@
-import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  MinLength,
+  IsOptional,
+  IsNotEmpty,
+} from 'class-validator';
 
 export class RegisterDto {
   @IsString()
@@ -27,9 +33,9 @@ export class AdminLoginDto {
   @IsString()
   email: string;
 
-  @IsOptional()
   @IsString()
-  password?: string;
+  @IsNotEmpty()
+  password: string;
 }
 
 export class ForgotPasswordDto {
@@ -107,3 +113,16 @@ export class ForceChangePasswordDto {
   @MinLength(8, { message: 'New password must be at least 8 characters' })
   newPassword: string;
 }
+
+export class RefreshTokenDto {
+  @IsString()
+  @IsNotEmpty()
+  refreshToken: string;
+}
+
+export class LogoutDto {
+  @IsString()
+  @IsOptional()
+  refreshToken?: string;
+}
+

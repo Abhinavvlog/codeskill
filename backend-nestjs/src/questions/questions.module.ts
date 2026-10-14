@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../database/database.module';
+import { RedisModule } from '../redis/redis.module';
 import {
   QuestionsController,
   QuestionBanksController,
@@ -7,7 +8,7 @@ import {
 import { QuestionsService } from './questions.service';
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, RedisModule],
   controllers: [QuestionsController, QuestionBanksController],
   providers: [QuestionsService],
   exports: [QuestionsService],

@@ -1,19 +1,29 @@
+import { ExecutionService } from '../execution/execution.service';
 import {
   Injectable,
   BadRequestException,
   NotFoundException,
   ForbiddenException,
   Logger,
+  Optional,
+  ServiceUnavailableException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Submission } from '../database/entities/submission.entity';
+import { SubmissionStore } from '../database/sharding/submission-store';
 import { User } from '../database/entities/user.entity';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { AppGateway } from '../gateway/app.gateway';
 import { RedisService } from '../redis/redis.service';
-import { SUPPORTED_LANGUAGES } from '../execution/execution.types';
+import {
+  SUPPORTED_LANGUAGES,
+  canonicalLanguage,
+} from '../execution/execution.types';
+import { ProblemsService } from '../problems/problems.service';
+import { ExecutionAdmissionService } from '../execution/admission/execution-admission.service';
 
 export enum SubmissionStatus {
   QUEUED = 'queued',
@@ -34,105 +44,160 @@ export class SubmissionsService {
   private readonly logger = new Logger(SubmissionsService.name);
 
   constructor(
-    @InjectRepository(Submission)
-    private readonly submissionRepo: Repository<Submission>,
+    private readonly submissionRepo: SubmissionStore,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     @InjectQueue('submissions') private submissionQueue: Queue,
     private readonly appGateway: AppGateway,
     private readonly redisService: RedisService,
+    private readonly problemsService: ProblemsService,
+    @Optional() private readonly executionService?: ExecutionService,
+    @Optional() private readonly admission?: ExecutionAdmissionService,
   ) {}
 
-  async createSubmission(userId: string, data: any) {
-    const {
-      status: _untrustedStatus,
-      runtime: _untrustedRuntime,
-      memory: _untrustedMemory,
-      testCasesPassed: _untrustedPassed,
-      totalTestCases: _untrustedTotal,
-      ...submissionData
-    } = data;
+  async createSubmission(userId: string, data: unknown) {
+    if (!data || typeof data !== 'object') {
+      throw new BadRequestException('Invalid submission payload');
+    }
+    const { code, language, problemId } = data as Record<string, unknown>;
 
-    if (!submissionData.code || typeof submissionData.code !== 'string') {
+    if (typeof code !== 'string' || !code) {
       throw new BadRequestException('Missing or invalid code');
     }
-    if (
-      !submissionData.language ||
-      typeof submissionData.language !== 'string'
-    ) {
+    if (!language || typeof language !== 'string') {
       throw new BadRequestException('Missing or invalid language');
     }
-    if (!submissionData.problemId) {
+    if (typeof problemId !== 'string' || !problemId.trim()) {
       throw new BadRequestException('Missing problemId');
     }
 
-    const langLower = submissionData.language.toLowerCase();
-    if (!SUPPORTED_LANGUAGES.includes(langLower)) {
+    const langLower = language.trim().toLowerCase();
+    const resolvedLanguage = canonicalLanguage(langLower);
+    if (!resolvedLanguage) {
       throw new BadRequestException(
-        `Unsupported language: "${submissionData.language}". Supported: ${SUPPORTED_LANGUAGES.join(', ')}`,
+        `Unsupported language: "${language}". Supported: ${SUPPORTED_LANGUAGES.join(', ')}`,
       );
     }
 
-    if (Buffer.byteLength(submissionData.code, 'utf8') > 1_000_000) {
+    if (Buffer.byteLength(code, 'utf8') > 1_000_000) {
       throw new BadRequestException('Source code exceeds the 1MB limit');
     }
 
-    // 1. Create submission in PostgreSQL with status 'queued'
+    // Resolve publication and judge data on the server; client source/state is ignored.
+    const problem = await this.problemsService.getExecutionProblem(
+      problemId.trim(),
+    );
+    const allowedLanguages = problem.config.supportedLanguages;
+    if (
+      allowedLanguages.length > 0 &&
+      !allowedLanguages.some(
+        (language) => canonicalLanguage(language) === resolvedLanguage,
+      )
+    ) {
+      throw new BadRequestException(
+        'This language is not enabled for the problem',
+      );
+    }
+    if (!problem.testCases.length) {
+      throw new BadRequestException(
+        'No test cases configured for this problem',
+      );
+    }
+
+    if (process.env.CODE_EXECUTION_PROVIDER === 'piston') {
+      if (!this.executionService)
+        throw new ServiceUnavailableException(
+          'Code execution is temporarily unavailable',
+        );
+      const runtimes = await this.executionService.availableLanguages();
+      if (
+        !runtimes.some(
+          (runtime) => runtime.language === resolvedLanguage && runtime.enabled,
+        )
+      )
+        throw new BadRequestException('This language runtime is unavailable');
+    }
+
+    if (!this.admission)
+      throw new ServiceUnavailableException(
+        'Execution admission control is unavailable',
+      );
+    const admissionId = await this.admission.reserve(userId, {
+      kind: 'submission',
+      problemId: problem.id,
+      language: resolvedLanguage,
+      code,
+    });
     const submission = this.submissionRepo.create({
+      id: admissionId,
       userId,
-      user: { id: userId } as any,
-      problemId: submissionData.problemId,
-      problem: { id: submissionData.problemId } as any,
-      code: submissionData.code,
-      language: submissionData.language,
+      user: { id: userId },
+      problemId: problem.id,
+      problemSource: problem.source,
+      code,
+      language: langLower,
       status: SubmissionStatus.QUEUED,
       queuedAt: new Date(),
       testResults: [],
     });
-    await this.submissionRepo.save(submission);
-
-    // 2. Increment active running jobs for user in Redis
-    const client = this.redisService.getClient();
-    if (client) {
-      await client.incr(`active:submissions:${userId}`);
-      await client.expire(`active:submissions:${userId}`, 120);
+    try {
+      await this.submissionRepo.save(submission);
+      await this.submissionQueue.add(
+        'evaluate-code',
+        {
+          submissionId: submission.id,
+          problemId: problem.id,
+          problemSource: problem.source,
+          code,
+          language: langLower,
+          userId,
+          admissionId,
+        },
+        {
+          jobId: admissionId,
+          attempts: 2,
+          backoff: { type: 'exponential', delay: 2_000, jitter: 0.25 },
+          priority: 100,
+          removeOnComplete: { age: 24 * 60 * 60, count: 5000 },
+          removeOnFail: { age: 7 * 24 * 60 * 60, count: 5000 },
+        },
+      );
+    } catch {
+      try {
+        submission.status = SubmissionStatus.INTERNAL_ERROR;
+        submission.compileOutput =
+          'Unable to queue this submission. Please retry.';
+        submission.completedAt = new Date();
+        await this.submissionRepo.save(submission);
+      } finally {
+        await this.admission.release(userId, admissionId);
+      }
+      throw new ServiceUnavailableException(
+        'Unable to queue this submission. Please retry.',
+      );
     }
 
-    // 3. Enqueue to BullMQ runner queue
-    await this.submissionQueue.add(
-      'evaluate-code',
-      {
-        submissionId: submission.id,
-        problemId: submissionData.problemId,
-        code: submissionData.code,
-        language: submissionData.language,
-        userId,
-      },
-      {
-        jobId: String(submission.id),
-        attempts: 2,
-        backoff: { type: 'exponential', delay: 2_000 },
-        removeOnComplete: { age: 24 * 60 * 60, count: 5000 },
-        removeOnFail: { age: 7 * 24 * 60 * 60, count: 5000 },
-      },
-    );
-
-    // 4. Update user's submission count stats
-    const user = await this.userRepo.findOne({ where: { id: userId } });
-    if (user) {
-      const stats = user.stats || {};
-      user.stats = {
-        ...stats,
-        totalSubmissions: (stats.totalSubmissions || 0) + 1,
-      };
-      await this.userRepo.save(user);
-    }
+    // Lock the same user row as the judge so counters cannot overwrite a
+    // concurrently committed accepted verdict.
+    await this.userRepo.manager.transaction(async (manager) => {
+      const user = await manager.findOne(User, {
+        where: { id: userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (user) {
+        user.stats = {
+          ...(user.stats || {}),
+          totalSubmissions: (user.stats?.totalSubmissions || 0) + 1,
+        };
+        await manager.save(User, user);
+      }
+    });
 
     // 5. Broadcast initial queued status via WebSocket
     this.appGateway.emitToUser(userId, 'submission_status', {
       submissionId: submission.id,
       status: SubmissionStatus.QUEUED,
-      problemId: submissionData.problemId,
+      problemId: problem.id,
       queuedAt: submission.queuedAt,
     });
 
@@ -145,14 +210,21 @@ export class SubmissionsService {
     isAdmin = false,
   ) {
     const submission = await this.submissionRepo.findOne({
-      where: [{ id: submissionId }, { mongoId: submissionId }],
+      where: this.submissionLookup(
+        submissionId,
+        this.submissionRepo.isSharded && !isAdmin ? userId : undefined,
+      ),
       relations: { user: true },
     });
     if (!submission) {
       throw new NotFoundException('Submission not found');
     }
 
-    if (!isAdmin && submission.userId !== userId && (submission as any).user?.id !== userId) {
+    if (
+      !isAdmin &&
+      submission.userId !== userId &&
+      (submission as any).user?.id !== userId
+    ) {
       throw new ForbiddenException('Access denied to this submission');
     }
 
@@ -192,7 +264,10 @@ export class SubmissionsService {
     isAdmin = false,
   ) {
     const submission = await this.submissionRepo.findOne({
-      where: [{ id: submissionId }, { mongoId: submissionId }],
+      where: this.submissionLookup(
+        submissionId,
+        this.submissionRepo.isSharded && !isAdmin ? userId : undefined,
+      ),
     });
     if (!submission) {
       throw new NotFoundException('Submission not found');
@@ -211,25 +286,27 @@ export class SubmissionsService {
       );
     }
 
-    try {
-      const job = await this.submissionQueue.getJob(submissionId);
-      if (job) {
+    const job = await this.submissionQueue.getJob(submissionId);
+    if (job) {
+      if ((await job.getState()) === 'active')
+        throw new BadRequestException(
+          'A running submission cannot be cancelled',
+        );
+      try {
         await job.remove();
+      } catch {
+        throw new ServiceUnavailableException(
+          'Submission could not be cancelled; it may have started running',
+        );
       }
-    } catch (err: any) {
-      this.logger.warn(
-        `Could not remove job ${submissionId} from queue: ${err.message}`,
-      );
     }
 
     submission.status = SubmissionStatus.CANCELLED;
     submission.completedAt = new Date();
     await this.submissionRepo.save(submission);
 
-    const client = this.redisService.getClient();
-    if (client) {
-      await client.decr(`active:submissions:${userId}`);
-    }
+    if (this.admission)
+      await this.admission.release(submission.userId, submission.id);
 
     this.appGateway.emitToUser(userId, 'submission_status', {
       submissionId: submission.id,
@@ -238,6 +315,18 @@ export class SubmissionsService {
     });
 
     return { success: true, message: 'Submission cancelled successfully' };
+  }
+
+  private submissionLookup(id: string, userId?: string) {
+    const scope = userId ? { userId } : {};
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      id,
+    )
+      ? [
+          { id, ...scope },
+          { mongoId: id, ...scope },
+        ]
+      : [{ mongoId: id, ...scope }];
   }
 
   async getSubmissionsByProblem(userId: string, problemId: string) {

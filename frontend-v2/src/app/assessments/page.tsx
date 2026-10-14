@@ -1,336 +1,88 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { 
-  Trophy, 
-  Clock, 
-  Award, 
-  Layers, 
-  ArrowRight, 
-  CheckCircle2, 
-  AlertCircle, 
-  ShieldAlert, 
-  RefreshCw,
-  Search,
-  Sparkles,
-  BarChart3,
-  RotateCcw,
-  GraduationCap
-} from "lucide-react";
+import { Code2, ListChecks, CheckSquare2, ToggleLeft, Terminal, Layers, Clock, Award, ArrowRight, ShieldCheck, Search, RefreshCw, BarChart3, GraduationCap, LockKeyhole } from "lucide-react";
 import { studentAssessmentsAPI } from "@/config/api";
 import { useAuth } from "@/context/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { getQuestionTypeLabel, type QuestionType } from "@/lib/question-types";
+import { assessmentTypes, assessmentCompleted, assessmentWindow, canAttemptAssessment, type AssignedAssessment } from "@/lib/assessment-cards";
 
+const icons = { DSA: Code2, MCQ: ListChecks, MULTIPLE_CHOICE: CheckSquare2, TRUE_FALSE: ToggleLeft, CODE_OUTPUT: Terminal };
+const tabs = ["All Assessments", "DSA / Coding", "MCQs", "True / False", "Code Output"];
 export default function StudentAssessmentsPage() {
-  const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
-  const [assessments, setAssessments] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [filterTab, setFilterTab] = useState<"available" | "completed">("available");
-  const [retakingId, setRetakingId] = useState<string | null>(null);
-
-  const fetchAssessments = async () => {
-    if (!user) {
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const res = await studentAssessmentsAPI.getMyAssessments();
-      setAssessments(res.data.assessments || []);
-    } catch (err: any) {
-      if (err?.response?.status !== 401) {
-        console.error("Failed to load student assessments:", err);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleRetake = async (assessmentId: string) => {
-    setRetakingId(assessmentId);
-    try {
-      await studentAssessmentsAPI.retakeAttempt(assessmentId);
-      router.push(`/assessments/${assessmentId}/take`);
-    } catch (err) {
-      console.error("Failed to initiate reattempt:", err);
-      router.push(`/assessments/${assessmentId}/take`);
-    } finally {
-      setRetakingId(null);
-    }
-  };
-
+  const router = useRouter(); const { user, loading: authLoading } = useAuth();
+  const [result, setResult] = useState<{ key: string; assessments: AssignedAssessment[]; error?: string }>();
+  const [actionError, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0); const [retakingId, setRetakingId] = useState<string | null>(null);
+  const [tab, setTab] = useState(tabs[0]); const [search, setSearch] = useState("");
+  const [availability, setAvailability] = useState("All availability"); const [difficulty, setDifficulty] = useState("All difficulties");
+  const [now, setNow] = useState(Date.now);
+  const showGuestPrompt = !authLoading && !user;
+  const requestKey = `${user?.id || user?._id || 'guest'}:${retry}`;
+  const loading = !!user && result?.key !== requestKey;
+  const assessments = result?.key === requestKey ? result.assessments : [];
+  const error = actionError || (result?.key === requestKey ? result.error : null);
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(timer); }, []);
   useEffect(() => {
-    if (!authLoading) {
-      if (user) {
-        fetchAssessments();
-      } else {
-        setIsLoading(false);
-      }
-    }
-  }, [user, authLoading]);
-
-  const availableTests = assessments.filter(
-    (a) => a.attemptStatus !== "submitted" && a.attemptStatus !== "auto_submitted"
-  );
-  const completedTests = assessments.filter(
-    (a) => a.attemptStatus === "submitted" || a.attemptStatus === "auto_submitted"
-  );
-
-  const displayedTests = filterTab === "available" ? availableTests : completedTests;
-
-  return (
-    <div className="flex-1 bg-background text-foreground font-sans min-h-screen">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8 py-8 mt-16 md:mt-24 space-y-6">
-        {/* Banner with Official CU Branding */}
-        <div className="bg-card border border-border rounded-xl p-6 sm:p-7 shadow-xs">
-          <div className="flex items-center gap-3 pb-4 mb-4 border-b border-border">
-            <div className="w-9 h-9 rounded-lg overflow-hidden bg-muted/40 shrink-0 border border-border p-1 flex items-center justify-center">
-              <img
-                src="https://images.seeklogo.com/logo-png/43/1/chandigarh-university-cu-logo-png_seeklogo-432515.png"
-                alt="Chandigarh University"
-                className="w-full h-full object-contain"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = "/cu-logo.png";
-                }}
-              />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-foreground leading-tight">Chandigarh University</p>
-              <p className="text-[11px] text-muted-foreground font-medium">Academic Assessment & Examination Portal</p>
-            </div>
-          </div>
-
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted text-foreground border border-border text-xs font-medium mb-3">
-                <GraduationCap className="w-3.5 h-3.5 text-primary" />
-                <span>Standardized Academic Assessments</span>
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
-                Course Assessments & Examinations
-              </h1>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-1.5 max-w-xl leading-relaxed">
-                Take scheduled timed tests, evaluate algorithmic problem-solving skills, and track verified institutional performance.
-              </p>
-            </div>
-
-            {user?.uid && (
-              <div className="bg-muted/40 border border-border px-4 py-3 rounded-lg text-left md:text-right shrink-0">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                  Enrolled Candidate
-                </span>
-                <div className="text-sm font-semibold text-foreground mt-0.5">{user.name}</div>
-                <div className="text-xs font-mono text-muted-foreground">{user.uid}</div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Tab Filter */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
-          <div className="flex items-center gap-1.5 bg-muted/40 p-1 rounded-lg border border-border">
-            <button
-              onClick={() => setFilterTab("available")}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                filterTab === "available"
-                  ? "bg-card text-foreground shadow-xs border border-border font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Available Tests ({availableTests.length})
-            </button>
-            <button
-              onClick={() => setFilterTab("completed")}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                filterTab === "completed"
-                  ? "bg-card text-foreground shadow-xs border border-border font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Completed ({completedTests.length})
-            </button>
-          </div>
-
-          <button
-            onClick={fetchAssessments}
-            className="p-2 border border-border hover:bg-muted/40 text-muted-foreground hover:text-foreground rounded-md text-xs transition-colors"
-            title="Refresh Assessments"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-
-        {/* Assessment Cards */}
-        {isLoading ? (
-          <div className="py-20 text-center text-muted-foreground text-sm">
-            <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-primary" />
-            Loading assigned assessments...
-          </div>
-        ) : !user ? (
-          <div className="text-center py-14 bg-card border border-border rounded-xl p-8 space-y-4 max-w-lg mx-auto">
-            <GraduationCap className="w-10 h-10 text-primary mx-auto opacity-80" />
-            <h3 className="text-base font-semibold text-foreground">
-              Sign In to View Your Assessments
-            </h3>
-            <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
-              Sign in with your student credentials (UID) to access enrolled semester exams, practice assessments, and scorecards.
-            </p>
-            <Link
-              href="/login?redirect=/assessments"
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-md bg-foreground hover:opacity-90 text-background font-medium text-xs transition-opacity shadow-sm"
-            >
-              <span>Student Sign In</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        ) : displayedTests.length === 0 ? (
-          <div className="text-center py-14 bg-card border border-border rounded-xl p-8 space-y-3">
-            <Trophy className="w-9 h-9 text-muted-foreground mx-auto opacity-40" />
-            <h3 className="text-sm font-semibold text-foreground">
-              {filterTab === "available"
-                ? "No pending assessments"
-                : "No completed assessments yet"}
-            </h3>
-            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              {filterTab === "available"
-                ? "You have completed all scheduled tests or no upcoming exams are currently assigned."
-                : "Complete a scheduled assessment to view your score and detailed performance breakdown."}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {displayedTests.map((test) => (
-              <div
-                key={test._id}
-                className="bg-card border border-border hover:border-foreground/20 rounded-xl p-5 transition-all shadow-xs flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <span className="px-2 py-0.5 rounded text-xs font-mono font-medium bg-muted text-foreground border border-border">
-                      {test.code}
-                    </span>
-                    <span
-                      className={`px-2 py-0.5 rounded-md text-[11px] font-medium capitalize ${
-                        test.attemptStatus === "submitted"
-                          ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                          : "bg-muted text-foreground border border-border"
-                      }`}
-                    >
-                      {test.attemptStatus === "submitted" ? "Completed" : "Ready"}
-                    </span>
-                  </div>
-
-                  <h3 className="text-sm font-semibold text-foreground hover:text-primary transition-colors">
-                    {test.title}
-                  </h3>
-                  {test.description && (
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                      {test.description}
-                    </p>
-                  )}
-
-                  {/* Test Details */}
-                  <div className="grid grid-cols-3 gap-2 py-3 my-3 border-y border-border text-xs">
-                    <div className="space-y-0.5">
-                      <span className="text-muted-foreground flex items-center gap-1 text-[11px]">
-                        <Clock className="w-3 h-3 text-muted-foreground" /> Duration
-                      </span>
-                      <p className="font-semibold text-foreground text-xs">{test.durationMinutes} mins</p>
-                    </div>
-                    <div className="space-y-0.5">
-                      <span className="text-muted-foreground flex items-center gap-1 text-[11px]">
-                        <Layers className="w-3 h-3 text-muted-foreground" /> Questions
-                      </span>
-                      <p className="font-semibold text-foreground text-xs">{test.questionCount} Questions</p>
-                    </div>
-                    <div className="space-y-0.5">
-                      <span className="text-muted-foreground flex items-center gap-1 text-[11px]">
-                        <Award className="w-3 h-3 text-muted-foreground" /> Total Marks
-                      </span>
-                      <p className="font-semibold text-foreground text-xs">{test.totalMarks} pts</p>
-                    </div>
-                  </div>
-
-                  {test.proctoring && (
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-                      <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Proctored (Tab & Window Monitor Active)</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="pt-3 flex items-center justify-between border-t border-border">
-                  {test.attemptStatus === "submitted" ? (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
-                      <div className="text-xs">
-                        <span className="text-muted-foreground">Score: </span>
-                        <strong className="text-foreground text-xs font-mono">{test.attemptScore} / {test.totalMarks} pts</strong>
-                        <span
-                          className={`ml-2 px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                            test.attemptPassed
-                              ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                              : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
-                          }`}
-                        >
-                          {test.attemptPassed ? "PASSED" : "COMPLETED"}
-                        </span>
-                        {test.totalAttempts && test.totalAttempts > 1 && (
-                          <span className="ml-2 text-[10px] text-muted-foreground font-mono">
-                            ({test.totalAttempts} attempts)
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {test.canRetake ? (
-                          <button
-                            type="button"
-                            onClick={() => handleRetake(test._id)}
-                            disabled={retakingId === test._id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-muted hover:bg-muted/80 text-foreground text-xs font-medium rounded-md border border-border transition-colors disabled:opacity-50"
-                          >
-                            <RotateCcw className={`w-3.5 h-3.5 ${retakingId === test._id ? "animate-spin" : ""}`} />
-                            <span>{retakingId === test._id ? "Launching..." : "Re-attempt"}</span>
-                          </button>
-                        ) : (
-                          <span className="text-[11px] font-medium text-muted-foreground px-2 py-0.5 rounded bg-muted border border-border">
-                            1 Attempt
-                          </span>
-                        )}
-
-                        <Link
-                          href={`/assessments/${test._id}/result`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-foreground text-background text-xs font-medium rounded-md hover:opacity-90 transition-opacity"
-                        >
-                          <BarChart3 className="w-3.5 h-3.5" /> Scorecard
-                        </Link>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between w-full">
-                      <span className="text-xs text-muted-foreground font-medium">
-                        {test.allowedAttempts === 1
-                          ? "1 Attempt Allowed"
-                          : test.allowedAttempts === 0
-                          ? "Multiple Attempts"
-                          : `${test.allowedAttempts} Attempts Allowed`}
-                      </span>
-                      <Link
-                        href={`/assessments/${test._id}`}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-foreground hover:opacity-90 text-background text-xs font-medium rounded-md transition-opacity shadow-xs"
-                      >
-                        Start Test <ArrowRight className="w-3.5 h-3.5" />
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+    if (authLoading) return;
+    if (!user) return;
+    const controller = new AbortController();
+    studentAssessmentsAPI.getMyAssessments(controller.signal).then(({ data }) => {
+      if (!Array.isArray(data.assessments)) throw new Error("Invalid assessments response");
+      if (!controller.signal.aborted) setResult({ key: requestKey, assessments: data.assessments });
+    }).catch(() => { if (!controller.signal.aborted) setResult({ key: requestKey, assessments: [], error: "Assessments could not be loaded. Please try again." }); });
+    return () => controller.abort();
+  }, [user, authLoading, requestKey]);
+  const retake = async (id: string) => {
+    if (retakingId) return; setRetakingId(id); setError(null);
+    try { await studentAssessmentsAPI.retakeAttempt(id); router.push(`/assessments/${id}/take`); }
+    catch { setError("Your re-attempt could not be started. Please try again."); }
+    finally { setRetakingId(null); }
+  };
+  const visible = assessments.filter(assessment => {
+    const types = assessmentTypes(assessment); const completed = assessmentCompleted(assessment);
+    const status = completed ? "Completed" : assessmentWindow(assessment, now);
+    const tabTypes: Record<string, QuestionType[]> = { "DSA / Coding": ["DSA"], MCQs: ["MCQ", "MULTIPLE_CHOICE"], "True / False": ["TRUE_FALSE"], "Code Output": ["CODE_OUTPUT"] };
+    return assessment.title.toLowerCase().includes(search.trim().toLowerCase())
+      && (tab === tabs[0] || types.some(type => tabTypes[tab]?.includes(type)))
+      && (availability === "All availability" || availability === status)
+      && (difficulty === "All difficulties" || assessment.difficulties?.some(value => value.toLowerCase() === difficulty.toLowerCase()) || assessment.difficulty?.toLowerCase() === difficulty.toLowerCase());
+  });
+  return <main className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-28 pb-12">
+    <div aria-hidden={showGuestPrompt} inert={showGuestPrompt} className={`space-y-7 transition-[filter,opacity] duration-300 ${showGuestPrompt ? "pointer-events-none select-none blur-[3px] opacity-45" : ""}`}>
+    <header className="flex flex-col sm:flex-row justify-between gap-5 sm:items-end"><div><p className="text-primary text-sm font-semibold flex gap-2 items-center mb-2"><GraduationCap className="w-4 h-4" /> CodeSkill assessment portal</p><h1 className="text-3xl font-bold tracking-tight">Assessments &amp; Technical Tests</h1><p className="text-muted-foreground mt-2 max-w-2xl">Build confidence with coding challenges and technical tests. Find your assigned assessments and track your results.</p></div><Button variant="outline" aria-label="Refresh assessments" disabled={loading || !user} onClick={() => setRetry(value => value + 1)}><RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /></Button></header>
+    <div className="flex flex-wrap gap-2 border-b border-border pb-4">{tabs.map(value => <button key={value} aria-pressed={tab === value} onClick={() => setTab(value)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === value ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>{value}</button>)}</div>
+    <div className="flex flex-col md:flex-row gap-3"><div className="relative flex-1"><Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" /><input aria-label="Search assessments" placeholder="Search by assessment title..." value={search} onChange={event => setSearch(event.target.value)} className="w-full py-2 pl-10 pr-3 rounded-lg bg-background border border-border" /></div><select aria-label="Availability" value={availability} onChange={event => setAvailability(event.target.value)} className="p-2 rounded-lg border border-border bg-background">{["All availability", "Upcoming", "Live", "Completed"].map(value => <option key={value}>{value}</option>)}</select><select aria-label="Difficulty" value={difficulty} onChange={event => setDifficulty(event.target.value)} className="p-2 rounded-lg border border-border bg-background">{["All difficulties", "Easy", "Medium", "Hard"].map(value => <option key={value}>{value}</option>)}</select></div>
+    {error && <div role="alert" className="p-5 border border-destructive/30 rounded-xl flex flex-wrap gap-3 items-center justify-between"><p className="text-destructive">{error}</p><Button variant="outline" onClick={() => setRetry(value => value + 1)}>Try again</Button></div>}
+    {authLoading || loading ? <div role="status" className="py-16 flex justify-center gap-3 text-muted-foreground"><Spinner />Loading assessments...</div> : !user ? <div className="min-h-64 rounded-2xl border border-dashed border-border bg-muted/30 flex items-center justify-center p-8 text-center"><p className="max-w-sm text-sm text-muted-foreground">Your assigned assessments, upcoming tests and results will appear here after you sign in.</p></div> : !error && visible.length === 0 ? <div className="text-center p-12 border border-border rounded-2xl text-muted-foreground">No assessments match your filters.</div> : <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">{visible.map(assessment => {
+      const types = assessmentTypes(assessment); const Icon = types.length === 1 ? icons[types[0]] : Layers;
+      const completed = assessmentCompleted(assessment); const status = completed ? "Completed" : assessmentWindow(assessment, now);
+      const canAttempt = canAttemptAssessment(assessment, now); const id = assessment.id || assessment._id;
+      const levels = assessment.difficulties?.length ? assessment.difficulties : assessment.difficulty ? [assessment.difficulty] : [];
+      return <article key={id} className="bg-card border border-border rounded-2xl p-6 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col gap-4">
+        <div className="flex items-start justify-between gap-3"><div className="bg-primary/10 text-primary p-3 rounded-xl"><Icon aria-label={types.length === 1 ? `${getQuestionTypeLabel(types[0])} assessment` : "Mixed assessment"} className="w-6 h-6" /></div><span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${status === "Live" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground"}`}>{status}</span></div>
+        <div className="space-y-2"><div className="flex flex-wrap gap-1.5">{types.length ? types.map(type => <span key={type} className="text-xs bg-primary/5 text-primary border border-primary/15 px-2 py-0.5 rounded-md">{getQuestionTypeLabel(type)}</span>) : <span className="text-xs text-muted-foreground">{assessment.type || "Technical Assessment"}</span>}</div><h2 className="text-lg font-bold leading-snug break-words">{assessment.title}</h2><p className="text-sm text-muted-foreground line-clamp-2 min-h-10">{assessment.description || "A technical assessment assigned to your account."}</p></div>
+        <dl className="grid grid-cols-3 gap-2 border-y border-border py-4 text-sm">{[{ label: "Duration", value: `${assessment.durationMinutes} mins`, icon: Clock }, { label: "Questions", value: assessment.questionCount, icon: Layers }, { label: "Total marks", value: `${assessment.totalMarks} pts`, icon: Award }].map(({ label, value, icon: MetaIcon }) => <div key={label}><dt className="text-xs text-muted-foreground flex gap-1 items-center mb-1"><MetaIcon className="w-3.5 h-3.5 shrink-0" />{label}</dt><dd className="font-semibold">{value}</dd></div>)}</dl>
+        <div className="text-xs text-muted-foreground flex flex-wrap gap-3">{levels.length > 0 && <span className="capitalize">Difficulty: {levels.length === 1 ? levels[0] : "Mixed"}</span>}{assessment.proctoring && Object.values(assessment.proctoring).some(Boolean) && <span className="flex gap-1 items-center"><ShieldCheck className="w-3.5 h-3.5" /> Proctored</span>}{assessment.code && <span className="font-mono">{assessment.code}</span>}</div>
+        <footer className="mt-auto pt-2 space-y-3">{completed && <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><span>Score: <strong>{assessment.attemptScore ?? 0} / {assessment.totalMarks} pts</strong></span><Link href={`/assessments/${id}/result`} className="font-semibold text-primary flex items-center gap-1 hover:underline"><BarChart3 className="w-4 h-4" />Scorecard</Link></div>}{canAttempt ? completed ? <Button className="w-full" disabled={!!retakingId} onClick={() => void retake(id)}>{retakingId === id ? "Launching..." : "Re-attempt"}</Button> : <Link href={`/assessments/${id}`} className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg bg-foreground text-background font-semibold text-sm hover:opacity-90">{assessment.attemptStatus === "in_progress" ? "Resume Assessment" : "Attempt Now"}<ArrowRight className="w-4 h-4" /></Link> : <Button variant="outline" className="w-full" disabled>{status === "Upcoming" ? "Opens at the scheduled start time" : "Assessment closed"}</Button>}</footer>
+      </article>;
+    })}</div>}
     </div>
-  );
+    {showGuestPrompt && <div className="absolute inset-x-0 top-28 z-20 flex justify-center px-4 sm:top-32" role="region" aria-labelledby="student-sign-in-heading">
+      <section className="w-full max-w-xl rounded-3xl border border-primary/20 bg-card/95 p-6 shadow-2xl shadow-primary/10 ring-1 ring-primary/10 backdrop-blur-md sm:p-8">
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/15"><LockKeyhole className="h-6 w-6" aria-hidden="true" /></div>
+        <div className="text-center">
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">Student access</p>
+          <h2 id="student-sign-in-heading" className="text-xl font-bold tracking-tight sm:text-2xl">Sign in to view your assessments</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">See tests assigned to your account, continue active assessments and review your results.</p>
+          <Link href="/login?redirect=/assessments" className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:w-auto sm:min-w-52">
+            Student Sign In <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        </div>
+      </section>
+    </div>}
+  </main>;
 }

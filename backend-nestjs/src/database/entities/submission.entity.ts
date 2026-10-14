@@ -7,11 +7,18 @@ import {
   Index,
   ManyToOne,
   JoinColumn,
+  Check,
 } from 'typeorm';
 import { User } from './user.entity';
 import { Problem } from './problem.entity';
 
+export type ProblemSource = 'problem' | 'metadata' | 'question';
+
 @Entity('submissions')
+@Check(
+  'CHK_submissions_problem_source',
+  `"problemSource" IN ('problem', 'metadata', 'question')`,
+)
 @Index(['userId', 'problemId', 'status'])
 @Index(['createdAt'])
 @Index(['status'])
@@ -27,12 +34,16 @@ export class Submission {
   @Column({ type: 'uuid' })
   userId: string;
 
-  @ManyToOne(() => Problem)
+  // problemId also identifies metadata-backed practice problems.
+  @ManyToOne(() => Problem, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'problemId' })
   problem: Problem;
 
   @Column({ type: 'uuid' })
   problemId: string;
+
+  @Column({ type: 'varchar', length: 20, default: 'problem' })
+  problemSource: ProblemSource;
 
   @Column({ type: 'text' })
   code: string;

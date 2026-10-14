@@ -1,4 +1,5 @@
 import { registerAs } from '@nestjs/config';
+import { resolveJwtSettings } from './jwt.config';
 
 export const appConfig = registerAs('app', () => ({
   port: parseInt(process.env.PORT || '5001', 10),
@@ -24,10 +25,8 @@ export const redisConfig = registerAs('redis', () => ({
   url: process.env.REDIS_URL,
 }));
 
-export const jwtConfig = registerAs('jwt', () => ({
-  secret: process.env.JWT_SECRET || 'supersecretcodeskilljwt',
-  expiresIn: process.env.JWT_EXPIRE || '30d',
-}));
+// Throws at boot when JWT_SECRET is missing/weak outside development/test.
+export const jwtConfig = registerAs('jwt', () => resolveJwtSettings());
 
 export const awsConfig = registerAs('aws', () => ({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -46,10 +45,7 @@ export const oauthConfig = registerAs('oauth', () => ({
   linkedinClientSecret: process.env.LINKEDIN_CLIENT_SECRET,
 }));
 
-export const adminConfig = registerAs('admin', () => ({
-  emails:
-    process.env.ADMIN_EMAILS ||
-    process.env.ADMIN_EMAIL ||
-    'admin@codeskill.com,admin@cuchd.in,md.shadab.azam.ansari@gmail.com,kanhamishra555@gmail.com,shaikhmustakim2942@gmail.com',
-  password: process.env.ADMIN_PASSWORD || 'admin123',
-}));
+// Administrators are created ONLY through the explicit bootstrap CLI
+// (`npm run admin:bootstrap`). There are no default e-mails or passwords and
+// nothing is promoted automatically at application start-up.
+export const adminConfig = registerAs('admin', () => ({}));

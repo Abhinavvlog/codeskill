@@ -52,8 +52,12 @@ export class CampusController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update university profile' })
-  async updateUniversity(@Param('id') id: string, @Body() body: any) {
-    return this.campusService.updateUniversity(id, body);
+  async updateUniversity(
+    @Param('id') id: string,
+    @Body() body: any,
+    @Request() req: any,
+  ) {
+    return this.campusService.updateUniversity(id, body, req.user);
   }
 
   @Get(':username')

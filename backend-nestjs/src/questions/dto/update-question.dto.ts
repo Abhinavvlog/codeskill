@@ -4,6 +4,8 @@ import {
   IsArray,
   IsNumber,
   IsIn,
+  IsBoolean,
+  ValidateIf,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -17,7 +19,9 @@ export class UpdateQuestionDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
-  options?: Array<string | { text: string; isCorrect?: boolean; explanation?: string }>;
+  options?: Array<
+    string | { text: string; isCorrect?: boolean; explanation?: string }
+  >;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -39,6 +43,16 @@ export class UpdateQuestionDto {
   @IsOptional()
   @IsString()
   topic?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Topic categories only; question type remains a separate field',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  categories?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -93,11 +107,38 @@ export class UpdateQuestionDto {
   questionType?: string;
 
   @ApiPropertyOptional({
-    enum: ['pending', 'approved', 'rejected', 'archived', 'active', 'draft'],
+    enum: [
+      'pending',
+      'approved',
+      'rejected',
+      'archived',
+      'active',
+      'draft',
+      'published',
+    ],
   })
   @IsOptional()
-  @IsString()
+  @IsIn([
+    'pending',
+    'approved',
+    'rejected',
+    'archived',
+    'active',
+    'draft',
+    'published',
+  ])
   status?: string;
+
+  @ApiPropertyOptional({ enum: ['Draft', 'Private', 'Published', 'Public'] })
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @IsIn(['Draft', 'Private', 'Published', 'Public'])
+  visibility?: 'Draft' | 'Private' | 'Published' | 'Public';
+
+  @ApiPropertyOptional()
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @Transform(({ obj, key }) => (obj as Record<string, unknown>)[key])
+  @IsBoolean()
+  contestOnly?: boolean;
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
@@ -144,7 +185,7 @@ export class UpdateQuestionDto {
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
-  @Transform(({ value }) => {
+  @Transform(({ value }: { value: unknown }) => {
     if (typeof value === 'string') {
       return value
         .split('\n')

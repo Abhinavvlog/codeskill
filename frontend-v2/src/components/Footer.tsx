@@ -12,6 +12,7 @@ export function Footer() {
     pathname === "/login" ||
     pathname === "/register" ||
     pathname.includes("/take") ||
+    pathname.endsWith("/attempt") ||
     pathname.match(/^\/(problems|contest)\/[^/]+$/);
 
   if (isHidden) return null;

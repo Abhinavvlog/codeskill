@@ -24,11 +24,30 @@ export class RedisService implements OnModuleDestroy {
       },
     };
 
-    const isCluster = process.env.NODE_ENV === 'production';
+    const isCluster =
+      process.env.REDIS_CLUSTER_MODE === 'true' ||
+      process.env.REDIS_ENABLE_CLUSTER === 'true';
+
+    const useTls =
+      process.env.REDIS_TLS === 'true' ||
+      Boolean(url && url.startsWith('rediss://'));
+
+    if (useTls) {
+      options.tls = {};
+    }
+
     if (isCluster) {
-      this.client = new Redis.Cluster([{ host: options.host, port: options.port }], {
+      const clusterHosts = process.env.REDIS_CLUSTER_NODES
+        ? process.env.REDIS_CLUSTER_NODES.split(',').map((node) => {
+            const [h, p] = node.trim().split(':');
+            return { host: h, port: parseInt(p, 10) || 6379 };
+          })
+        : [{ host: options.host, port: options.port }];
+
+      this.client = new Redis.Cluster(clusterHosts, {
         redisOptions: {
-          password: options.password,
+          password: options.password || undefined,
+          tls: useTls ? {} : undefined,
         },
       });
     } else if (url) {

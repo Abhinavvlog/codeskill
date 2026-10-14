@@ -1,5 +1,7 @@
 "use client";
 
+import { getTopicCategories, normalizeQuestionType } from "@/lib/question-types";
+
 import { useEffect, useState, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { adminProblemsAPI, adminQuestionsAPI } from "@/config/api";
@@ -88,12 +90,10 @@ function EditQuestionContent() {
         }
 
         const rawType = data.questionType || (Array.isArray(data.options) && data.options.length ? "MCQ" : "DSA");
-        let qType: 'MCQ' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'CODE_OUTPUT' | 'DSA' = "DSA";
-        if (["TRUE_FALSE", "true_false"].includes(rawType)) qType = "TRUE_FALSE";
-        else if (["MULTIPLE_CHOICE", "multiple_choice"].includes(rawType)) qType = "MULTIPLE_CHOICE";
-        else if (["MCQ", "single_choice"].includes(rawType)) qType = "MCQ";
-        else if (["CODE_OUTPUT", "code_output"].includes(rawType)) qType = "CODE_OUTPUT";
-        else if (["DSA", "coding", "algorithmic"].includes(rawType)) qType = "DSA";
+        const qType = normalizeQuestionType(rawType, "DSA");
+        const storedVisibility = String(data.visibility || data.metadata?.visibility || "").trim().toLowerCase();
+        const visibility = ["public", "published"].includes(storedVisibility) ? "Published" : storedVisibility === "private" ? "Private" : "Draft";
+        const contestOnly = typeof data.contestOnly === "boolean" ? data.contestOnly : data.metadata?.contestOnly === true;
 
         const rawConstraints = data.constraints || data.statement?.constraints;
         const constraintsString = Array.isArray(rawConstraints)
@@ -104,12 +104,12 @@ function EditQuestionContent() {
 
         const mappedState: any = {
           metadata: {
-            title: data.question || data.title || "",
+            title: data.title || data.question || "",
             slug: data.slug || "",
             difficulty: (data.difficulty ? data.difficulty.charAt(0).toUpperCase() + data.difficulty.slice(1).toLowerCase() : "Easy"),
-            categories: data.topic ? [data.topic] : (data.categories || []),
+            categories: getTopicCategories(data),
             tags: data.tags || [],
-            visibility: data.status === "approved" || data.visibility === "Published" ? "Published" : "Draft",
+            visibility,
             author: data.author || "",
             questionId: data._id || data.id || "",
             estimatedSolveTime: 30, // Default if not in backend
@@ -159,12 +159,12 @@ function EditQuestionContent() {
           },
           testCases: data.testCases?.cases || (Array.isArray(data.testCases) ? data.testCases : []),
           publishing: {
-            publishImmediately: data.status === "approved" || data.visibility === "Published",
-            saveAsDraft: data.status !== "approved" && data.visibility !== "Published",
+            publishImmediately: visibility === "Published",
+            saveAsDraft: visibility === "Draft",
             scheduledDate: "",
             isArchived: false,
             isFeatured: false,
-            contestOnly: false,
+            contestOnly,
             practiceOnly: true,
           },
         };
@@ -274,18 +274,18 @@ function EditQuestionContent() {
 
     setLoading(true);
     try {
-      const visibility = (store.metadata.visibility === "Published" || store.publishing.publishImmediately)
-        ? "Published"
-        : (store.metadata.visibility === "Draft" || store.publishing.saveAsDraft)
-        ? "Draft"
-        : store.metadata.visibility || "Draft";
+      const visibility = store.metadata.visibility || "Draft";
 
       const formattedConstraints = formatConstraints(store.statement.constraints);
 
       const payload: any = {
         question: store.metadata.title,
         title: store.metadata.title,
+        slug: store.metadata.slug,
+        visibility,
+        contestOnly: store.publishing.contestOnly,
         topic: store.metadata.categories[0] || "General",
+        categories: store.metadata.categories,
         difficulty: store.metadata.difficulty.toLowerCase(),
         marks: store.metadata.points || 1,
         status: visibility === "Published" ? "approved" : "draft",

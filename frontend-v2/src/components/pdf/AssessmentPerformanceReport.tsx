@@ -355,10 +355,10 @@ const styles = StyleSheet.create({
     marginBottom: 9,
   },
   analyticsColLeft: {
-    width: "53%",
+    width: "50%",
   },
   analyticsColRight: {
-    width: "45%",
+    width: "48%",
   },
 
   // 7. Detailed Performance Table
@@ -477,11 +477,18 @@ export const AssessmentPerformanceReport = ({ data }: AssessmentPerformanceRepor
   const hardSolved = hardQuestions.filter((q) => q.status.toLowerCase() === "passed").length;
 
   const easyPoints = easyQuestions.reduce((acc, q) => acc + (q.points || 0), 0);
-  const easyMax = easyQuestions.reduce((acc, q) => acc + (q.maxPoints || q.points || 10), 0) || 15;
+  const easyMax = easyQuestions.reduce((acc, q) => acc + (q.maxPoints || q.points || 10), 0) || (data.difficultyBreakdown?.easy?.maxScore ?? 15);
   const medPoints = medQuestions.reduce((acc, q) => acc + (q.points || 0), 0);
-  const medMax = medQuestions.reduce((acc, q) => acc + (q.maxPoints || q.points || 20), 0) || 25;
+  const medMax = medQuestions.reduce((acc, q) => acc + (q.maxPoints || q.points || 20), 0) || (data.difficultyBreakdown?.medium?.maxScore ?? 25);
   const hardPoints = hardQuestions.reduce((acc, q) => acc + (q.points || 0), 0);
-  const hardMax = hardQuestions.reduce((acc, q) => acc + (q.maxPoints || q.points || 30), 0) || 60;
+  const hardMax = hardQuestions.reduce((acc, q) => acc + (q.maxPoints || q.points || 30), 0) || (data.difficultyBreakdown?.hard?.maxScore ?? 60);
+
+  const computedEasyScore = easyQuestions.length > 0 ? easyPoints : (data.difficultyBreakdown?.easy?.score ?? 15);
+  const computedEasyMax = easyQuestions.length > 0 ? easyMax : (data.difficultyBreakdown?.easy?.maxScore ?? 15);
+  const computedMedScore = medQuestions.length > 0 ? medPoints : (data.difficultyBreakdown?.medium?.score ?? 25);
+  const computedMedMax = medQuestions.length > 0 ? medMax : (data.difficultyBreakdown?.medium?.maxScore ?? 25);
+  const computedHardScore = hardQuestions.length > 0 ? hardPoints : (data.difficultyBreakdown?.hard?.score ?? 45);
+  const computedHardMax = hardQuestions.length > 0 ? hardMax : (data.difficultyBreakdown?.hard?.maxScore ?? 60);
 
   const totalProblemsCount = perf.totalProblems || questions.length || 5;
   const totalSolvedCount = perf.totalSolved ?? (easySolved + medSolved + hardSolved);
@@ -780,12 +787,12 @@ export const AssessmentPerformanceReport = ({ data }: AssessmentPerformanceRepor
             <ScoreDonutChart
               score={score}
               maxScore={maxScore}
-              easyScore={easyPoints || 15}
-              easyMax={easyMax || 15}
-              medScore={medPoints || 25}
-              medMax={medMax || 25}
-              hardScore={hardPoints || 45}
-              hardMax={hardMax || 60}
+              easyScore={computedEasyScore}
+              easyMax={computedEasyMax}
+              medScore={computedMedScore}
+              medMax={computedMedMax}
+              hardScore={computedHardScore}
+              hardMax={computedHardMax}
             />
           </View>
         </View>

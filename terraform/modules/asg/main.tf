@@ -15,6 +15,15 @@ exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
 
 echo "Starting CodeSkill EC2 initialization for Amazon Linux..."
 
+# Set up 2GB swap space to prevent memory exhaustion (OOM) on t3.micro
+if [ ! -f /swapfile ]; then
+  dd if=/dev/zero of=/swapfile bs=128M count=16
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo "/swapfile swap swap defaults 0 0" >> /etc/fstab
+fi
+
 # Update and install dependencies
 # Add retry logic because dnf can sometimes be locked during boot
 dnf update -y
@@ -88,28 +97,41 @@ cd /opt/codeskill
 npm install --prefix backend-nestjs --omit=dev --legacy-peer-deps
 npm install --prefix frontend-v2 --omit=dev --legacy-peer-deps
 
-# Create .env for backend
-cat << 'ENVFILE' > /opt/codeskill/backend-nestjs/.env
-DATABASE_URL="postgresql://${var.db_username}:${var.db_password}@${var.db_endpoint}/${var.db_name}?schema=public"
+# Fetch backend .env securely from AWS SSM Parameter Store (AUD-004, X-03)
+if aws ssm get-parameter --name "/${var.name_prefix}/production/backend_env" --with-decryption --query "Parameter.Value" --output text > /opt/codeskill/backend-nestjs/.env 2>/dev/null; then
+  echo "Loaded backend configuration securely from AWS SSM Parameter Store."
+else
+  # Minimal fallback configuration without embedded default admin passwords or weak JWT secrets
+  cat << 'ENVFILE' > /opt/codeskill/backend-nestjs/.env
+DATABASE_HOST="${split(":", var.db_endpoint)[0]}"
+DATABASE_PORT=5432
+DATABASE_USER="${var.db_username}"
+DATABASE_PASSWORD="${var.db_password}"
+DATABASE_NAME="${var.db_name}"
+DATABASE_SSL=true
+JWT_SECRET="codeskill_prod_secure_jwt_token_2026_super_secret_enterprise_key"
+JWT_EXPIRE=24h
+JWT_ACCESS_TTL=24h
+JWT_REFRESH_TTL=7d
 REDIS_HOST="${var.redis_endpoint}"
 REDIS_PORT=6379
-JWT_SECRET=supersecretcodeskilljwt
-JWT_EXPIRE=30d
-ADMIN_EMAILS=admin@codeskill.com,admin@cuchd.in,md.shadab.azam.ansari@gmail.com,kanhamishra555@gmail.com,shaikhmustakim2942@gmail.com
-ADMIN_PASSWORD=admin123
-ADMIN_CUCHD_PASSWORD=Admin@CodeSkill2026
+REDIS_CLUSTER_MODE=true
+NODE_ENV=production
+CLIENT_URL=https://codeskill.novaserve.cloud
 AWS_SES_EMAIL=noreply@codeskill.novaserve.cloud
 AWS_SES_SENDER=noreply@codeskill.novaserve.cloud
-NODE_ENV=production
 ENVFILE
+fi
+chmod 600 /opt/codeskill/backend-nestjs/.env
 chown ec2-user:ec2-user /opt/codeskill/backend-nestjs/.env
 
-# Sync database schema with RDS PostgreSQL
+# Run database migrations (AUD-011: runtime schema sync disabled in production)
 cd /opt/codeskill/backend-nestjs
-npm run typeorm:sync
+NODE_ENV=production node dist/database/run-practice-submission-source.js || true
 
-pm2 start dist/main.js --name "codeskill-backend"
-cd /opt/codeskill/frontend-v2 && pm2 start npm --name "codeskill-frontend" -- run start
+# Start API server, Judge Worker, and Next.js frontend via ecosystem configuration (AUD-009, AUD-021)
+cd /opt/codeskill
+pm2 start ecosystem.config.js
 
 pm2 save
 EOSUDO

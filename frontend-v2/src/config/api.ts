@@ -1,20 +1,12 @@
+import { awaitExecution } from "@/lib/await-execution";
 import axios from "axios";
+import { getBrowserApiBaseURL } from "@/lib/api-base-url";
+import { normalizeProblemQuery } from "@/lib/public-problems";
 
 // Dynamically determine the correct API base URL
 const getDynamicBaseURL = (): string => {
   if (typeof window !== "undefined") {
-    const envUrl = process.env.NEXT_PUBLIC_API_URL;
-    // In browser: if envUrl is missing or points to localhost/127.0.0.1 on a non-local domain, use relative /api
-    if (
-      !envUrl ||
-      envUrl === "/api" ||
-      (envUrl.includes("localhost") &&
-        window.location.hostname !== "localhost" &&
-        window.location.hostname !== "127.0.0.1")
-    ) {
-      return "/api";
-    }
-    return envUrl;
+    return getBrowserApiBaseURL(process.env.NEXT_PUBLIC_API_URL, window.location);
   }
   return process.env.INTERNAL_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5001/api";
 };
@@ -144,13 +136,25 @@ export const usersAPI = {
 
 // ── Public Problems ──
 export const problemsAPI = {
-  getAll: (page = 1, limit = 20, search = "", category = "All Topics") => {
-    let url = `/problems?page=${page}&limit=${limit}`;
-    if (search) url += `&search=${encodeURIComponent(search)}`;
-    if (category && category !== "All Topics") url += `&category=${encodeURIComponent(category)}`;
-    return api.get(url);
+  getAll: (page = 1, limit = 20, search = "", category = "All Topics", signal?: AbortSignal) => {
+    const params: { page: number; limit: number; search?: string; category?: string } = { page, limit };
+    const query = normalizeProblemQuery(search);
+    const topic = normalizeProblemQuery(category, true);
+    if (query) params.search = query;
+    if (topic) params.category = topic;
+    return api.get("/problems", { params, signal });
   },
   getBySlug: (slug: string) => api.get(`/problems/${slug}`),
+};
+
+export const petAPI = {
+  ask: (data: {
+    question: string;
+    problemSlug?: string;
+    code?: string;
+    language?: string;
+    history: Array<{ role: "user" | "assistant"; content: string }>;
+  }) => api.post<{ reply: string; source: "openrouter" | "deepseek" | "local"; notice?: string }>("/pet/ask", data, { timeout: 30000 }),
 };
 
 // ── Submissions ──
@@ -161,13 +165,13 @@ export const submissionAPI = {
 };
 
 export const runAPI = {
+  runtimes: () => api.get<Array<{ language: string; version?: string; enabled: boolean }>>("/execution/runtimes"),
   run: (data: { code: string; language: string; testCases: any[]; config?: any }) =>
     api.post("/execution/run", data, { timeout: 60000 }),
   getJob: (jobId: string) => api.get(`/execution/jobs/${jobId}`, { timeout: 60000 }),
 };
 
-// Azure-backed high-scale execution (Microsoft Azure Container Instances)
-// Falls back to local executor if AZURE_COMPILER_URL is not set on the backend
+// Compatibility endpoint: backend selects the configured provider and queue.
 export const azureRunAPI = {
   run: (data: {
     code: string;
@@ -176,7 +180,10 @@ export const azureRunAPI = {
     testCases?: Array<{ id: string; input: string; expected: string }>;
     timeoutMs?: number;
     memoryMB?: number;
-  }) => api.post("/execution/azure-run", data, { timeout: 90000 }),
+  }) => awaitExecution(
+    () => api.post("/execution/azure-run", data, { timeout: 90000 }),
+    jobId => runAPI.getJob(jobId),
+  ),
 };
 
 // ── Discussions ──
@@ -199,19 +206,50 @@ export const discussionsAPI = {
 
 // ── Admin ──
 export const adminProblemsAPI = {
-  getAll: () => api.get("/admin/problems"),
+  getAll: (params?: { page?: number; limit?: number; search?: string }, signal?: AbortSignal) =>
+    api.get("/admin/problems", { params, signal }),
   getById: (id: string) => api.get(`/admin/problems/${id}`),
   create: (data: any) => api.post("/admin/problems", data),
   update: (id: string, data: any) => api.put(`/admin/problems/${id}`, data),
   delete: (id: string) => api.delete(`/admin/problems/${id}`),
 };
 
+function notifyContestChange<T>(response: T): T {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("codeskill-contests-changed"));
+    if (typeof BroadcastChannel !== "undefined") {
+      const channel = new BroadcastChannel("codeskill-contests"); channel.postMessage("refresh"); channel.close();
+    }
+  }
+  return response;
+}
+
 export const adminContestsAPI = {
-  getAll: () => api.get("/admin/contests"),
+  getAll: (page = 1, limit = 50, search = "") =>
+    api.get(`/admin/contests?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`),
   getById: (id: string) => api.get(`/admin/contests/${id}`),
-  create: (data: any) => api.post("/admin/contests", data),
-  update: (id: string, data: any) => api.put(`/admin/contests/${id}`, data),
-  delete: (id: string) => api.delete(`/admin/contests/${id}`),
+  create: (data: any) => api.post("/admin/contests", data).then(notifyContestChange),
+  update: (id: string, data: any) => api.put(`/admin/contests/${id}`, data).then(notifyContestChange),
+  delete: (id: string) => api.delete(`/admin/contests/${id}`).then(notifyContestChange),
+  getResults: (id: string, params: any = {}) => {
+    const q = new URLSearchParams();
+    if (params.search) q.set("search", params.search);
+    if (params.status) q.set("status", params.status);
+    if (params.minScore !== undefined && params.minScore !== "") q.set("minScore", String(params.minScore));
+    if (params.maxScore !== undefined && params.maxScore !== "") q.set("maxScore", String(params.maxScore));
+    if (params.page) q.set("page", String(params.page));
+    if (params.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return api.get(`/admin/contests/${id}/results${qs ? `?${qs}` : ""}`);
+  },
+  togglePublishResults: (id: string, publish?: boolean) =>
+    api.post(`/admin/contests/${id}/publish-results`, { publish }).then(notifyContestChange),
+  grantReattempts: (id: string, data: { studentIds: string[]; reason?: string; allowedAttempts?: number; expiresAt?: string }) =>
+    api.post(`/admin/contests/${id}/reattempts`, data),
+  revokeReattempt: (id: string, targetId: string) =>
+    api.post(`/admin/contests/${id}/reattempts/revoke`, { targetId }),
+  exportResultsCsv: (id: string) =>
+    api.get(`/admin/contests/${id}/results/export`, { responseType: "blob" }),
 };
 
 export const adminUsersAPI = {
@@ -334,7 +372,7 @@ export const adminQuestionsAPI = {
     aiGenerated?: boolean;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
-  }) => api.get("/admin/questions", { params }),
+  }, signal?: AbortSignal) => api.get("/admin/questions", { params, signal }),
   getById: (id: string) => api.get(`/admin/questions/${id}`),
   create: (data: any) => api.post("/admin/questions", data),
   update: (id: string, data: any) => api.put(`/admin/questions/${id}`, data),
@@ -380,7 +418,7 @@ export const adminAssessmentsAPI = {
 };
 
 export const studentAssessmentsAPI = {
-  getMyAssessments: () => api.get("/assessments/my-assessments"),
+  getMyAssessments: (signal?: AbortSignal) => api.get("/assessments/my-assessments", { signal }),
   getOverview: (id: string) => api.get(`/assessments/${id}/overview`),
   startAttempt: (id: string) => api.post(`/assessments/${id}/start`),
   saveProgress: (id: string, data: any) => api.post(`/assessments/${id}/save-progress`, data),

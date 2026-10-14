@@ -165,4 +165,19 @@ describe('Question DTOs Constraints Validation & Transformation', () => {
       ]);
     });
   });
+  it.each([CreateQuestionDto, UpdateQuestionDto])('keeps topic categories and type as separate whitelisted fields in %p', async (Dto) => {
+    const input = { ...baseValidDto, categories: ['Arrays', 'Trees'], questionType: 'CODE_OUTPUT' };
+    const dto = plainToInstance<CreateQuestionDto | UpdateQuestionDto, typeof input>(Dto, input);
+    const errors = await validate(dto, { whitelist: true });
+    expect(errors).toHaveLength(0);
+    expect(dto.categories).toEqual(['Arrays', 'Trees']);
+    expect(dto.questionType).toBe('CODE_OUTPUT');
+  });
+
+  it('rejects non-string topic categories', async () => {
+    const dto = plainToInstance(CreateQuestionDto, { ...baseValidDto, categories: ['Arrays', 123] });
+    const errors = await validate(dto, { whitelist: true });
+    expect(errors.some(error => error.property === 'categories')).toBe(true);
+  });
+
 });

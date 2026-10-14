@@ -1,3 +1,4 @@
+import { parseSubmissionShardingConfig } from './sharding/sharding.config';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -15,6 +16,7 @@ import { AssessmentAttempt } from './entities/assessment-attempt.entity';
 import { Submission } from './entities/submission.entity';
 import { Contest } from './entities/contest.entity';
 import { ContestAttempt } from './entities/contest-attempt.entity';
+import { ContestReattemptGrant } from './entities/contest-reattempt-grant.entity';
 import { Company } from './entities/company.entity';
 import { CompanyUser } from './entities/company-user.entity';
 import { Job } from './entities/job.entity';
@@ -29,9 +31,11 @@ import { AuditLog } from './entities/audit-log.entity';
 import { EmailJob } from './entities/email-job.entity';
 import { ExamSession } from './entities/exam-session.entity';
 import { ExamSecurityEvent } from './entities/exam-security-event.entity';
+import { RefreshToken } from './entities/refresh-token.entity';
 
 const entities = [
   User,
+  RefreshToken,
   Problem,
   ProblemMetadata,
   ProblemStatement,
@@ -44,6 +48,7 @@ const entities = [
   Submission,
   Contest,
   ContestAttempt,
+  ContestReattemptGrant,
   Company,
   CompanyUser,
   Job,
@@ -65,13 +70,24 @@ const entities = [
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => {
+        const isProduction = process.env.NODE_ENV === 'production';
+        const isSyncAllowed = !isProduction && process.env.DB_SYNCHRONIZE === 'true';
+        if (isSyncAllowed && parseSubmissionShardingConfig()) {
+          throw new Error('DB_SYNCHRONIZE must be disabled when using submission shards');
+        }
+
         const url = configService.get<string>('database.postgres.url');
         if (url) {
+          const usesSsl =
+            url.includes('sslmode=require') ||
+            url.includes('ssl=true') ||
+            configService.get<boolean>('database.postgres.ssl');
           return {
             type: 'postgres',
             url,
+            ssl: usesSsl ? { rejectUnauthorized: false } : false,
             autoLoadEntities: true,
-            synchronize: process.env.NODE_ENV !== 'production',
+            synchronize: isSyncAllowed,
             invalidWhereValuesBehavior: {
               null: 'ignore',
             },
@@ -88,7 +104,7 @@ const entities = [
             ? { rejectUnauthorized: false }
             : false,
           autoLoadEntities: true,
-          synchronize: process.env.NODE_ENV !== 'production',
+          synchronize: isSyncAllowed,
           invalidWhereValuesBehavior: {
             null: 'ignore',
           },

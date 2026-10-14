@@ -1,4 +1,4 @@
-
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -11,6 +11,7 @@ import { RedisIoAdapter } from './gateway/redis-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.enableShutdownHooks();
 
   // Global prefix
   app.setGlobalPrefix('api');

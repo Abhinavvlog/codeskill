@@ -8,8 +8,11 @@ import { AssessmentsService } from './assessments.service';
 import { AssessmentsAdminController } from './assessments-admin.controller';
 import { AssessmentsStudentController } from './assessments-student.controller';
 
+import { ExecutionModule } from '../execution/execution.module';
+
 @Module({
   imports: [
+    ExecutionModule,
     TypeOrmModule.forFeature([
       Assessment,
       AssessmentAttempt,

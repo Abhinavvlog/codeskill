@@ -24,28 +24,65 @@ export class UsersService {
   }
 
   async getLeaderboard(limit = 50) {
-    const users = await this.userRepository.find({
-      where: { isActive: true },
-      order: { stats: { xp: 'DESC' } },
-      take: limit,
-    });
+    try {
+      const rawUsers: any[] = await this.userRepository.query(
+        `SELECT id, name, username, uid, avatar, stats, "studentProfile"
+         FROM users
+         WHERE "isActive" = true
+         ORDER BY COALESCE((stats->>'xp')::numeric, 0) DESC
+         LIMIT $1`,
+        [limit],
+      );
 
-    const leaderboard = users.map((u, idx) => ({
-      rank: idx + 1,
-      _id: u.id,
-      name: u.name,
-      username: u.username,
-      uid: u.uid,
-      avatar: u.avatar || '',
-      xp: u.stats?.xp ?? 0,
-      totalSolved: u.stats?.totalSolved ?? 0,
-      currentStreak: u.stats?.currentStreak ?? 0,
-      tier: this.getTier(u.stats?.xp ?? 0),
-      department: u.studentProfile?.department || '',
-      batch: u.studentProfile?.batch || '',
-    }));
+      const leaderboard = rawUsers.map((u, idx) => {
+        const stats = typeof u.stats === 'string' ? JSON.parse(u.stats) : (u.stats || {});
+        const studentProfile = typeof u.studentProfile === 'string' ? JSON.parse(u.studentProfile) : (u.studentProfile || {});
+        const xp = stats.xp ?? 0;
 
-    return { success: true, leaderboard, total: leaderboard.length };
+        return {
+          rank: idx + 1,
+          _id: u.id,
+          name: u.name,
+          username: u.username,
+          uid: u.uid,
+          avatar: u.avatar || '',
+          xp,
+          totalSolved: stats.totalSolved ?? 0,
+          currentStreak: stats.currentStreak ?? 0,
+          tier: this.getTier(xp),
+          department: studentProfile.department || '',
+          batch: studentProfile.batch || '',
+        };
+      });
+
+      return { success: true, leaderboard, total: leaderboard.length };
+    } catch {
+      const users = await this.userRepository.find({
+        where: { isActive: true },
+        take: limit,
+      });
+
+      const sortedUsers = [...users].sort(
+        (a, b) => (b.stats?.xp ?? 0) - (a.stats?.xp ?? 0),
+      );
+
+      const leaderboard = sortedUsers.map((u, idx) => ({
+        rank: idx + 1,
+        _id: u.id,
+        name: u.name,
+        username: u.username,
+        uid: u.uid,
+        avatar: u.avatar || '',
+        xp: u.stats?.xp ?? 0,
+        totalSolved: u.stats?.totalSolved ?? 0,
+        currentStreak: u.stats?.currentStreak ?? 0,
+        tier: this.getTier(u.stats?.xp ?? 0),
+        department: u.studentProfile?.department || '',
+        batch: u.studentProfile?.batch || '',
+      }));
+
+      return { success: true, leaderboard, total: leaderboard.length };
+    }
   }
 
   async getPublicProfile(identifier: string) {

@@ -1,30 +1,33 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, ExtractJwt } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { User as UserEntity } from '../../database/entities/user.entity';
+import { JwtSettings } from '../../config/jwt.config';
+import { AccessTokenPayload, TokenService } from '../token.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    private configService: ConfigService,
-    @InjectRepository(UserEntity) private userRepository: Repository<UserEntity>,
+    config: ConfigService,
+    private readonly tokens: TokenService,
   ) {
+    // getOrThrow: there is deliberately no fallback secret (AUD-004 / X-01).
+    const jwt = config.getOrThrow<JwtSettings>('jwt');
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: configService.get<string>('jwt.secret') || 'default',
+      secretOrKey: jwt.secret,
+      algorithms: ['HS256'],
+      issuer: jwt.issuer,
+      audience: jwt.audience,
       ignoreExpiration: false,
     });
   }
 
-  async validate(payload: any) {
-    const user = await this.userRepository.findOne({ where: { id: payload.id } });
-    
-    if (!user) {
-      throw new UnauthorizedException('Please log in to access this resource.');
-    }
-    return user;
+  /**
+   * Runs after the signature, algorithm, issuer, audience and expiry have been
+   * verified. Re-checks the live account (exists, active, tokenVersion).
+   */
+  async validate(payload: Partial<AccessTokenPayload> | null | undefined) {
+    return this.tokens.validateAccessPayload(payload);
   }
 }
