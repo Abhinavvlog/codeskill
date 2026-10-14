@@ -20,6 +20,7 @@ module.exports = {
         NODE_ENV: "production",
         PORT: 5001,
         PROCESS_ROLE: "api",
+        JUDGE_CONFIG_PARAMETER: "/codeskill-prod/judges/backend_env",
         ENABLE_EMBEDDED_JUDGE: "false",
       },
       log_date_format: "YYYY-MM-DDTHH:mm:ss.SSSZ",
@@ -39,6 +40,7 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PROCESS_ROLE: "judge",
+        JUDGE_CONFIG_PARAMETER: "/codeskill-prod/judges/backend_env",
         JUDGE_SANDBOX: "docker",
       },
       log_date_format: "YYYY-MM-DDTHH:mm:ss.SSSZ",

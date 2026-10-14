@@ -1,3 +1,4 @@
+import './runtime-config';
 import { PistonService } from './piston/piston.service';
 import { Judge0Service } from './judge0/judge0.service';
 import { ExecutionAdmissionModule } from './admission/execution-admission.module';
