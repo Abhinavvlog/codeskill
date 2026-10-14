@@ -4,6 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type ViolationHandler = (type: string, details: string) => void;
 
+function playVideo(video: HTMLVideoElement) {
+  try {
+    const playback = video.play();
+    if (playback && typeof playback.catch === "function") void playback.catch(() => {});
+  } catch {
+    // Some browsers and test DOMs may not implement media playback.
+  }
+}
+
 export function useAssessmentMedia(sessionId: string, enabled: boolean, onViolation: ViolationHandler) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const violationRef = useRef(onViolation);
@@ -21,6 +30,15 @@ export function useAssessmentMedia(sessionId: string, enabled: boolean, onViolat
   const [micActive, setMicActive] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [cameraError, setCameraError] = useState<string | null>(null);
+
+  const attachVideo = useCallback((video: HTMLVideoElement | null) => {
+    videoRef.current = video;
+    const stream = sessionRef.current.stream;
+    if (!video || !stream || sessionRef.current.ended) return;
+
+    video.srcObject = stream;
+    playVideo(video);
+  }, []);
 
   const releaseMedia = useCallback(() => {
     const session = sessionRef.current;
@@ -75,7 +93,10 @@ export function useAssessmentMedia(sessionId: string, enabled: boolean, onViolat
         setCameraActive(true);
         setMicActive(true);
         setCameraError(null);
-        if (videoRef.current) videoRef.current.srcObject = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          playVideo(videoRef.current);
+        }
         const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (AudioCtx) {
           const context = new AudioCtx();
@@ -127,5 +148,5 @@ export function useAssessmentMedia(sessionId: string, enabled: boolean, onViolat
     }
   }, [cameraActive, sessionId]);
 
-  return { videoRef, cameraActive: enabled && cameraActive, micActive: enabled && micActive, audioLevel: enabled ? audioLevel : 0, cameraError, stopCamera };
+  return { videoRef, attachVideo, cameraActive: enabled && cameraActive, micActive: enabled && micActive, audioLevel: enabled ? audioLevel : 0, cameraError, stopCamera };
 }
