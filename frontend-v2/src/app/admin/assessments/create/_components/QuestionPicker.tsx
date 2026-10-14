@@ -6,17 +6,6 @@ import { adminQuestionsAPI } from "@/config/api";
 import { Spinner } from "@/components/ui/spinner";
 import { useAssessmentStore } from "../_store/useAssessmentStore";
 
-type PickerQuestion = {
-  _id: string;
-  question: string;
-  topic: string;
-  subtopic?: string;
-  difficulty?: string;
-  questionType?: string;
-  marks?: number;
-  negativeMarks?: number;
-};
-
 interface QuestionPickerProps {
   sectionId: string;
   onClose: () => void;
@@ -24,7 +13,15 @@ interface QuestionPickerProps {
 
 export default function QuestionPicker({ sectionId, onClose }: QuestionPickerProps) {
   const store = useAssessmentStore();
-  const [questions, setQuestions] = useState<PickerQuestion[]>([]);
+  const [questions, setQuestions] = useState<Array<{
+    _id: string;
+    question: string;
+    questionType?: string;
+    difficulty?: string;
+    marks?: number;
+    negativeMarks?: number;
+    topic?: string;
+  }>>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -35,10 +32,11 @@ export default function QuestionPicker({ sectionId, onClose }: QuestionPickerPro
   const [topics, setTopics] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  
-  // To avoid duplicate adds, get existing ones
+
+  // To avoid duplicate adds, get existing ones across the entire assessment
   const section = store.sections.find(s => s.id === sectionId);
   const existingIds = new Set(section?.questions.map(q => q.questionId) || []);
+  const allSelectedInAssessment = new Set(store.sections.flatMap(s => s.questions.map(q => q.questionId)));
 
   const [selectedQuestions, setSelectedQuestions] = useState<Map<string, PickerQuestion>>(new Map());
 
@@ -106,9 +104,18 @@ export default function QuestionPicker({ sectionId, onClose }: QuestionPickerPro
     return () => controller.abort();
   }, [search, typeFilter, subjectFilter, topicFilter, difficultyFilter, page]);
 
-  const toggleSelect = (q: PickerQuestion) => {
+  const toggleSelect = (q: {
+    _id: string;
+    question: string;
+    questionType?: string;
+    difficulty?: string;
+    marks?: number;
+    negativeMarks?: number;
+    topic?: string;
+  }) => {
     if (existingIds.has(q._id)) return; // Already in section
-    
+    if (allSelectedInAssessment.has(q._id)) return; // Already selected elsewhere in the assessment
+
     const newSelection = new Map(selectedQuestions);
     if (newSelection.has(q._id)) {
       newSelection.delete(q._id);
@@ -150,9 +157,9 @@ export default function QuestionPicker({ sectionId, onClose }: QuestionPickerPro
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      
+
       <div className="relative w-full max-w-4xl bg-card border border-border rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        
+
         <div className="flex items-center justify-between p-5 border-b border-border bg-muted/30">
           <div>
             <h2 className="text-lg font-bold text-foreground">Add Questions</h2>
@@ -166,7 +173,7 @@ export default function QuestionPicker({ sectionId, onClose }: QuestionPickerPro
         <div className="p-5 border-b border-border bg-card flex flex-wrap gap-3 items-center">
           <div className="relative flex-1">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input 
+            <input
               type="text"
               placeholder="Search questions..."
               aria-label="Search questions"
@@ -210,7 +217,7 @@ export default function QuestionPicker({ sectionId, onClose }: QuestionPickerPro
             <option value="medium">Medium</option>
             <option value="hard">Hard</option>
           </select>
-          <select 
+          <select
             aria-label="Question type"
             value={typeFilter}
             onChange={e => { setTypeFilter(e.target.value); setPage(1); }}
@@ -247,37 +254,35 @@ export default function QuestionPicker({ sectionId, onClose }: QuestionPickerPro
             <div className="space-y-1.5 p-3">
               {questions.map(q => {
                 const isExisting = existingIds.has(q._id);
-                const isSelected = selectedQuestions.has(q._id);
+                const isSelected = selectedIds.has(q._id);
+                const isDuplicateAcrossAssessment = allSelectedInAssessment.has(q._id) && !isExisting;
                 return (
-                  <div 
+                  <div
                     key={q._id}
                     onClick={() => toggleSelect(q)}
-                    className={`flex items-start gap-4 p-4 rounded-xl border transition-all ${
-                      isExisting 
+                    className={`flex items-start gap-4 p-4 rounded-xl border transition-all ${isExisting || isDuplicateAcrossAssessment
                         ? 'opacity-50 cursor-not-allowed bg-muted/50 border-border'
                         : isSelected
-                        ? 'bg-primary/5 border-primary/30 cursor-pointer'
-                        : 'bg-card border-border hover:border-primary/30 cursor-pointer'
-                    }`}
+                          ? 'bg-primary/5 border-primary/30 cursor-pointer'
+                          : 'bg-card border-border hover:border-primary/30 cursor-pointer'
+                      }`}
                   >
-                    <div className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center shrink-0 border ${
-                      isExisting || isSelected 
-                        ? 'bg-primary border-primary text-primary-foreground' 
+                    <div className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center shrink-0 border ${isExisting || isSelected
+                        ? 'bg-primary border-primary text-primary-foreground'
                         : 'border-border bg-muted'
-                    }`}>
+                      }`}>
                       {(isExisting || isSelected) && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                     </div>
-                    
+
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1.5">
                         <span className="px-2 py-0.5 bg-muted border border-border rounded text-[10px] font-bold text-foreground uppercase">
                           {q.questionType || 'MCQ'}
                         </span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          q.difficulty === 'easy' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' :
-                          q.difficulty === 'medium' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' :
-                          'bg-rose-500/15 text-rose-600 dark:text-rose-400'
-                        }`}>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${q.difficulty === 'easy' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' :
+                            q.difficulty === 'medium' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' :
+                              'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                          }`}>
                           {q.difficulty}
                         </span>
                         <span className="ml-auto text-xs font-mono font-medium text-muted-foreground">
@@ -324,7 +329,7 @@ export default function QuestionPicker({ sectionId, onClose }: QuestionPickerPro
             <button onClick={onClose} className="px-5 py-2.5 rounded-xl border border-border hover:bg-muted text-sm font-semibold transition-colors">
               Cancel
             </button>
-            <button 
+            <button
               onClick={handleAdd}
               disabled={selectedQuestions.size === 0}
               className="px-6 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-semibold rounded-xl shadow-md transition-all disabled:opacity-50"
