@@ -1,10 +1,14 @@
 import type { Metadata } from "next";
-import { Roboto } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const roboto = Roboto({
-  weight: ["400", "500", "600", "700", "800", "900"],
-  subsets: ["latin"],
+const roboto = localFont({
+  src: [
+    { path: "../../public/fonts/NimbusSanL-Reg.otf", weight: "400", style: "normal" },
+    { path: "../../public/fonts/NimbusSanL-Bol.otf", weight: "700", style: "normal" },
+    { path: "../../public/fonts/NimbusSanL-RegIta.otf", weight: "400", style: "italic" },
+    { path: "../../public/fonts/NimbusSanL-BolIta.otf", weight: "700", style: "italic" },
+  ],
   display: "swap",
   variable: "--font-roboto",
 });
