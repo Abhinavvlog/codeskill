@@ -4,6 +4,21 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Visible, contained scrolling for long questions in the fullscreen exam. */
+.assessment-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: #64748b transparent;
+  scrollbar-gutter: stable;
+}
+.assessment-scroll::-webkit-scrollbar { width: 9px; height: 9px; }
+.assessment-scroll::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+.assessment-scroll::-webkit-scrollbar-track { background: transparent; }
+
 @theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));

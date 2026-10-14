@@ -2,6 +2,7 @@ import { awaitExecution } from "@/lib/await-execution";
 import axios from "axios";
 import { getBrowserApiBaseURL } from "@/lib/api-base-url";
 import { normalizeProblemQuery } from "@/lib/public-problems";
+import { logger } from "@/lib/logger";
 
 // Dynamically determine the correct API base URL
 const getDynamicBaseURL = (): string => {
@@ -74,6 +75,26 @@ api.interceptors.response.use(
     return res;
   },
   (error) => {
+    const requestId =
+      error.response?.headers?.["x-request-id"] ||
+      error.config?.headers?.["x-request-id"] ||
+      "unknown";
+    const status = error.response?.status;
+    const reqUrl = error.config?.url || "";
+
+    if (status && status >= 400) {
+      logger.warn(
+        `API request failed: [${status}] ${reqUrl}`,
+        {
+          requestId,
+          status,
+          url: reqUrl,
+          response: error.response?.data,
+        },
+        "APIClient"
+      );
+    }
+
     if (error.response?.status === 401 && typeof window !== "undefined") {
       const pathname = window.location.pathname;
       const isAuthPage =
@@ -84,7 +105,6 @@ api.interceptors.response.use(
         pathname.startsWith("/forgot-password") ||
         pathname.startsWith("/reset-password");
 
-      const reqUrl = error.config?.url || "";
       const isAuthRequest =
         reqUrl.includes("auth/login") ||
         reqUrl.includes("auth/admin-login") ||
@@ -99,8 +119,6 @@ api.interceptors.response.use(
           window.location.href = "/login";
         }
       }
-    } else if (error.response?.status === 400 && typeof window !== "undefined") {
-      console.warn(`[API 400 Bad Request] ${error.config?.url}:`, error.response?.data);
     }
     return Promise.reject(error);
   }
@@ -253,7 +271,8 @@ export const adminContestsAPI = {
 };
 
 export const adminUsersAPI = {
-  getAll: (search = "", adminsOnly = false) => api.get(`/admin/users?search=${encodeURIComponent(search)}&adminsOnly=${adminsOnly}`),
+  getAll: (search = "", adminsOnly = false, page = 1, limit = 50) =>
+    api.get(`/admin/users?search=${encodeURIComponent(search)}&adminsOnly=${adminsOnly}&page=${page}&limit=${limit}`),
   getReport: (userId: string) => api.get(`/admin/users/${userId}/report`),
   promote: (userId: string) => api.put(`/admin/users/${userId}/promote`),
   demote: (userId: string) => api.put(`/admin/users/${userId}/demote`),

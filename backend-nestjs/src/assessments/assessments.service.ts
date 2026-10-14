@@ -2,6 +2,7 @@ import { canonicalLanguage } from '../execution/execution.types';
 import { PistonUnavailableError } from '../execution/piston/piston.types';
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
@@ -20,6 +21,7 @@ import { ExecutionService } from '../execution/execution.service';
 
 @Injectable()
 export class AssessmentsService {
+  private readonly logger = new Logger(AssessmentsService.name);
   constructor(
     @InjectRepository(Assessment)
     private readonly assessmentRepo: Repository<Assessment>,
@@ -1105,6 +1107,14 @@ export class AssessmentsService {
       })
       .filter(Boolean);
 
+    this.logger.log({
+      event: 'ASSESSMENT_ATTEMPT_STARTED',
+      assessmentId: assessment.id,
+      attemptId: attempt.id,
+      studentId,
+      status: attempt.status,
+    });
+
     return {
       success: true,
       attemptId: attempt.id,
@@ -1209,6 +1219,17 @@ export class AssessmentsService {
       attempt.tabSwitchCount = attempt.violations.filter(
         (v) => v.type === 'tab_switch',
       ).length;
+
+      for (const v of dto.violations) {
+        this.logger.warn({
+          event: 'ASSESSMENT_VIOLATION_RECORDED',
+          assessmentId: targetAssessmentId,
+          attemptId: attempt.id,
+          studentId,
+          violationType: v.type,
+          details: v.details,
+        });
+      }
     }
 
     await this.attemptRepo.save(attempt);
@@ -1327,6 +1348,13 @@ export class AssessmentsService {
               );
               testCasesPassed = results.filter((res) => res.passed).length;
             } catch (execErr: any) {
+              this.logger.error({
+                message: `Assessment code execution failed for question ${q.id}`,
+                questionId: q.id,
+                attemptId: attempt?.id,
+                studentId,
+                error: execErr?.message || String(execErr),
+              });
               if (execErr instanceof PistonUnavailableError) throw execErr;
               testCasesPassed = 0;
             }
@@ -1468,6 +1496,17 @@ export class AssessmentsService {
     attempt.violations = violations;
 
     await this.attemptRepo.save(attempt);
+
+    this.logger.log({
+      event: 'ASSESSMENT_ATTEMPT_SUBMITTED',
+      assessmentId: assessment.id,
+      attemptId: attempt.id,
+      studentId,
+      score: finalScore,
+      percentage,
+      passed: attempt.passed,
+      status: attempt.status,
+    });
 
     return {
       success: true,
