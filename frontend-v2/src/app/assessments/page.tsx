@@ -16,7 +16,7 @@ export default function StudentAssessmentsPage() {
   const router = useRouter(); const { user, loading: authLoading } = useAuth();
   const [result, setResult] = useState<{ key: string; assessments: AssignedAssessment[]; error?: string }>();
   const [actionError, setError] = useState<string | null>(null);
-  const [retry, setRetry] = useState(0); const [retakingId, setRetakingId] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
   const [tab, setTab] = useState(tabs[0]); const [search, setSearch] = useState("");
   const [availability, setAvailability] = useState("All availability"); const [difficulty, setDifficulty] = useState("All difficulties");
   const [now, setNow] = useState(Date.now);
@@ -36,12 +36,7 @@ export default function StudentAssessmentsPage() {
     }).catch(() => { if (!controller.signal.aborted) setResult({ key: requestKey, assessments: [], error: "Assessments could not be loaded. Please try again." }); });
     return () => controller.abort();
   }, [user, authLoading, requestKey]);
-  const retake = async (id: string) => {
-    if (retakingId) return; setRetakingId(id); setError(null);
-    try { await studentAssessmentsAPI.retakeAttempt(id); router.push(`/assessments/${id}/take`); }
-    catch { setError("Your re-attempt could not be started. Please try again."); }
-    finally { setRetakingId(null); }
-  };
+  const retake = (id: string) => { setError(null); router.push(`/assessments/${id}`); };
   const visible = assessments.filter(assessment => {
     const types = assessmentTypes(assessment); const completed = assessmentCompleted(assessment);
     const status = completed ? "Completed" : assessmentWindow(assessment, now);
@@ -67,7 +62,7 @@ export default function StudentAssessmentsPage() {
         <div className="space-y-2"><div className="flex flex-wrap gap-1.5">{types.length ? types.map(type => <span key={type} className="text-xs bg-primary/5 text-primary border border-primary/15 px-2 py-0.5 rounded-md">{getQuestionTypeLabel(type)}</span>) : <span className="text-xs text-muted-foreground">{assessment.type || "Technical Assessment"}</span>}</div><h2 className="text-lg font-bold leading-snug break-words">{assessment.title}</h2><p className="text-sm text-muted-foreground line-clamp-2 min-h-10">{assessment.description || "A technical assessment assigned to your account."}</p></div>
         <dl className="grid grid-cols-3 gap-2 border-y border-border py-4 text-sm">{[{ label: "Duration", value: `${assessment.durationMinutes} mins`, icon: Clock }, { label: "Questions", value: assessment.questionCount, icon: Layers }, { label: "Total marks", value: `${assessment.totalMarks} pts`, icon: Award }].map(({ label, value, icon: MetaIcon }) => <div key={label}><dt className="text-xs text-muted-foreground flex gap-1 items-center mb-1"><MetaIcon className="w-3.5 h-3.5 shrink-0" />{label}</dt><dd className="font-semibold">{value}</dd></div>)}</dl>
         <div className="text-xs text-muted-foreground flex flex-wrap gap-3">{levels.length > 0 && <span className="capitalize">Difficulty: {levels.length === 1 ? levels[0] : "Mixed"}</span>}{assessment.proctoring && Object.values(assessment.proctoring).some(Boolean) && <span className="flex gap-1 items-center"><ShieldCheck className="w-3.5 h-3.5" /> Proctored</span>}{assessment.code && <span className="font-mono">{assessment.code}</span>}</div>
-        <footer className="mt-auto pt-2 space-y-3">{completed && <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><span>Score: <strong>{assessment.attemptScore ?? 0} / {assessment.totalMarks} pts</strong></span><Link href={`/assessments/${id}/result`} className="font-semibold text-primary flex items-center gap-1 hover:underline"><BarChart3 className="w-4 h-4" />Scorecard</Link></div>}{canAttempt ? completed ? <Button className="w-full" disabled={!!retakingId} onClick={() => void retake(id)}>{retakingId === id ? "Launching..." : "Re-attempt"}</Button> : <Link href={`/assessments/${id}`} className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg bg-foreground text-background font-semibold text-sm hover:opacity-90">{assessment.attemptStatus === "in_progress" ? "Resume Assessment" : "Attempt Now"}<ArrowRight className="w-4 h-4" /></Link> : <Button variant="outline" className="w-full" disabled>{status === "Upcoming" ? "Opens at the scheduled start time" : "Assessment closed"}</Button>}</footer>
+        <footer className="mt-auto pt-2 space-y-3">{completed && <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><span>Score: <strong>{assessment.attemptScore ?? 0} / {assessment.totalMarks} pts</strong></span><Link href={`/assessments/${id}/result`} className="font-semibold text-primary flex items-center gap-1 hover:underline"><BarChart3 className="w-4 h-4" />Scorecard</Link></div>}{canAttempt ? completed ? <Button className="w-full" onClick={() => retake(id)}>Re-attempt</Button> : <Link href={`/assessments/${id}`} className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg bg-foreground text-background font-semibold text-sm hover:opacity-90">{assessment.attemptStatus === "in_progress" ? "Resume Assessment" : "Attempt Now"}<ArrowRight className="w-4 h-4" /></Link> : <Button variant="outline" className="w-full" disabled>{status === "Upcoming" ? "Opens at the scheduled start time" : "Assessment closed"}</Button>}</footer>
       </article>;
     })}</div>}
     </div>

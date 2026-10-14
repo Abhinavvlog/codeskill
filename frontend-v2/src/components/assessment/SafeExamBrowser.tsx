@@ -10,6 +10,7 @@ interface SafeExamBrowserProps {
   maxWarnings?: number;
   onTerminate?: () => void;
   onViolation?: (type: string, message: string) => void;
+  onFullscreenEntered?: () => void | Promise<void>;
   isEnabled?: boolean;
 }
 
@@ -18,6 +19,7 @@ export default function SafeExamBrowser({
   maxWarnings = 3,
   onTerminate,
   onViolation,
+  onFullscreenEntered,
   isEnabled = true,
 }: SafeExamBrowserProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -27,16 +29,19 @@ export default function SafeExamBrowser({
   useEffect(() => {
     if (!isEnabled) return;
 
-    // Check initial fullscreen state
+    // A route transition can preserve document fullscreen while this component
+    // mounts with fresh local state. Sync immediately so the exam is not gated.
     const checkFullscreen = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-      if (!document.fullscreenElement) {
+      const fullscreen = Boolean(document.fullscreenElement);
+      setIsFullscreen(fullscreen);
+      if (!fullscreen) {
         handleWarning('Exiting fullscreen is not allowed during the exam.');
       }
     };
 
     // Fullscreen event listener
     document.addEventListener('fullscreenchange', checkFullscreen);
+    setIsFullscreen(Boolean(document.fullscreenElement));
     
     // Visibility change (tab switching)
     const handleVisibilityChange = () => {
@@ -116,10 +121,15 @@ export default function SafeExamBrowser({
     try {
       if (!document.fullscreenElement) {
         await document.documentElement.requestFullscreen();
-        setIsFullscreen(true);
       }
+
+      // Keep the gate state in sync even when fullscreen was entered before
+      // this page mounted (for example, from the assessment briefing).
+      setIsFullscreen(Boolean(document.fullscreenElement));
+      if (document.fullscreenElement) await onFullscreenEntered?.();
     } catch (err) {
       console.error("Error attempting to enable fullscreen:", err);
+      setIsFullscreen(Boolean(document.fullscreenElement));
       toast.error("Failed to enter fullscreen. Please try again.");
     }
   };

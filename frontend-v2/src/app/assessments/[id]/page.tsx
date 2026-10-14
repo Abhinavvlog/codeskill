@@ -1,25 +1,25 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useRef, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Trophy,
   Clock,
   Award,
   Layers,
   ShieldAlert,
   CheckCircle2,
   AlertTriangle,
-  ArrowRight,
   ArrowLeft,
   Maximize2,
-  Check,
+  Mic,
+  Video,
   RefreshCw,
   BarChart3
 } from "lucide-react";
 import { studentAssessmentsAPI } from "@/config/api";
 import { useAuth } from "@/context/AuthContext";
+import { handoffAssessmentStream, releaseAssessmentStream, setPreferredAssessmentCamera } from "@/lib/assessment-media-session";
 
 export default function AssessmentBriefingPage({
   params,
@@ -35,6 +35,69 @@ export default function AssessmentBriefingPage({
   const [isLoading, setIsLoading] = useState(true);
   const [agreedToRules, setAgreedToRules] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState("");
+  const [isCheckingMedia, setIsCheckingMedia] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
+  const cameraPreviewRef = useRef<HTMLVideoElement>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const streamHandedOffRef = useRef(false);
+  const cameraRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    if (cameraPreviewRef.current) cameraPreviewRef.current.srcObject = cameraStream;
+  }, [cameraStream]);
+
+  useEffect(() => () => {
+    cameraRequestIdRef.current += 1;
+    if (!streamHandedOffRef.current) {
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      releaseAssessmentStream(id);
+    }
+  }, [id]);
+
+  const enableCamera = async (deviceId?: string) => {
+    const requestId = ++cameraRequestIdRef.current;
+    setIsCheckingMedia(true);
+    setMediaError(null);
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Camera and microphone access is not supported in this browser.");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: deviceId
+          ? { deviceId: { exact: deviceId }, width: { ideal: 640 }, height: { ideal: 480 } }
+          : { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: true,
+      });
+      if (requestId !== cameraRequestIdRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = stream;
+      setCameraStream(stream);
+      const [devices, settings] = await Promise.all([
+        navigator.mediaDevices.enumerateDevices(),
+        Promise.resolve(stream.getVideoTracks()[0]?.getSettings()),
+      ]);
+      const cameras = devices.filter((device) => device.kind === "videoinput");
+      setCameraDevices(cameras);
+      setSelectedCamera(settings?.deviceId || deviceId || cameras[0]?.deviceId || "");
+    } catch (error) {
+      if (requestId !== cameraRequestIdRef.current) return;
+      setCameraStream(cameraStreamRef.current);
+      const activeCameraId = cameraStreamRef.current?.getVideoTracks()[0]?.getSettings().deviceId;
+      if (activeCameraId) setSelectedCamera(activeCameraId);
+      setMediaError(error instanceof Error && error.name === "NotAllowedError"
+        ? "Allow camera and microphone access in your browser to continue."
+        : error instanceof Error ? error.message : "Camera and microphone could not be started.");
+    } finally {
+      if (requestId === cameraRequestIdRef.current) setIsCheckingMedia(false);
+    }
+  };
 
   useEffect(() => {
     const fetchOverview = async () => {
@@ -59,29 +122,29 @@ export default function AssessmentBriefingPage({
     fetchOverview();
   }, [id, router]);
 
+  const assessment = data?.assessment;
+
   const handleStartExam = async () => {
-    if (!agreedToRules) return;
+    if (!agreedToRules || !cameraStreamRef.current) return;
     setIsStarting(true);
+    setStartError(null);
 
     try {
-      // Request Fullscreen if supported
-      if (document.documentElement.requestFullscreen) {
-        await document.documentElement.requestFullscreen().catch(() => {});
-      }
-    } catch (e) {
-      // Fullscreen prompt optional fallback
+      if (selectedCamera) setPreferredAssessmentCamera(id, selectedCamera);
+      handoffAssessmentStream(id, cameraStreamRef.current);
+      streamHandedOffRef.current = true;
+      const requestedRetake =
+        new URLSearchParams(window.location.search).get("retake") === "1" ||
+        (data?.completedAttemptsCount > 0 && data?.attempt?.status !== "in_progress") ||
+        (data?.attempt?.status === "in_progress" &&
+          data?.attempt?.startedAt &&
+          Date.now() - new Date(data.attempt.startedAt).getTime() >=
+            Math.max(1, Number(assessment?.durationMinutes) || 45) * 60_000);
+      router.push(`/assessments/${id}/take${requestedRetake ? "?retake=1" : ""}`);
+    } catch (error) {
+      setStartError(error instanceof Error ? error.message : "The assessment could not be started. Please try again.");
+      setIsStarting(false);
     }
-
-    // If re-attempting after completing, ensure fresh attempt is initialized
-    if (data?.completedAttemptsCount > 0 && data?.attempt?.status !== "in_progress") {
-      try {
-        await studentAssessmentsAPI.retakeAttempt(id);
-      } catch (e) {
-        console.error("Retake attempt error:", e);
-      }
-    }
-
-    router.push(`/assessments/${id}/take`);
   };
 
   if (isLoading) {
@@ -94,8 +157,6 @@ export default function AssessmentBriefingPage({
       </div>
     );
   }
-
-  const assessment = data?.assessment;
 
   if (!assessment) {
     return (
@@ -276,6 +337,39 @@ export default function AssessmentBriefingPage({
             </ul>
           </div>
 
+          {/* Camera and microphone check before the test starts */}
+          <section aria-labelledby="assessment-media-heading" className="rounded-2xl border border-border bg-card p-4 sm:p-5 space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 id="assessment-media-heading" className="text-sm font-bold text-foreground">Camera &amp; microphone check</h3>
+                <p className="mt-1 text-xs text-muted-foreground">Choose your camera and confirm your devices before entering the secure assessment.</p>
+              </div>
+              {cameraStream ? <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600"><CheckCircle2 className="h-3.5 w-3.5" /> Devices ready</span> : <span className="text-xs text-muted-foreground">Camera access required</span>}
+            </div>
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(220px,0.85fr)] sm:items-center">
+              <div className="relative aspect-video overflow-hidden rounded-xl bg-slate-950">
+                <video ref={cameraPreviewRef} autoPlay muted playsInline className={`h-full w-full object-cover ${cameraStream ? "" : "hidden"}`} />
+                {!cameraStream && <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-300"><ShieldAlert className="h-8 w-8 text-slate-400" /><span className="text-xs">Camera preview will appear here</span></div>}
+              </div>
+              <div className="space-y-3">
+                {cameraDevices.length > 0 && <label className="block space-y-1.5 text-xs font-medium text-foreground">Choose camera
+                  <select aria-label="Choose camera" value={selectedCamera} disabled={isCheckingMedia} onChange={(event) => { setSelectedCamera(event.target.value); void enableCamera(event.target.value); }} className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm">
+                    {cameraDevices.map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `Camera ${index + 1}`}</option>)}
+                  </select>
+                </label>}
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-2 ${cameraStream?.getVideoTracks().some((track) => track.readyState === "live") ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-700" : "border-border text-muted-foreground"}`}><Video className="h-3.5 w-3.5" />Camera</span>
+                  <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-2 ${cameraStream?.getAudioTracks().some((track) => track.readyState === "live") ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-700" : "border-border text-muted-foreground"}`}><Mic className="h-3.5 w-3.5" />Microphone</span>
+                </div>
+                {!cameraStream && <button type="button" onClick={() => void enableCamera()} disabled={isCheckingMedia} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-primary/30 px-3 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/5 disabled:opacity-60">
+                  {isCheckingMedia ? <><RefreshCw className="h-4 w-4 animate-spin" /> Checking devices…</> : "Enable camera & microphone"}
+                </button>}
+              </div>
+            </div>
+            {mediaError && <p role="alert" className="text-xs font-medium text-destructive">{mediaError}</p>}
+            {startError && <p role="alert" className="text-xs font-medium text-destructive">{startError}</p>}
+          </section>
+
           {/* System Check & Anti-Cheat Consent */}
           <div className="p-4 rounded-xl bg-card border border-border space-y-3">
             <label className="flex items-start gap-3 cursor-pointer select-none">
@@ -334,12 +428,12 @@ export default function AssessmentBriefingPage({
                   ? "This assessment is currently not accepting new attempts."
                   : data?.completedAttemptsCount > 0
                   ? "Starting a new attempt will allow you to improve your score. The highest score is permanently saved."
-                  : "Once you click Begin, the timer and proctoring session will start immediately."}
+                  : "Review your devices and rules before entering the secure assessment."}
               </span>
 
               <button
                 onClick={handleStartExam}
-                disabled={!agreedToRules || isStarting || assessment.isAvailable === false}
+                disabled={!agreedToRules || !cameraStream || isStarting || isCheckingMedia || assessment.isAvailable === false}
                 className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary/90 active:bg-primary/80 text-white font-semibold rounded-md text-xs sm:text-sm uppercase tracking-wider transition-all shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Maximize2 className="w-4 h-4" />
@@ -347,9 +441,7 @@ export default function AssessmentBriefingPage({
                   ? "Launching Exam..."
                   : assessment.isAvailable === false
                   ? "Assessment Closed"
-                  : data?.completedAttemptsCount > 0
-                  ? "Start New Attempt / Re-attempt"
-                  : "Begin Assessment Now"}
+                  : "Begin Assessment"}
               </button>
             </div>
           )}
