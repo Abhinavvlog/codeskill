@@ -36,7 +36,7 @@
 <div align="center">
 
 ### 🗺️ Enterprise 5-Tier High-Level Design (HLD)
-![CodeSkill Enterprise 5-Tier System Architecture](docs/assets/system-architecture-hld.png)
+
 
 *Figure 1: Canonical 5-Tier HLD Topology detailing Client Tier, Ingress & Proxy, PM2 Process Clustering, Sharded Persistence, and Sandboxed Execution.*
 
