@@ -9,7 +9,7 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import * as path from 'path';
 
 @Injectable()
@@ -50,7 +50,7 @@ export class S3Service {
 
     try {
       const ext = path.extname(file.originalname);
-      const filename = `${folder}/${uuidv4()}${ext}`;
+      const filename = `${folder}/${randomUUID()}${ext}`;
 
       const command = new PutObjectCommand({
         Bucket: this.bucketName,
@@ -85,7 +85,7 @@ export class S3Service {
     const safeFolder = folder.replace(/[^a-zA-Z0-9/_-]/g, '').replace(/^\/+|\/+$/g, '') || 'proctoring';
     const safeLabel = label.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48) || 'capture';
     const ext = match[1] === 'jpeg' ? 'jpg' : match[1];
-    const key = `${safeFolder}/${safeLabel}-${uuidv4()}.${ext}`;
+    const key = `${safeFolder}/${safeLabel}-${randomUUID()}.${ext}`;
     try {
       await this.s3Client.send(new PutObjectCommand({
         Bucket: this.bucketName,
