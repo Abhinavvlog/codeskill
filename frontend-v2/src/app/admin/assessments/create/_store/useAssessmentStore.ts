@@ -67,7 +67,7 @@ interface AssessmentStore {
 
 const defaultProctoring: ProctoringSettings = {
   useCamera: true,
-  enforceFullscreen: true;
+  enforceFullscreen: true,
   blockCopyPaste: true,
   detectTabSwitch: true,
   maxTabSwitches: 3,
