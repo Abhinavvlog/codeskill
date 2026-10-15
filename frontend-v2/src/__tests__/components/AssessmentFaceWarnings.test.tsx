@@ -15,6 +15,7 @@ let mockFaceTick: (() => void) | null = null;
 jest.mock("react", () => ({ ...jest.requireActual("react"), use: () => ({ id: "exam" }) }));
 jest.mock("next/navigation", () => ({ useRouter: () => mockRouter }));
 jest.mock("@/config/api", () => ({ studentAssessmentsAPI: {
+  getOverview: jest.fn().mockResolvedValue({ data: { assessment: { proctoring: {} } } }),
   startAttempt: jest.fn(), submitAttempt: jest.fn(), saveProgress: jest.fn().mockResolvedValue({}),
 } }));
 jest.mock("@/lib/assessment-face-verification", () => ({
