@@ -19,6 +19,21 @@
 }
 .assessment-scroll::-webkit-scrollbar-track { background: transparent; }
 
+.assessment-code .token.comment,
+.assessment-code .token.prolog { color: #94a3b8; font-style: italic; }
+.assessment-code .token.keyword,
+.assessment-code .token.boolean { color: #c4a7ff; }
+.assessment-code .token.string,
+.assessment-code .token.char { color: #a5df9c; }
+.assessment-code .token.number { color: #ffba82; }
+.assessment-code .token.function { color: #82cfff; }
+.assessment-code .token.class-name,
+.assessment-code .token.builtin { color: #66d9ef; }
+.assessment-code .token.operator,
+.assessment-code .token.punctuation { color: #cbd5e1; }
+.assessment-code .token.macro,
+.assessment-code .token.directive { color: #f5a9c6; }
+
 @theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
