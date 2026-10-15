@@ -73,6 +73,15 @@ interface Question {
   testCases?: TestCase[];
 }
 
+interface AssessmentProctoring {
+  useCamera?: boolean;
+  enforceFullscreen?: boolean;
+  detectTabSwitch?: boolean;
+  blockCopyPaste?: boolean;
+  maxTabSwitches?: number;
+  autoSubmitOnViolation?: boolean;
+}
+
 interface ViolationEvent {
   type: string;
   timestamp: string;
@@ -110,6 +119,8 @@ export default function TakeAssessmentPage({
   const [startedAt, setStartedAt] = useState<Date>(new Date());
   const [timeLeftSeconds, setTimeLeftSeconds] = useState(2700);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+  const [proctoring, setProctoring] = useState<AssessmentProctoring | null>(null);
   const [loadedAssessmentId, setLoadedAssessmentId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submissionRequestedRef = useRef(false);
@@ -120,6 +131,20 @@ export default function TakeAssessmentPage({
   const [startError, setStartError] = useState<string | null>(null);
   const mediaCleanupRef = useRef<{ assessmentId: string; timer: number } | null>(null);
   const examPageRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoadingSettings(true);
+    studentAssessmentsAPI.getOverview(id).then((res) => {
+      if (!cancelled) setProctoring(res.data?.assessment?.proctoring || {});
+    }).catch((error) => {
+      console.error("Failed to load assessment proctoring settings:", error);
+      if (!cancelled) setProctoring({});
+    }).finally(() => {
+      if (!cancelled) setIsLoadingSettings(false);
+    });
+    return () => { cancelled = true; };
+  }, [id]);
 
   // Stop any handed-off preflight stream when this route is really left. Defer
   // one event turn so React Strict Mode's development-only remount can cancel it.
@@ -173,6 +198,9 @@ export default function TakeAssessmentPage({
   // Add a proctoring violation and sync telemetry
   const recordViolation = useCallback(
     (type: string, details: string) => {
+      if (type === "tab_switch" && proctoring?.detectTabSwitch !== false) {
+        setTabSwitches((count) => count + 1);
+      }
       const newV: ViolationEvent = {
         type,
         timestamp: new Date().toISOString(),
@@ -211,7 +239,7 @@ export default function TakeAssessmentPage({
         violations: updated,
       }).catch(() => {});
     },
-    [id, questions, startedAt]
+    [id, questions, startedAt, proctoring?.detectTabSwitch]
   );
 
   // Start the attempt only after the candidate enters fullscreen from the secure gate.
@@ -221,7 +249,7 @@ export default function TakeAssessmentPage({
     startAttemptRequestedRef.current = true;
     setIsLoading(true);
     try {
-      if (!getAssessmentFaceReference(id)) {
+      if (proctoring?.useCamera !== false && !getAssessmentFaceReference(id)) {
         throw new Error("Take your identity selfie on the assessment briefing page before entering the test.");
       }
       const isExplicitRetake = new URLSearchParams(window.location.search).get("retake") === "1";
@@ -286,7 +314,7 @@ export default function TakeAssessmentPage({
     } finally {
       setIsLoading(false);
     }
-  }, [id, router]);
+  }, [id, router, proctoring?.useCamera]);
 
   // Media starts only for a loaded, active session; stopping is permanent for this assessment.
   const {
@@ -300,7 +328,7 @@ export default function TakeAssessmentPage({
     faceDetectionStatus,
     stopCamera,
   } = useAssessmentMedia(
-    id, loadedAssessmentId === id && questions.length > 0 && !isLoading && !isSubmitting && timeLeftSeconds > 0, recordViolation,
+    id, proctoring?.useCamera !== false && loadedAssessmentId === id && questions.length > 0 && !isLoading && !isSubmitting && timeLeftSeconds > 0, recordViolation,
   );
 
   // 3. Submit Attempt Handler
@@ -367,7 +395,7 @@ export default function TakeAssessmentPage({
         : `Face warning ${warningNumber}/5: ${details}`;
       setWarningToast({ id: Date.now(), message: warningText, type: warningNumber >= 4 ? "alert" : "warning" });
       setFaceMonitorStatus(details);
-      if (warningNumber >= 5) {
+      if (warningNumber >= 5 && proctoring?.autoSubmitOnViolation !== false) {
         setIsAutoSubmitting(true);
         setWarningToast({ id: Date.now(), message: "Five face-verification warnings reached. Your assessment is being submitted now.", type: "alert" });
         void submitExam(true);
@@ -432,7 +460,7 @@ export default function TakeAssessmentPage({
       window.clearInterval(interval);
       faceMonitorBusyRef.current = false;
     };
-  }, [cameraActive, id, isSubmitting, loadedAssessmentId, recordViolation, submitExam, timeLeftSeconds, videoRef]);
+  }, [cameraActive, id, isSubmitting, loadedAssessmentId, recordViolation, submitExam, timeLeftSeconds, videoRef, proctoring?.autoSubmitOnViolation]);
 
   // Snapshot the visible assessment page every 20 seconds. This captures the
   // exam UI itself and does not request desktop/screen-sharing permission.
@@ -780,12 +808,12 @@ export default function TakeAssessmentPage({
 
   if (isLoading || !currentQ) {
     return (
-      <SafeExamBrowser isEnabled={!isSubmitting} onFullscreenEntered={beginAssessmentAfterFullscreen}>
+      <SafeExamBrowser isEnabled={!isLoadingSettings && !isSubmitting} requireFullscreen={proctoring?.enforceFullscreen !== false} monitorViolations={false} detectTabSwitch={false} blockCopyPaste={false} onFullscreenEntered={beginAssessmentAfterFullscreen}>
         <div className="flex-1 min-h-screen bg-background flex items-center justify-center font-sans">
           <div className="text-center space-y-3">
             <Spinner className="w-9 h-9 animate-spin text-primary mx-auto" />
             <h2 className="text-sm font-semibold text-foreground">Preparing Secure Assessment Environment</h2>
-            <p className="text-xs text-muted-foreground">The test will start after you enter fullscreen.</p>
+            <p className="text-xs text-muted-foreground">{isLoadingSettings ? "Loading assessment settings…" : proctoring?.enforceFullscreen === false ? "Your assessment is starting." : "The test will start after you enter fullscreen."}</p>
           </div>
         </div>
       </SafeExamBrowser>
@@ -798,8 +826,13 @@ export default function TakeAssessmentPage({
   return (
     <SafeExamBrowser
       isEnabled={!isSubmitting}
+      requireFullscreen={proctoring?.enforceFullscreen !== false}
+      detectTabSwitch={proctoring?.detectTabSwitch !== false}
+      blockCopyPaste={proctoring?.blockCopyPaste !== false}
+      monitorViolations={loadedAssessmentId === id}
+      autoSubmitOnViolation={proctoring?.autoSubmitOnViolation !== false}
       onFullscreenEntered={beginAssessmentAfterFullscreen}
-      maxWarnings={maxTabSwitches}
+      maxWarnings={proctoring?.maxTabSwitches ?? maxTabSwitches}
       onTerminate={() => submitExam(true)}
       onViolation={recordViolation}
     >
@@ -868,7 +901,7 @@ export default function TakeAssessmentPage({
           </button>
 
           {/* Tab Switch Strike Counter */}
-          {tabSwitches > 0 && (
+          {proctoring?.detectTabSwitch !== false && tabSwitches > 0 && (
             <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold">
               <ShieldAlert className="w-3.5 h-3.5" />
               <span>{tabSwitches}/{maxTabSwitches}</span>
@@ -1098,7 +1131,7 @@ export default function TakeAssessmentPage({
         })()}
       </div>
 
-      <FloatingAssessmentMonitor minimized={isPipMinimized}>
+      {proctoring?.useCamera !== false && <FloatingAssessmentMonitor minimized={isPipMinimized}>
           {/* Live Proctoring Camera & Mic PIP Card */}
           <div className="bg-card border border-border rounded-xl p-3 shadow-sm space-y-2 relative overflow-hidden">
             <div className="flex items-center justify-between">
@@ -1218,7 +1251,7 @@ export default function TakeAssessmentPage({
               </div>
             )}
           </div>
-      </FloatingAssessmentMonitor>
+      </FloatingAssessmentMonitor>}
 
       {/* Confirmation Modal */}
       {showSubmitModal && (

@@ -1,3 +1,4 @@
+/Users/home/.rvm/scripts/rvm:29: operation not permitted: ps
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -12,6 +13,11 @@ interface SafeExamBrowserProps {
   onViolation?: (type: string, message: string) => void;
   onFullscreenEntered?: () => void | Promise<void>;
   isEnabled?: boolean;
+  requireFullscreen?: boolean;
+  detectTabSwitch?: boolean;
+  blockCopyPaste?: boolean;
+  monitorViolations?: boolean;
+  autoSubmitOnViolation?: boolean;
 }
 
 export default function SafeExamBrowser({
@@ -21,22 +27,32 @@ export default function SafeExamBrowser({
   onViolation,
   onFullscreenEntered,
   isEnabled = true,
+  requireFullscreen = true,
+  detectTabSwitch = true,
+  blockCopyPaste = true,
+  monitorViolations = true,
+  autoSubmitOnViolation = true,
 }: SafeExamBrowserProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [warnings, setWarnings] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const warningCountRef = useRef(0);
-  const callbacksRef = useRef({ onViolation, onTerminate, maxWarnings });
-  callbacksRef.current = { onViolation, onTerminate, maxWarnings };
+  const callbacksRef = useRef({ onViolation, onTerminate, onFullscreenEntered, maxWarnings, autoSubmitOnViolation });
+  callbacksRef.current = { onViolation, onTerminate, onFullscreenEntered, maxWarnings, autoSubmitOnViolation };
+
+  useEffect(() => {
+    if (isEnabled && (!requireFullscreen || isFullscreen)) {
+      void callbacksRef.current.onFullscreenEntered?.();
+    }
+  }, [isEnabled, requireFullscreen, isFullscreen]);
 
   useEffect(() => {
     if (!isEnabled) return;
     let away = false;
-    let engaged = Boolean(document.fullscreenElement);
-    const warnAway = (message: string) => {
-      if (!engaged || away) return;
+    const warnAway = (type: string, message: string) => {
+      if (!monitorViolations || away) return;
       away = true;
-      handleWarning(message);
+      handleWarning(type, message);
     };
     const checkReturned = () => {
       if (!document.hidden && document.hasFocus()) away = false;
@@ -47,9 +63,8 @@ export default function SafeExamBrowser({
     const checkFullscreen = () => {
       const fullscreen = Boolean(document.fullscreenElement);
       setIsFullscreen(fullscreen);
-      if (fullscreen) engaged = true;
-      if (!fullscreen) {
-        warnAway('Exiting fullscreen is not allowed during the exam.');
+      if (requireFullscreen && !fullscreen) {
+        warnAway('fullscreen_exit', 'Exiting fullscreen is not allowed during the exam.');
       }
     };
 
@@ -59,12 +74,14 @@ export default function SafeExamBrowser({
     
     // Visibility change (tab switching)
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        warnAway('Tab, desktop, or window switching is not allowed during the exam.');
+      if (detectTabSwitch && document.hidden) {
+        warnAway('tab_switch', 'Tab, desktop, or window switching is not allowed during the exam.');
       } else checkReturned();
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    const handleBlur = () => warnAway('The assessment lost focus. Switching apps, windows, or desktops is not allowed.');
+    const handleBlur = () => {
+      if (detectTabSwitch) warnAway('tab_switch', 'The assessment lost focus. Switching apps, windows, or desktops is not allowed.');
+    };
     window.addEventListener('blur', handleBlur);
     window.addEventListener('focus', checkReturned);
     // Some desktop transitions omit visibilitychange. Check focus as a fallback.
@@ -75,8 +92,10 @@ export default function SafeExamBrowser({
 
     // Prevent Context Menu (Right Click)
     const handleContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-      toast.error('Right-click is disabled during the assessment.');
+      if (blockCopyPaste) {
+        e.preventDefault();
+        toast.error('Right-click is disabled during the assessment.');
+      }
     };
     document.addEventListener('contextmenu', handleContextMenu);
 
@@ -86,26 +105,26 @@ export default function SafeExamBrowser({
       const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
 
       // Prevent Copy (Ctrl/Cmd + C)
-      if (cmdOrCtrl && e.key.toLowerCase() === 'c') {
+      if (blockCopyPaste && cmdOrCtrl && e.key.toLowerCase() === 'c') {
         e.preventDefault();
         toast.error('Copying is disabled.');
       }
       // Prevent Paste (Ctrl/Cmd + V)
-      if (cmdOrCtrl && e.key.toLowerCase() === 'v') {
+      if (blockCopyPaste && cmdOrCtrl && e.key.toLowerCase() === 'v') {
         e.preventDefault();
         toast.error('Pasting is disabled.');
       }
       // Prevent Developer Tools (F12, Ctrl+Shift+I, Cmd+Option+I)
-      if (
+      if (blockCopyPaste && (
         e.key === 'F12' ||
         (cmdOrCtrl && e.shiftKey && e.key.toLowerCase() === 'i') ||
         (cmdOrCtrl && e.altKey && e.key.toLowerCase() === 'i')
-      ) {
+      )) {
         e.preventDefault();
         toast.error('Developer tools are disabled.');
       }
       // Prevent Print (Ctrl/Cmd + P)
-      if (cmdOrCtrl && e.key.toLowerCase() === 'p') {
+      if (blockCopyPaste && cmdOrCtrl && e.key.toLowerCase() === 'p') {
         e.preventDefault();
       }
     };
@@ -123,17 +142,21 @@ export default function SafeExamBrowser({
       document.removeEventListener('contextmenu', handleContextMenu);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isEnabled]);
+  }, [isEnabled, requireFullscreen, detectTabSwitch, blockCopyPaste, monitorViolations]);
 
-  const handleWarning = (message: string) => {
+  const handleWarning = (type: string, message: string) => {
     const callbacks = callbacksRef.current;
     if (warningCountRef.current >= callbacks.maxWarnings) return;
-    callbacks.onViolation?.("browser_violation", message);
+    callbacks.onViolation?.(type, message);
     const nextCount = ++warningCountRef.current;
     setWarnings(nextCount);
     if (nextCount >= callbacks.maxWarnings) {
-      toast.error('Maximum warnings exceeded. Exam terminated.');
-      callbacks.onTerminate?.();
+      if (callbacks.autoSubmitOnViolation) {
+        toast.error('Maximum warnings exceeded. Exam terminated.');
+        callbacks.onTerminate?.();
+      } else {
+        toast.error(`Warning limit reached: ${message}`);
+      }
     } else {
       toast.error(`Warning ${nextCount}/${callbacks.maxWarnings}: ${message}`);
     }
@@ -148,7 +171,7 @@ export default function SafeExamBrowser({
       // Keep the gate state in sync even when fullscreen was entered before
       // this page mounted (for example, from the assessment briefing).
       setIsFullscreen(Boolean(document.fullscreenElement));
-      if (document.fullscreenElement) await onFullscreenEntered?.();
+      if (document.fullscreenElement) await callbacksRef.current.onFullscreenEntered?.();
     } catch (err) {
       console.error("Error attempting to enable fullscreen:", err);
       setIsFullscreen(Boolean(document.fullscreenElement));
@@ -163,13 +186,13 @@ export default function SafeExamBrowser({
   return (
     <div ref={containerRef} className="relative w-full h-screen overflow-hidden bg-background">
       {/* The actual content */}
-      <div className={`w-full h-full overflow-hidden transition-opacity duration-300 ${!isFullscreen ? 'opacity-0 pointer-events-none blur-sm' : 'opacity-100'}`}>
+      <div className={`w-full h-full overflow-hidden transition-opacity duration-300 ${requireFullscreen && !isFullscreen ? 'opacity-0 pointer-events-none blur-sm' : 'opacity-100'}`}>
         {children}
       </div>
 
       {/* Fullscreen Overlay */}
       <AnimatePresence>
-        {!isFullscreen && (
+        {requireFullscreen && !isFullscreen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -179,7 +202,7 @@ export default function SafeExamBrowser({
             <ShieldAlert className="w-20 h-20 text-red-500 mb-6" />
             <h1 className="text-3xl font-bold text-foreground mb-4">Secure Exam Environment</h1>
             <p className="text-muted-foreground text-lg max-w-lg mb-8">
-              This assessment requires a secure, fullscreen environment. Any attempt to switch tabs, minimize the window, or exit fullscreen will be recorded as a violation.
+              Enter fullscreen to begin your assessment. {monitorViolations ? 'Leaving fullscreen during the test will be recorded.' : 'The timer starts after you enter fullscreen.'}
             </p>
             
             {warnings > 0 && (

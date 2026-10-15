@@ -147,17 +147,9 @@ export default function AssessmentBriefingPage({
   const assessment = data?.assessment;
 
   const handleStartExam = async () => {
-    if (!agreedToRules || !cameraStreamRef.current || !getAssessmentFaceReference(id)) return;
+    const cameraRequired = assessment?.proctoring?.useCamera !== false;
+    if (!agreedToRules || (cameraRequired && (!cameraStreamRef.current || !getAssessmentFaceReference(id)))) return;
     setIsStarting(true);
-
-    try {
-      // Request Fullscreen if supported
-      if (document.documentElement.requestFullscreen) {
-        await document.documentElement.requestFullscreen().catch(() => { });
-      }
-    } catch (e) {
-      // Fullscreen prompt optional fallback
-    }
 
     const attemptToken = Date.now();
 
@@ -394,7 +386,7 @@ export default function AssessmentBriefingPage({
           </div>
 
           {/* Camera and microphone check before the test starts */}
-          <section aria-labelledby="assessment-media-heading" className="rounded-2xl border border-border bg-card p-4 sm:p-5 space-y-4">
+          {assessment.proctoring?.useCamera !== false ? <section aria-labelledby="assessment-media-heading" className="rounded-2xl border border-border bg-card p-4 sm:p-5 space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h3 id="assessment-media-heading" className="text-sm font-bold text-foreground">Camera &amp; microphone check</h3>
@@ -438,7 +430,7 @@ export default function AssessmentBriefingPage({
             {mediaError && <p role="alert" className="text-xs font-medium text-destructive">{mediaError}</p>}
             {selfieError && <p role="alert" className="text-xs font-medium text-destructive">{selfieError}</p>}
             {startError && <p role="alert" className="text-xs font-medium text-destructive">{startError}</p>}
-          </section>
+          </section> : <section className="rounded-2xl border border-border bg-card p-4 sm:p-5"><p className="text-sm font-semibold text-foreground">Camera and microphone are not required for this assessment.</p><p className="mt-1 text-xs text-muted-foreground">You can begin without enabling either device.</p>{startError && <p role="alert" className="mt-3 text-xs font-medium text-destructive">{startError}</p>}</section>}
 
           {/* System Check & Anti-Cheat Consent */}
           <div className="p-4 rounded-xl bg-card border border-border space-y-3">
@@ -450,7 +442,7 @@ export default function AssessmentBriefingPage({
                 className="mt-0.5 rounded border-border text-primary focus:ring-primary h-4 w-4"
               />
               <span className="text-xs text-foreground font-medium leading-relaxed">
-                I acknowledge that I am attempting this assessment independently without external assistance. I agree to camera/microphone proctoring and periodic snapshots of the assessment page.
+                I acknowledge that I am attempting this assessment independently without external assistance.{assessment.proctoring?.useCamera !== false ? " I agree to camera/microphone proctoring." : ""} Periodic assessment snapshots may be captured.
               </span>
             </label>
           </div>
@@ -503,7 +495,7 @@ export default function AssessmentBriefingPage({
 
               <button
                 onClick={handleStartExam}
-                disabled={!agreedToRules || !cameraStream || !selfieCaptured || isStarting || isCheckingMedia || isCapturingSelfie || assessment.isAvailable === false}
+                disabled={!agreedToRules || (assessment.proctoring?.useCamera !== false && (!cameraStream || !selfieCaptured || isCheckingMedia || isCapturingSelfie)) || isStarting || assessment.isAvailable === false}
                 className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary/90 active:bg-primary/80 text-white font-semibold rounded-md text-xs sm:text-sm uppercase tracking-wider transition-all shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Maximize2 className="w-4 h-4" />

@@ -200,6 +200,7 @@ export class CreateAssessmentDto {
 
   @IsOptional()
   proctoring?: {
+    useCamera?: boolean;
     enforceFullscreen?: boolean;
     blockCopyPaste?: boolean;
     detectTabSwitch?: boolean;
