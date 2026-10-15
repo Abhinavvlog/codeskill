@@ -24,7 +24,7 @@ beforeEach(() => {
   jest.mocked(studentAssessmentsAPI.submitAttempt).mockImplementation(() => new Promise(() => {}));
 });
 afterEach(() => { clearAssessmentFaceReference("exam"); jest.restoreAllMocks(); jest.useRealTimers(); });
-it("stops both tracks before the manual submission API resolves", async () => {
+it("keeps both tracks active until the manual submission API resolves", async () => {
   render(<Page params={Promise.resolve({ id: "exam" })} />);
   fireEvent.click(await screen.findByRole("button", { name: "Enter Fullscreen" }));
   await screen.findByRole("button", { name: "Submit Test" });
@@ -32,22 +32,23 @@ it("stops both tracks before the manual submission API resolves", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Submit Test" }));
   expect(videoStop).not.toHaveBeenCalled(); // Opening confirmation does not end the session.
   fireEvent.click(screen.getByRole("button", { name: "Yes, Submit Now" }));
-  expect(videoStop).toHaveBeenCalledTimes(1); expect(audioStop).toHaveBeenCalledTimes(1);
+  expect(videoStop).not.toHaveBeenCalled(); expect(audioStop).not.toHaveBeenCalled();
   expect(studentAssessmentsAPI.submitAttempt).toHaveBeenCalledTimes(1);
 });
-it("stops media for forced termination even when submission fails", async () => {
-  jest.mocked(studentAssessmentsAPI.submitAttempt).mockRejectedValueOnce(new Error("Network failure"));
+it("keeps the attempt and media available when forced submission fails", async () => {
+  jest.mocked(studentAssessmentsAPI.submitAttempt).mockRejectedValue(new Error("Network failure"));
   jest.spyOn(console, "error").mockImplementation(() => {});
   render(<Page params={Promise.resolve({ id: "exam" })} />); fireEvent.click(await screen.findByRole("button", { name: "Enter Fullscreen" })); await screen.findByRole("button", { name: "Force termination" });
   await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(1));
   jest.useFakeTimers();
   fireEvent.click(screen.getByRole("button", { name: "Force termination" }));
   await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-  expect(studentAssessmentsAPI.submitAttempt).toHaveBeenCalledTimes(1);
-  expect(screen.getByText("Finalizing your assessment")).toBeInTheDocument();
-  await act(async () => { jest.advanceTimersByTime(2500); await Promise.resolve(); });
-  expect(replace).toHaveBeenCalledWith("/assessments/exam/result");
-  expect(videoStop).toHaveBeenCalledTimes(1); expect(audioStop).toHaveBeenCalledTimes(1);
+  await act(async () => { await jest.runAllTimersAsync(); });
+  expect(studentAssessmentsAPI.submitAttempt).toHaveBeenCalledTimes(3);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Your saved answers are still here");
+  expect(screen.getByRole("button", { name: "Retry submission" })).toBeInTheDocument();
+  expect(replace).not.toHaveBeenCalled();
+  expect(videoStop).not.toHaveBeenCalled(); expect(audioStop).not.toHaveBeenCalled();
   expect(getUserMedia).toHaveBeenCalledTimes(1);
 });
 it("stops media when the countdown reaches zero", async () => {

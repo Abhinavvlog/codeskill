@@ -329,7 +329,7 @@ export default function TakeAssessmentPage({
     faceDetectionStatus,
     stopCamera,
   } = useAssessmentMedia(
-    id, proctoring?.useCamera !== false && loadedAssessmentId === id && questions.length > 0 && !isLoading && !isSubmitting && timeLeftSeconds > 0, recordViolation,
+    id, proctoring?.useCamera !== false && loadedAssessmentId === id && questions.length > 0 && !isLoading && timeLeftSeconds > 0, recordViolation,
   );
 
   // 3. Submit Attempt Handler
