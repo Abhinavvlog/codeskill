@@ -22,6 +22,7 @@ jobs:
         run: |
           npm test -- --runInBand
           npm run build
+          npm run test:startup
         working-directory: backend-nestjs
       - name: Install frontend
         run: npm ci --legacy-peer-deps
