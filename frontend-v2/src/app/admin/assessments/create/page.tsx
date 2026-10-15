@@ -14,6 +14,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { ToastProvider, useToast } from "../../questions/create/_components/Toast"; // Reuse toast
 
 type StudentCohort = { semester: string; section: string };
+type AutoSelectionCriteria = {
+  topic: string;
+  easyCount: number;
+  mediumCount: number;
+  hardCount: number;
+};
 
 function yearLabel(year: string) {
   const suffix = Number(year) % 10 === 1 && Number(year) !== 11 ? "st"
@@ -93,6 +99,7 @@ function AssessmentBuilder() {
 
   const [activePicker, setActivePicker] = useState<string | null>(null);
   const [autoGenerateSectionId, setAutoGenerateSectionId] = useState<string | null>(null);
+  const [autoSelections, setAutoSelections] = useState<Record<string, AutoSelectionCriteria>>({});
   const [isPublishing, setIsPublishing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [cohorts, setCohorts] = useState<StudentCohort[]>([]);
@@ -162,6 +169,14 @@ function AssessmentBuilder() {
     setTargetGroup(group);
   };
 
+  const clearAutoSelection = (sectionId: string) => {
+    setAutoSelections((current) => {
+      const next = { ...current };
+      delete next[sectionId];
+      return next;
+    });
+  };
+
   // Calculate totals
   const totalQuestions = store.sections.reduce((acc, sec) => acc + sec.questions.length, 0);
   const totalMarks = store.sections.reduce((acc, sec) => acc + sec.questions.reduce((sum, q) => sum + (Number(q.marks) || 1), 0), 0);
@@ -205,7 +220,7 @@ function AssessmentBuilder() {
         code: store.code,
         description: store.description,
         durationMinutes: store.durationMinutes,
-        passingMarks: store.passingMarks ? Number(store.passingMarks) : Math.ceil(totalMarks * 0.4),
+        passingMarks: store.passingMarks !== '' ? Number(store.passingMarks) : undefined,
         category: store.category,
         allowedAttempts: store.allowedAttempts,
         targetSemesters: targetSemesters.length ? targetSemesters : selectedYears.length ? visibleSemesters : [],
@@ -222,6 +237,7 @@ function AssessmentBuilder() {
           description: s.description,
           order: s.order,
           timeLimit: s.timeLimit,
+          autoSelection: autoSelections[s.id],
           questions: s.questions.map(q => ({
             questionId: q.questionId,
             marks: Number(q.marks),
@@ -429,7 +445,7 @@ function AssessmentBuilder() {
                         <button onClick={() => setAutoGenerateSectionId(section.id)} className="px-4 py-2 border border-primary/40 bg-primary/5 text-primary text-xs font-semibold rounded-lg shadow-sm hover:bg-primary/10 transition-colors">
                           Auto Generate from Bank
                         </button>
-                        <button onClick={() => setActivePicker(section.id)} className="px-4 py-2 bg-primary text-primary-foreground text-xs font-semibold rounded-lg shadow-sm">
+                        <button onClick={() => { clearAutoSelection(section.id); setActivePicker(section.id); }} className="px-4 py-2 bg-primary text-primary-foreground text-xs font-semibold rounded-lg shadow-sm">
                           + Select Questions from Bank
                         </button>
                       </div>
@@ -451,13 +467,13 @@ function AssessmentBuilder() {
                           <div className="flex items-center gap-3 sm:w-auto w-full border-t sm:border-t-0 pt-3 sm:pt-0 border-border">
                             <div className="flex items-center gap-2 bg-muted/50 px-2 py-1 rounded-lg border border-border">
                               <span className="text-[10px] font-bold text-muted-foreground uppercase">Marks</span>
-                              <input type="number" min={1} value={q.marks} onChange={e => store.updateQuestionConfig(section.id, q.questionId, { marks: Number(e.target.value) })} className="w-12 bg-transparent border-none text-xs font-mono font-bold text-emerald-500 focus:ring-0 p-0 text-center" />
+                              <input type="number" min={1} value={q.marks} onChange={e => { clearAutoSelection(section.id); store.updateQuestionConfig(section.id, q.questionId, { marks: Number(e.target.value) }); }} className="w-12 bg-transparent border-none text-xs font-mono font-bold text-emerald-500 focus:ring-0 p-0 text-center" />
                             </div>
                             <div className="flex items-center gap-2 bg-muted/50 px-2 py-1 rounded-lg border border-border">
                               <span className="text-[10px] font-bold text-muted-foreground uppercase">Neg</span>
-                              <input type="number" min={0} value={q.negativeMarks} onChange={e => store.updateQuestionConfig(section.id, q.questionId, { negativeMarks: Number(e.target.value) })} className="w-10 bg-transparent border-none text-xs font-mono font-bold text-rose-500 focus:ring-0 p-0 text-center" />
+                              <input type="number" min={0} value={q.negativeMarks} onChange={e => { clearAutoSelection(section.id); store.updateQuestionConfig(section.id, q.questionId, { negativeMarks: Number(e.target.value) }); }} className="w-10 bg-transparent border-none text-xs font-mono font-bold text-rose-500 focus:ring-0 p-0 text-center" />
                             </div>
-                            <button onClick={() => store.removeQuestionFromSection(section.id, q.questionId)} className="p-1.5 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md transition-colors ml-auto sm:ml-0">
+                            <button onClick={() => { clearAutoSelection(section.id); store.removeQuestionFromSection(section.id, q.questionId); }} className="p-1.5 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md transition-colors ml-auto sm:ml-0">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
@@ -467,7 +483,7 @@ function AssessmentBuilder() {
                         <button onClick={() => setAutoGenerateSectionId(section.id)} className="flex-1 py-3 border border-primary/30 bg-primary/5 text-primary rounded-xl text-xs font-semibold hover:bg-primary/10 transition-colors flex items-center justify-center gap-2">
                           <Sparkles className="w-4 h-4" /> Auto Generate from Bank
                         </button>
-                        <button onClick={() => setActivePicker(section.id)} className="flex-1 py-3 border border-dashed border-border rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors flex items-center justify-center gap-2">
+                        <button onClick={() => { clearAutoSelection(section.id); setActivePicker(section.id); }} className="flex-1 py-3 border border-dashed border-border rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors flex items-center justify-center gap-2">
                           <Plus className="w-4 h-4" /> Add More Questions
                         </button>
                       </div>
@@ -502,7 +518,11 @@ function AssessmentBuilder() {
       )}
 
       {autoGenerateSectionId && (
-        <AutoGenerateFromBank sectionId={autoGenerateSectionId} onClose={() => setAutoGenerateSectionId(null)} />
+        <AutoGenerateFromBank
+          sectionId={autoGenerateSectionId}
+          onGenerated={(criteria) => setAutoSelections((current) => ({ ...current, [autoGenerateSectionId]: criteria }))}
+          onClose={() => setAutoGenerateSectionId(null)}
+        />
       )}
 
       {/* Publish Confirm Modal */}
@@ -555,7 +575,7 @@ type TopicEntry = {
   topic?: string;
 };
 
-function AutoGenerateFromBank({ sectionId, onClose }: { sectionId: string; onClose: () => void }) {
+function AutoGenerateFromBank({ sectionId, onGenerated, onClose }: { sectionId: string; onGenerated: (criteria: AutoSelectionCriteria) => void; onClose: () => void }) {
   const store = useAssessmentStore();
   const { addToast } = useToast();
   const [topics, setTopics] = useState<string[]>([]);
@@ -702,6 +722,8 @@ function AutoGenerateFromBank({ sectionId, onClose }: { sectionId: string; onClo
         questionType: q.questionType,
       });
     });
+
+    onGenerated({ topic: selectedTopic, easyCount, mediumCount, hardCount });
 
     setIsGenerating(false);
     addToast("success", "Questions generated", `${finalQuestions.length} questions imported into this section.`);
