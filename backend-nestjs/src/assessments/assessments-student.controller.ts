@@ -2,6 +2,8 @@ import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AssessmentsService } from './assessments.service';
 import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
+import { EvaluateAssessmentCodeDto } from './dto/evaluate-code.dto';
+import { SubmissionRateLimitGuard } from '../common/guards/submission-rate-limit.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
@@ -64,6 +66,16 @@ export class AssessmentsStudentController {
     @CurrentUser() studentUser: any,
   ) {
     return this.assessmentsService.submitAttempt(id, dto, studentUser);
+  }
+
+  @Post(':id/evaluate-code')
+  @UseGuards(SubmissionRateLimitGuard)
+  async evaluateCode(
+    @Param('id') id: string,
+    @Body() dto: EvaluateAssessmentCodeDto,
+    @CurrentUser() studentUser: any,
+  ) {
+    return this.assessmentsService.evaluateCode(id, dto, studentUser);
   }
 
   @Get(':id/result')

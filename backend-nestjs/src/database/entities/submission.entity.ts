@@ -80,6 +80,11 @@ export class Submission {
     executionTime?: number;
     memoryUsed?: number;
     error?: string;
+    status?: string;
+    isHidden?: boolean;
+    input?: string;
+    output?: string;
+    expected?: string;
   }>;
 
   @Column({ type: 'varchar', nullable: true })

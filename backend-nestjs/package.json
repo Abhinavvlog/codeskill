@@ -28,7 +28,8 @@
     "db:shards:verify": "ts-node src/database/verify-submission-sharding.ts",
     "test:shards:integration": "ts-node test/submission-sharding.integration.ts",
     "test:judges:integration": "ts-node test/judge-resilience.integration.ts",
-    "test:judges:live": "ts-node test/judges-live.integration.ts"
+    "test:judges:live": "ts-node test/judges-live.integration.ts",
+    "test:feedback:integration": "ts-node test/submission-feedback.integration.ts"
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",

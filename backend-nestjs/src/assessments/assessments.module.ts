@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Assessment } from '../database/entities/assessment.entity';
 import { AssessmentAttempt } from '../database/entities/assessment-attempt.entity';
@@ -13,6 +14,7 @@ import { ExecutionModule } from '../execution/execution.module';
 @Module({
   imports: [
     ExecutionModule,
+    BullModule.registerQueue({ name: 'submissions' }),
     TypeOrmModule.forFeature([
       Assessment,
       AssessmentAttempt,

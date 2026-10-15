@@ -749,7 +749,7 @@ export default function TakeAssessmentPage({
           const isCodingQuestion = ["coding", "algorithmic", "dsa"].includes(currentQ.questionType?.toLowerCase()) || (!currentQ.options?.length && Boolean(currentQ.starterCode || currentQ.codeSnippet));
           return <AssessmentReadingZoom>{readingScale => <main className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden p-3 gap-3">
             {isCodingQuestion ? <>
-              <DSAAssessmentEditor readingScale={readingScale} key={currentQ._id} question={currentQ} savedResponse={responses[currentQ._id]} onDraftChange={handleCodingDraft} onSave={handleSaveCodingQuestion} />
+              <DSAAssessmentEditor assessmentId={id} readingScale={readingScale} key={currentQ._id} question={currentQ} savedResponse={responses[currentQ._id]} onDraftChange={handleCodingDraft} onSave={handleSaveCodingQuestion} />
               <div className="shrink-0 flex items-center justify-between rounded-xl border border-border bg-card px-4 py-2">
                 <button onClick={handleMarkForReview} className="inline-flex items-center gap-2 text-xs font-semibold text-amber-500"><Bookmark className="size-4" />{currentResponse?.status === "marked_for_review" ? "Unreview" : "Review later"}</button>
                 <div className="flex gap-3"><button onClick={() => setCurrentIndex(i => Math.max(0, i - 1))} disabled={currentIndex === 0} className="text-xs font-medium disabled:opacity-30">Previous</button><button onClick={handleSaveAndNext} className="rounded-lg border border-border bg-muted px-4 py-2 text-xs font-semibold">{isLastQuestion ? "Review & finish" : "Next question"}</button></div>

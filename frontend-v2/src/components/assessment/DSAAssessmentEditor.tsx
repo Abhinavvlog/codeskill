@@ -25,7 +25,8 @@ import {
   Send,
   HelpCircle,
 } from "lucide-react";
-import { azureRunAPI } from "@/config/api";
+import { azureRunAPI, studentAssessmentsAPI } from "@/config/api";
+import ExecutionFeedback from '@/components/Result/ExecutionFeedback';
 import { Spinner } from "@/components/ui/spinner";
 
 const LANGUAGES = [
@@ -155,6 +156,7 @@ interface TestCase {
 }
 
 interface DSAAssessmentEditorProps {
+  assessmentId: string;
   readingScale?: number;
   question: {
     _id: string;
@@ -187,6 +189,7 @@ interface DSAAssessmentEditorProps {
 }
 
 export default function DSAAssessmentEditor({
+  assessmentId,
   question,
   readingScale = 1,
   savedResponse,
@@ -230,6 +233,7 @@ export default function DSAAssessmentEditor({
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [runResult, setRunResult] = useState<any>(null);
+  const [resultMode, setResultMode] = useState<'run' | 'submission'>('run');
   const [copied, setCopied] = useState(false);
   const [saveSuccessNotice, setSaveSuccessNotice] = useState<string | null>(null);
 
@@ -308,6 +312,7 @@ export default function DSAAssessmentEditor({
   const handleRunTest = async () => {
     if (isRunning || isSubmitting) return;
     setIsRunning(true);
+    setResultMode('run');
     setBottomTab("output");
     setRunResult(null);
 
@@ -348,21 +353,8 @@ export default function DSAAssessmentEditor({
       }
     } catch (err: any) {
       setRunResult({
-        success: false,
-        results: [
-          {
-            id: "err",
-            passed: false,
-            status: "system_error",
-            output: "",
-            error: err.response?.data?.message || err.message || "Failed to execute code",
-          },
-        ],
-        result: {
-          status: "system_error",
-          stdout: "",
-          stderr: err.response?.data?.message || err.message || "Execution error",
-        },
+        status: 'system_error', passedCount: 0, totalCount: 0, results: [],
+        message: err.response?.data?.message || err.message || 'Failed to execute code',
       });
     } finally {
       setIsRunning(false);
@@ -374,27 +366,27 @@ export default function DSAAssessmentEditor({
   const handleSubmitSolution = async () => {
     if (isRunning || isSubmitting) return;
     setIsSubmitting(true);
+    setRunResult(null);
+    setResultMode('submission');
     setBottomTab("output");
     let passed = 0;
-    let total = sampleCases.length || 1;
+    let total = 0;
     let verified = false;
     try {
-      const payloadCases = sampleCases.length > 0
-        ? sampleCases.map((tc, index) => ({ id: tc.id || String(index + 1), input: tc.input || "", expected: tc.expected ?? tc.output ?? "" }))
-        : [{ id: "1", input: customInput || "", expected: "" }];
-      const res = await azureRunAPI.run({ code, language, testCases: payloadCases, timeoutMs: 15000 });
+      const res = await studentAssessmentsAPI.evaluateCode(assessmentId, { questionId: question._id, code, language });
       const data = res.data;
       setRunResult(data);
       passed = data.passedCount ?? data.results?.filter((result: any) => result.passed).length ?? 0;
-      total = data.totalCount ?? data.results?.length ?? payloadCases.length;
+      total = data.totalCount ?? data.results?.length ?? 0;
       verified = true;
     } catch (err: any) {
-      setRunResult({ results: [{ passed: false, status: "system_error", error: err.response?.data?.message || err.message || "Execution unavailable" }] });
+      setRunResult({ status: 'system_error', results: [], passedCount: 0, totalCount: 0,
+        message: err.response?.data?.message || err.message || 'Execution unavailable' });
     }
     try {
       await onSave(code, language, passed, total);
       setSaveSuccessNotice(verified
-        ? `Solution saved. Passed ${passed} of ${total} sample test cases. Final grading runs on the server.`
+        ? `Solution saved. Passed ${passed} of ${total} test cases. Final grading runs on the server.`
         : "Code saved. Execution could not be verified; try running it again.");
     } catch {
       setSaveSuccessNotice("Code kept in this session. Server save failed; please try Submit Solution again.");
@@ -688,7 +680,7 @@ export default function DSAAssessmentEditor({
                       allPassed ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
                     }`}
                   >
-                    {runResult.passedCount ?? resultsList.filter((r: any) => r.passed).length}/{resultsList.length}
+                    {runResult.passedCount ?? resultsList.filter((r: any) => r.passed).length}/{runResult.totalCount ?? resultsList.length}
                   </span>
                 )}
               </button>
@@ -769,109 +761,15 @@ export default function DSAAssessmentEditor({
             {/* TAB 3: Execution Output Console */}
             {bottomTab === "output" && (
               <div className="space-y-3 font-mono text-xs">
-                {isRunning ? (
-                  <div className="flex items-center gap-2 text-zinc-400 py-4 justify-center">
-                    <Spinner className="w-5 h-5 animate-spin text-primary" />
-                    <span>Running your code…</span>
-                  </div>
-                ) : resultsList.length > 0 ? (
-                  <div className="space-y-3">
-                    {/* Execution Summary Header */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800">
-                      <div className="flex items-center gap-2">
-                        {allPassed ? (
-                          <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>ACCEPTED</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-rose-400 font-bold">
-                            <XCircle className="w-4 h-4" />
-                            <span>FAILED SOME TEST CASES</span>
-                          </div>
-                        )}
-                        <span className="text-zinc-500">|</span>
-                        <span className="text-zinc-300 font-sans">
-                          {runResult.passedCount ?? resultsList.filter((r: any) => r.passed).length} of {resultsList.length} passed
-                        </span>
-                      </div>
-
-                      {runResult.engine && (
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-mono">
-                          Engine: {runResult.engine}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Detailed Per-Case Results */}
-                    {resultsList.map((res: any, idx: number) => {
-                      const isCasePassed = res.passed || res.status === "accepted" || res.status === "success";
-                      return (
-                        <div
-                          key={res.id || idx}
-                          className={`p-3 rounded-lg border text-xs space-y-2 ${
-                            isCasePassed
-                              ? "bg-emerald-500/5 border-emerald-500/20"
-                              : "bg-rose-500/5 border-rose-500/20"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              {isCasePassed ? (
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                              ) : (
-                                <XCircle className="w-3.5 h-3.5 text-rose-400" />
-                              )}
-                              <span className="font-bold text-zinc-200">
-                                Case {idx + 1}: {isCasePassed ? "Passed" : (res.status || "Wrong Answer").replace(/_/g, " ").toUpperCase()}
-                              </span>
-                            </div>
-
-                            {res.executionTimeMs && (
-                              <span className="text-zinc-500 text-[11px]">
-                                {res.executionTimeMs} ms
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Stdout / Output */}
-                          {res.stdout || res.output ? (
-                            <div>
-                              <div className="text-[10px] text-zinc-400 font-sans">Your Output:</div>
-                              <pre className="p-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-200 whitespace-pre-wrap">
-                                {res.stdout || res.output}
-                              </pre>
-                            </div>
-                          ) : null}
-
-                          {/* Expected (if available) */}
-                          {res.expected && !isCasePassed && (
-                            <div>
-                              <div className="text-[10px] text-zinc-400 font-sans">Expected Output:</div>
-                              <pre className="p-2 rounded bg-zinc-950 border border-zinc-800 text-emerald-400 font-bold whitespace-pre-wrap">
-                                {res.expected}
-                              </pre>
-                            </div>
-                          )}
-
-                          {/* Stderr / Error Message */}
-                          {(res.stderr || res.error) && (
-                            <div>
-                              <div className="text-[10px] text-rose-400 font-sans font-bold">Compiler / Runtime Error:</div>
-                              <pre className="p-2 rounded bg-rose-950/20 border border-rose-500/30 text-rose-300 text-[11px] whitespace-pre-wrap">
-                                {res.stderr || res.error}
-                              </pre>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-6 text-zinc-500">
-                    Click <strong className="text-zinc-300">Run Code</strong> to compile against sample test cases, or <strong className="text-zinc-300">Submit Solution</strong> to run available test cases and save.
-                  </div>
-                )}
+                <ExecutionFeedback context="assessment" mode={resultMode} language={language}
+                  phase={isRunning || isSubmitting ? 'running' : null}
+                  result={runResult ? {
+                    ...runResult,
+                    status: runResult.status || (allPassed ? 'accepted' : resultsList[0]?.status || 'wrong_answer'),
+                    results: resultsList,
+                    passedCount: runResult.passedCount ?? resultsList.filter((r: any) => r.passed).length,
+                    totalCount: runResult.totalCount ?? resultsList.length,
+                  } : null} />
               </div>
             )}
           </div>

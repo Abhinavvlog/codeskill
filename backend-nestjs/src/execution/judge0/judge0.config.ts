@@ -36,6 +36,12 @@ export function judge0Config() {
     authToken: process.env.JUDGE0_AUTH_TOKEN,
     apiKey: process.env.JUDGE0_API_KEY,
     apiHost: process.env.JUDGE0_API_HOST,
+    discoveryTimeout: positiveInteger(
+      'JUDGE_DISCOVERY_TIMEOUT_MS',
+      2000,
+      100,
+      10000,
+    ),
     requestTimeout: positiveInteger(
       'JUDGE0_REQUEST_TIMEOUT_MS',
       5000,

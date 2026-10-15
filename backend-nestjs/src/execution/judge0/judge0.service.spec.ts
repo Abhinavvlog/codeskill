@@ -42,6 +42,10 @@ describe('Judge0 asynchronous API contract', () => {
     process.env = { ...original };
   });
   const run = () => service.execute('py', 'print(30)', '10 20');
+  it('uses a short discovery timeout independent of the execution deadline', async () => {
+    await run();
+    expect(get).toHaveBeenCalledWith('/languages', { timeout: 2000 });
+  });
   it('sends bounded base64 code/input and polls the token without disclosing an expected answer', async () => {
     expect(await run()).toMatchObject({
       stdout: '30\n',
