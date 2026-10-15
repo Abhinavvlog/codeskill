@@ -57,19 +57,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  useEffect(() => {
-    const clearSession = () => setUser(null);
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === "codeskill_token" && !event.newValue) clearSession();
-    };
-    window.addEventListener("codeskill:session-expired", clearSession);
-    window.addEventListener("storage", handleStorage);
-    return () => {
-      window.removeEventListener("codeskill:session-expired", clearSession);
-      window.removeEventListener("storage", handleStorage);
-    };
-  }, []);
-
   const registerSendOTP = useCallback(async (data: { email: string }) => {
     try {
       setError(null);
