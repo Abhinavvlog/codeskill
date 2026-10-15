@@ -37,6 +37,11 @@ import { AssessmentReadingZoom } from "@/components/assessment/AssessmentReading
 import { ResizableAssessmentPanels } from "@/components/assessment/ResizableAssessmentPanels";
 import { FloatingAssessmentMonitor } from "@/components/assessment/FloatingAssessmentMonitor";
 import { CodeSnippet } from "@/components/assessment/CodeSnippet";
+import {
+  checkAssessmentFace,
+  getAssessmentFaceReference,
+  type AssessmentFaceCheck,
+} from "@/lib/assessment-face-verification";
 
 interface TestCase {
   id?: string;
@@ -108,10 +113,13 @@ export default function TakeAssessmentPage({
   const [loadedAssessmentId, setLoadedAssessmentId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submissionRequestedRef = useRef(false);
+  const [isAutoSubmitting, setIsAutoSubmitting] = useState(false);
+  const [snapshotStatus, setSnapshotStatus] = useState("First snapshot is captured after 20 seconds; S3 storage is confirmed per capture");
   const [assessmentTitle, setAssessmentTitle] = useState("Proctored Assessment");
   const [assessmentCode, setAssessmentCode] = useState("");
   const [startError, setStartError] = useState<string | null>(null);
   const mediaCleanupRef = useRef<{ assessmentId: string; timer: number } | null>(null);
+  const examPageRef = useRef<HTMLDivElement | null>(null);
 
   // Stop any handed-off preflight stream when this route is really left. Defer
   // one event turn so React Strict Mode's development-only remount can cancel it.
@@ -137,6 +145,8 @@ export default function TakeAssessmentPage({
   const [violationMessage, setViolationMessage] = useState("");
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [warningToast, setWarningToast] = useState<{ id: number; message: string; type: "warning" | "alert" } | null>(null);
+  const [faceWarningCount, setFaceWarningCount] = useState(0);
+  const [faceMonitorStatus, setFaceMonitorStatus] = useState("Waiting for camera");
 
   // Camera & Voice Proctoring State
   const [isPipMinimized, setIsPipMinimized] = useState(false);
@@ -153,6 +163,12 @@ export default function TakeAssessmentPage({
 
   const violationsRef = useRef(violations);
   violationsRef.current = violations;
+  const faceWarningsRef = useRef(0);
+  const faceMonitorBusyRef = useRef(false);
+  const faceCandidateRef = useRef<{ issue: string; count: number } | null>(null);
+  const activeFaceIssueRef = useRef<string | null>(null);
+  const lookingAwaySinceRef = useRef<number | null>(null);
+  const submitStartedRef = useRef(false);
 
   // Add a proctoring violation and sync telemetry
   const recordViolation = useCallback(
@@ -205,6 +221,9 @@ export default function TakeAssessmentPage({
     startAttemptRequestedRef.current = true;
     setIsLoading(true);
     try {
+      if (!getAssessmentFaceReference(id)) {
+        throw new Error("Take your identity selfie on the assessment briefing page before entering the test.");
+      }
       const isExplicitRetake = new URLSearchParams(window.location.search).get("retake") === "1";
       // A Redo action must discard any stale in-progress attempt and start a
       // fresh timer. Ordinary assessment entry still resumes an in-progress test.
@@ -287,8 +306,9 @@ export default function TakeAssessmentPage({
   // 3. Submit Attempt Handler
   const submitExam = useCallback(
     async (isAuto = false) => {
-      if (isSubmitting || submissionRequestedRef.current) return;
+      if (isSubmitting || submissionRequestedRef.current || submitStartedRef.current) return;
       submissionRequestedRef.current = true;
+      submitStartedRef.current = true;
       stopCamera();
       // Also release any preflight stream that was handed off but not adopted
       // by the exam media hook (for example, after a quick route transition).
@@ -315,21 +335,180 @@ export default function TakeAssessmentPage({
           timeSpentSeconds: Math.floor((Date.now() - startedAt.getTime()) / 1000),
           violations: violationsRef.current,
         });
-        router.replace(`/assessments/${id}/result`);
       } catch (err) {
         console.error("Submission response:", err);
-        router.replace(`/assessments/${id}/result`);
       }
+      if (isAuto) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2500));
+      }
+      router.replace(`/assessments/${id}/result`);
     },
     [id, isSubmitting, questions, startedAt, router, stopCamera]
   );
 
-  const faceWarningCount = violations.filter(event => event.type === "multiple_faces_detected").length;
   useEffect(() => {
-    if (faceWarningCount >= MAX_FACE_WARNINGS && loadedAssessmentId === id && !isLoading) {
-      void submitExam(true);
+    if (!cameraActive || loadedAssessmentId !== id || isSubmitting || timeLeftSeconds <= 0) return;
+    const reference = getAssessmentFaceReference(id);
+    if (!reference) {
+      setFaceMonitorStatus("Identity selfie missing");
+      return;
     }
-  }, [faceWarningCount, loadedAssessmentId, id, isLoading, submitExam]);
+
+    let cancelled = false;
+    const reportFaceIssue = (issue: string, details: string) => {
+      if (activeFaceIssueRef.current === issue) return;
+      activeFaceIssueRef.current = issue;
+      faceWarningsRef.current += 1;
+      setFaceWarningCount(faceWarningsRef.current);
+      recordViolation(issue, details);
+      const warningNumber = faceWarningsRef.current;
+      const warningText = warningNumber === 4
+        ? `Face warning 4/5: ${details} One more warning will automatically submit your assessment.`
+        : `Face warning ${warningNumber}/5: ${details}`;
+      setWarningToast({ id: Date.now(), message: warningText, type: warningNumber >= 4 ? "alert" : "warning" });
+      setFaceMonitorStatus(details);
+      if (warningNumber >= 5) {
+        setIsAutoSubmitting(true);
+        setWarningToast({ id: Date.now(), message: "Five face-verification warnings reached. Your assessment is being submitted now.", type: "alert" });
+        void submitExam(true);
+      }
+    };
+
+    const inspectFrame = async () => {
+      if (cancelled || faceMonitorBusyRef.current || isSubmitting) return;
+      const video = videoRef.current;
+      if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) return;
+      faceMonitorBusyRef.current = true;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = 320;
+        canvas.height = Math.max(180, Math.round((320 * video.videoHeight) / video.videoWidth));
+        const context = canvas.getContext("2d");
+        if (!context) return;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const check: AssessmentFaceCheck = await checkAssessmentFace(canvas, reference);
+        if (cancelled) return;
+
+        let issue: { type: string; details: string } | null = null;
+        if (check.status === "no-face") issue = { type: "face_not_detected", details: "No face detected. Keep your face visible in the camera." };
+        else if (check.status === "multiple-faces") issue = { type: "multiple_faces", details: "More than one face detected in the camera view." };
+        else if (check.status === "mismatch") issue = { type: "face_mismatch", details: "The face in the camera does not match your identity selfie." };
+        else if ("yaw" in check && check.yaw !== undefined && Math.abs(check.yaw) > 0.45) {
+          lookingAwaySinceRef.current ??= Date.now();
+          if (Date.now() - lookingAwaySinceRef.current >= 7000) {
+            issue = { type: "looking_away", details: "Please face the screen. Looking away for too long is recorded as a warning." };
+          }
+        } else {
+          lookingAwaySinceRef.current = null;
+        }
+
+        if (!issue) {
+          faceCandidateRef.current = null;
+          activeFaceIssueRef.current = null;
+          setFaceMonitorStatus("Face matched · monitoring");
+          return;
+        }
+
+        const previous = faceCandidateRef.current;
+        const candidate = previous?.issue === issue.type
+          ? { issue: issue.type, count: previous.count + 1 }
+          : { issue: issue.type, count: 1 };
+        faceCandidateRef.current = candidate;
+        setFaceMonitorStatus(issue.details);
+        // Require two consecutive detections to avoid transient camera/pose false positives.
+        if (candidate.count >= 2) reportFaceIssue(issue.type, issue.details);
+      } catch {
+        if (!cancelled) setFaceMonitorStatus("Face check unavailable · retrying");
+      } finally {
+        faceMonitorBusyRef.current = false;
+      }
+    };
+
+    setFaceMonitorStatus("Loading face verification models…");
+    void inspectFrame();
+    const interval = window.setInterval(() => void inspectFrame(), 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      faceMonitorBusyRef.current = false;
+    };
+  }, [cameraActive, id, isSubmitting, loadedAssessmentId, recordViolation, submitExam, timeLeftSeconds, videoRef]);
+
+  // Snapshot the visible assessment page every 20 seconds. This captures the
+  // exam UI itself and does not request desktop/screen-sharing permission.
+  useEffect(() => {
+    if (loadedAssessmentId !== id || isLoading || isSubmitting) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const capture = async () => {
+      const examPage = examPageRef.current;
+      if (cancelled) return;
+      try {
+        if (!examPage) throw new Error("Assessment screen is not available");
+        const { default: html2canvas } = await import("html2canvas");
+        const canvas = await html2canvas(examPage, {
+          backgroundColor: "#f8fafc",
+          logging: false,
+          useCORS: true,
+          scale: Math.min(window.devicePixelRatio || 1, 1.5),
+          width: window.innerWidth,
+          height: window.innerHeight,
+          x: window.scrollX,
+          y: window.scrollY,
+          windowWidth: window.innerWidth,
+          windowHeight: window.innerHeight,
+          scrollX: window.scrollX,
+          scrollY: window.scrollY,
+        });
+        if (cancelled) return;
+        const image = canvas.toDataURL("image/jpeg", 0.62);
+        const timestamp = new Date().toISOString();
+        let saved = false;
+        let lastError: unknown;
+        // Retry the same captured frame on transient network/storage failures.
+        for (let attempt = 0; attempt < 3 && !cancelled; attempt += 1) {
+          try {
+            const response = await studentAssessmentsAPI.recordProctorCapture(id, {
+              type: "screen",
+              image,
+              filename: `assessment-${id}-${Date.now()}.jpg`,
+              timestamp,
+            });
+            const result = response.data;
+            if (result?.success !== true || result?.savedToS3 !== true || !result?.url || !result?.objectKey) {
+              throw new Error("The server did not confirm that this snapshot was saved to S3");
+            }
+            saved = true;
+            if (!cancelled) {
+              setSnapshotStatus(`Saved to S3 · ${new Date(result.timestamp || timestamp).toLocaleTimeString()} · ${result.objectKey}`);
+            }
+            break;
+          } catch (error) {
+            lastError = error;
+            if (attempt < 2 && !cancelled) {
+              await new Promise((resolve) => window.setTimeout(resolve, 1000 * (attempt + 1)));
+            }
+          }
+        }
+        if (!saved && !cancelled) {
+          const serverMessage = (lastError as { response?: { data?: { message?: string | string[] } }; message?: string })?.response?.data?.message;
+          const message = Array.isArray(serverMessage) ? serverMessage.join(", ") : serverMessage;
+          const fallback = (lastError as { message?: string })?.message;
+          setSnapshotStatus(`S3 save failed · ${message || fallback || "Upload failed after 3 attempts"}`);
+        }
+      } catch (error) {
+        console.warn("Assessment page snapshot could not be uploaded:", error);
+        if (!cancelled) setSnapshotStatus(`Snapshot capture failed · ${(error as { message?: string })?.message || "capture unavailable"}`);
+      }
+      if (!cancelled) timer = window.setTimeout(() => void capture(), 20_000);
+    };
+    // Keep snapshots sequential so a slow upload never silently drops a frame.
+    timer = window.setTimeout(() => void capture(), 20_000);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [id, isLoading, isSubmitting, loadedAssessmentId]);
 
   // 4. Countdown Clock
   useEffect(() => {
@@ -585,6 +764,20 @@ export default function TakeAssessmentPage({
     );
   }
 
+  if (isSubmitting) {
+    return (
+      <main role="status" aria-live="polite" className="flex min-h-screen items-center justify-center bg-background px-5 py-12">
+        <section className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-center shadow-lg">
+          <Spinner className="mx-auto h-10 w-10 animate-spin text-primary" />
+          <h1 className="mt-5 text-xl font-bold text-foreground">{isAutoSubmitting ? "Submitting your assessment" : "Finalizing your assessment"}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {isAutoSubmitting ? "Your saved answers are being submitted after the proctoring warning limit." : "Your answers are being saved and your result is loading."}
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   if (isLoading || !currentQ) {
     return (
       <SafeExamBrowser isEnabled={!isSubmitting} onFullscreenEntered={beginAssessmentAfterFullscreen}>
@@ -610,7 +803,7 @@ export default function TakeAssessmentPage({
       onTerminate={() => submitExam(true)}
       onViolation={recordViolation}
     >
-      <div className="h-dvh overflow-hidden bg-background text-foreground font-sans flex flex-col select-none relative [touch-action:pan-x_pan-y_pinch-zoom]">
+      <div ref={examPageRef} data-assessment-page-capture className="h-dvh overflow-hidden bg-background text-foreground font-sans flex flex-col select-none relative [touch-action:pan-x_pan-y_pinch-zoom]">
       {/* Top Test Header Bar */}
       <header className="h-16 shrink-0 border-b border-border bg-card/95 backdrop-blur-xl px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 shadow-sm">
         <div className="flex items-center gap-3">
@@ -922,6 +1115,11 @@ export default function TakeAssessmentPage({
                 {isPipMinimized ? "Show Feed" : "Collapse"}
               </button>
             </div>
+            <div className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-[10px] ${faceWarningCount ? "border-amber-500/30 bg-amber-500/5 text-amber-700" : "border-emerald-500/20 bg-emerald-500/5 text-emerald-700"}`}>
+              <span className="min-w-0 truncate">Face check: {faceMonitorStatus}</span>
+              <span className="shrink-0 font-semibold">{faceWarningCount}/5 warnings</span>
+            </div>
+            <p className="text-[10px] leading-relaxed text-muted-foreground">Exam snapshots: {snapshotStatus}</p>
 
             <div role="status" className={`rounded-lg border px-2 py-1.5 text-xs ${faceWarningCount > 0 ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300" : "border-border bg-muted/30 text-muted-foreground"}`}>
               <div className="flex items-center justify-between gap-2 font-semibold">

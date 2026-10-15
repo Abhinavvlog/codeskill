@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 220" width="100%" height="100%">
+  <defs>
+    <linearGradient id="neonRed" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF2E55"/>
+      <stop offset="100%" stop-color="#C8102E"/>
+    </linearGradient>
+    <linearGradient id="neonBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#818CF8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background container for Dark Mode preview -->
+  <rect width="800" height="220" rx="20" fill="#0B0F19"/>
+
+  <!-- Icon: Floating Intersecting Code Rhombus -->
+  <g transform="translate(45, 30)">
+    <!-- Outer Glow Box -->
+    <rect x="0" y="0" width="160" height="160" rx="36" fill="#111827" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+    
+    <!-- Code diamond mark -->
+    <path d="M80 35 L125 80 L80 125 L35 80 Z" fill="none" stroke="url(#neonRed)" stroke-width="5" stroke-linejoin="round"/>
+    
+    <!-- Left Bracket < -->
+    <path d="M72 65 L58 80 L72 95" fill="none" stroke="#F8FAFC" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Right Bracket > -->
+    <path d="M88 65 L102 80 L88 95" fill="none" stroke="url(#neonBlue)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <circle cx="80" cy="80" r="3" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Main Wordmark -->
+  <g transform="translate(235, 105)">
+    <text font-family="'Outfit', 'Inter', -apple-system, sans-serif" font-weight="900" font-size="68" letter-spacing="-1">
+      <tspan x="0" y="0" fill="#F8FAFC">Code</tspan>
+      <tspan fill="url(#neonRed)">Skill</tspan>
+    </text>
+
+    <!-- Subtitle / Affiliation -->
+    <g transform="translate(4, 25)">
+      <rect x="0" y="0" width="195" height="26" rx="6" fill="rgba(200, 16, 46, 0.25)" stroke="#C8102E" stroke-width="1"/>
+      <text x="97" y="17" font-family="'Inter', sans-serif" font-size="11" font-weight="700" fill="#FB7185" text-anchor="middle" letter-spacing="1.5">CHANDIGARH UNIVERSITY</text>
+
+      <text x="215" y="18" font-family="'Inter', sans-serif" font-size="13" font-weight="500" fill="#94A3B8" letter-spacing="1">Coding &amp; Evaluation Engine</text>
+    </g>
+  </g>
+</svg>

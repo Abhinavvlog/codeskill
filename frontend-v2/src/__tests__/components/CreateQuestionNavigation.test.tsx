@@ -5,7 +5,10 @@ import CreateQuestion from "@/app/admin/questions/create/page";
 import { useQuestionStore } from "@/app/admin/questions/create/_store/useQuestionStore";
 import { adminQuestionsAPI } from "@/config/api";
 
-jest.mock("next/navigation", () => ({ useRouter: () => ({ push: jest.fn() }) }));
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ push: jest.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 jest.mock("@/config/api", () => ({ adminQuestionsAPI: { create: jest.fn().mockResolvedValue({}) } }));
 jest.mock("@monaco-editor/react", () => ({ __esModule: true, default: () => <div /> }));
 

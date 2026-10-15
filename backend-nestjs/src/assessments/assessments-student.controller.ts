@@ -1,7 +1,12 @@
 import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AssessmentsService } from './assessments.service';
-import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
+import {
+  SubmitAssessmentDto,
+  RecordViolationDto,
+  VerifyIdentityDto,
+  ProctorCaptureDto,
+} from './dto/submit-assessment.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
@@ -42,6 +47,36 @@ export class AssessmentsStudentController {
     @CurrentUser() studentUser: any,
   ) {
     return this.assessmentsService.retakeStudentAttempt(id, studentUser);
+  }
+
+  @Post(':id/verify-identity')
+  @ApiOperation({ summary: 'Verify candidate identity before assessment start' })
+  async verifyIdentity(
+    @Param('id') id: string,
+    @Body() dto: VerifyIdentityDto,
+    @CurrentUser() studentUser: any,
+  ) {
+    return this.assessmentsService.verifyIdentity(id, dto, studentUser);
+  }
+
+  @Post(':id/violations')
+  @ApiOperation({ summary: 'Record timestamped proctoring violation and secure evidence' })
+  async recordViolation(
+    @Param('id') id: string,
+    @Body() dto: RecordViolationDto,
+    @CurrentUser() studentUser: any,
+  ) {
+    return this.assessmentsService.recordViolation(id, dto, studentUser);
+  }
+
+  @Post(':id/proctor-capture')
+  @ApiOperation({ summary: 'Receive proctoring frame capture from @peepl/proctoring' })
+  async recordProctorCapture(
+    @Param('id') id: string,
+    @Body() dto: ProctorCaptureDto,
+    @CurrentUser() studentUser: any,
+  ) {
+    return this.assessmentsService.recordProctorCapture(id, dto, studentUser);
   }
 
   @Post(':id/save-progress')

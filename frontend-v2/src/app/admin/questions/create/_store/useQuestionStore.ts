@@ -50,6 +50,9 @@ export interface ProblemMetadata {
   questionId: string;
   estimatedSolveTime: number; // minutes
   points: number;
+  negativeMarks?: number;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
   questionType: 'MCQ' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'CODE_OUTPUT' | 'DSA';
 }
 
@@ -219,6 +222,7 @@ const initialState = {
     questionId: `QID-${Date.now().toString(36).toUpperCase()}`,
     estimatedSolveTime: 30,
     points: 100,
+    negativeMarks: 0,
     questionType: 'DSA' as const,
   },
   languages: {

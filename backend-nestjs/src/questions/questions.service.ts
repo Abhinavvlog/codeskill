@@ -14,6 +14,7 @@ import { QueryQuestionsDto } from './dto/query-questions.dto';
 import { CreateQuestionBankDto } from './dto/create-question-bank.dto';
 import { CacheService } from '../redis/cache.service';
 import * as XLSX from 'xlsx';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class QuestionsService {
@@ -49,9 +50,17 @@ export class QuestionsService {
     }
 
     if (query.topic && query.topic.trim()) {
+      const topicVal = query.topic.trim();
       qb.andWhere(
-        "(question.topic = :topic OR (question.metadata->'categories') ? :topic)",
-        { topic: query.topic.trim() },
+        new Brackets((qbTopic) => {
+          qbTopic.where('LOWER(TRIM(question.topic)) = LOWER(:topicVal)', { topicVal })
+                 .orWhere('question.topic ILIKE :topicLike', { topicLike: `%${topicVal}%` })
+                 .orWhere("(question.metadata->'categories') ? :topicVal", { topicVal })
+                 .orWhere(
+                   "EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(CASE WHEN jsonb_typeof(question.metadata->'categories') = 'array' THEN question.metadata->'categories' ELSE '[]'::jsonb END, '[]'::jsonb)) AS cat WHERE cat ILIKE :topicLike)",
+                   { topicLike: `%${topicVal}%` },
+                 );
+        }),
       );
     }
 
@@ -579,6 +588,65 @@ export class QuestionsService {
     return question;
   }
 
+  async bulkUpdate(
+    ids: string[],
+    updates: UpdateQuestionDto,
+    adminUser: any,
+    ip = '',
+    userAgent = '',
+  ) {
+    if (!ids || !ids.length) {
+      throw new BadRequestException('Question IDs are required for bulk update');
+    }
+    const questions = await this.questionRepository.findBy({ id: In(ids) });
+    if (!questions.length) {
+      throw new NotFoundException('No questions found matching provided IDs');
+    }
+
+    const { categories, visibility, contestOnly, ...restUpdates } = updates as any;
+    for (const q of questions) {
+      if (categories !== undefined) {
+        const topics = this.normalizeCategories(categories);
+        q.metadata = { ...q.metadata, categories: topics };
+        q.topic = topics[0] || q.topic || 'General';
+      }
+      if (visibility !== undefined) {
+        q.metadata = { ...q.metadata, visibility };
+        if (visibility === 'Published') q.status = 'active';
+        else if (visibility === 'Draft') q.status = 'draft';
+      }
+      if (contestOnly !== undefined) {
+        q.metadata = { ...q.metadata, contestOnly };
+      }
+      for (const [key, val] of Object.entries(restUpdates)) {
+        if (val !== undefined && val !== null && val !== '') {
+          (q as any)[key] = val;
+        }
+      }
+    }
+
+    await this.questionRepository.save(questions);
+    await this.cacheService.invalidatePrefix('problems:');
+
+    const auditLog = this.auditLogRepository.create({
+      actorId: adminUser.id || adminUser._id,
+      actorEmail: adminUser.email,
+      action: 'BULK_UPDATE_QUESTIONS',
+      target: ids.join(','),
+      targetType: 'Question',
+      ipAddress: ip,
+      userAgent: userAgent,
+      metadata: { ids, updates },
+    });
+    await this.auditLogRepository.save(auditLog);
+
+    return {
+      success: true,
+      message: `Successfully updated ${questions.length} questions`,
+      updatedCount: questions.length,
+    };
+  }
+
   async delete(id: string, adminUser: any, ip = '', userAgent = '') {
     const question = await this.questionRepository.findOne({ where: { id } });
     if (!question) throw new NotFoundException('Question not found');
@@ -766,7 +834,37 @@ export class QuestionsService {
     return { success: true, message: 'Question Bank removed' };
   }
 
-  // --- Bulk Question Import (XLSX / CSV) ---
+  // --- Bulk Question Import (XLSX / CSV) with Duplicate Detection & Merge Strategy ---
+
+  normalizeQuestionStem(text: string): string {
+    if (!text) return '';
+    return text
+      .toLowerCase()
+      .replace(/<[^>]*>/g, '') // strip HTML
+      .replace(/[^\w\s]/g, '') // strip punctuation
+      .replace(/\s+/g, ' ') // collapse whitespace
+      .trim();
+  }
+
+  calculateContentHash(stem: string, questionType: string, topic: string): string {
+    const normStem = this.normalizeQuestionStem(stem);
+    const normType = (questionType || 'single_choice').toLowerCase().trim();
+    const normTopic = (topic || 'general').toLowerCase().trim();
+    return crypto
+      .createHash('sha256')
+      .update(`${normStem}:::${normType}:::${normTopic}`)
+      .digest('hex');
+  }
+
+  private normalizeOptionList(options: any[]): string[] {
+    if (!Array.isArray(options)) return [];
+    return options
+      .map((o) => {
+        const text = typeof o === 'string' ? o : o.text || '';
+        return text.toLowerCase().replace(/\s+/g, ' ').trim();
+      })
+      .filter(Boolean);
+  }
 
   async parseAndValidateQuestionsImport(fileBuffer: Buffer) {
     const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
@@ -802,7 +900,7 @@ export class QuestionsService {
     };
 
     const parsedRows: any[] = [];
-    const fileQuestionSet = new Set<string>();
+    const fileHashMap = new Map<string, number>();
 
     for (let i = 0; i < rawRows.length; i++) {
       const row = rawRows[i];
@@ -1000,6 +1098,12 @@ export class QuestionsService {
           ? 'single_choice'
           : mappedType || typeKey;
 
+      const contentHash = this.calculateContentHash(
+        question,
+        questionType,
+        topic,
+      );
+
       parsedRows.push({
         rowNumber: i + 2,
         question,
@@ -1031,28 +1135,52 @@ export class QuestionsService {
         memoryLimit,
         testCases,
         isCoding,
+        contentHash,
       });
     }
 
-    const allFileQuestions = parsedRows.map((r) => r.question).filter(Boolean);
-    const existingDbQuestions = await this.questionRepository.find({
-      where: {
-        question: In(allFileQuestions),
-      },
-      select: { question: true, topic: true },
-    });
+    // Retrieve potential database matches for all topics in the file
+    const allTopics = [...new Set(parsedRows.map((r) => r.topic).filter(Boolean))];
+    const existingDbQuestions = allTopics.length > 0
+      ? await this.questionRepository.find({
+          where: { topic: In(allTopics) },
+          select: {
+            id: true,
+            question: true,
+            questionType: true,
+            topic: true,
+            options: true,
+            correctAnswer: true,
+            correctAnswers: true,
+            marks: true,
+            explanation: true,
+            subtopic: true,
+            tags: true,
+          },
+        })
+      : [];
 
-    const dbQuestionMap = new Set(
-      existingDbQuestions.map(
-        (q) => `${q.topic.toLowerCase()}:::${q.question.toLowerCase().trim()}`,
-      ),
-    );
+    // Map existing questions by content hash and normalized stem for fast lookups
+    const dbHashToQuestion = new Map<string, QuestionEntity>();
+    const dbStemToQuestions = new Map<string, QuestionEntity[]>();
 
-    const errors: { row: number; question?: string; error: string }[] = [];
+    for (const eq of existingDbQuestions) {
+      const hash = this.calculateContentHash(eq.question, eq.questionType, eq.topic);
+      dbHashToQuestion.set(hash, eq);
+
+      const normStemKey = `${eq.topic.toLowerCase()}:::${this.normalizeQuestionStem(eq.question)}`;
+      if (!dbStemToQuestions.has(normStemKey)) {
+        dbStemToQuestions.set(normStemKey, []);
+      }
+      dbStemToQuestions.get(normStemKey)!.push(eq);
+    }
+
+    const errors: { row: number; question?: string; error: string; isDuplicate?: boolean }[] = [];
     const validRows: any[] = [];
     let duplicatesInFile = 0;
-    let willUpdateCount = 0;
-    let willInsertCount = 0;
+    let exactDuplicatesCount = 0;
+    let conflictsCount = 0;
+    let newCount = 0;
     let invalid = 0;
 
     for (const row of parsedRows) {
@@ -1060,23 +1188,6 @@ export class QuestionsService {
 
       if (!row.question) {
         rowErrors.push('Question statement is missing');
-      } else {
-        const questionKey = `${row.topic.toLowerCase()}:::${row.question.toLowerCase().trim()}`;
-        if (fileQuestionSet.has(questionKey)) {
-          rowErrors.push(
-            'Duplicate question statement within the uploaded file',
-          );
-          duplicatesInFile++;
-        } else {
-          fileQuestionSet.add(questionKey);
-          if (dbQuestionMap.has(questionKey)) {
-            row.isUpdate = true;
-            willUpdateCount++;
-          } else {
-            row.isUpdate = false;
-            willInsertCount++;
-          }
-        }
       }
 
       if (!row.topic) {
@@ -1120,7 +1231,6 @@ export class QuestionsService {
       }> = [];
 
       if (isChoice) {
-        // Enforce min 2 options
         const rawOptions = [
           { key: 'A', text: row.optA },
           { key: 'B', text: row.optB },
@@ -1170,36 +1280,102 @@ export class QuestionsService {
         }
       }
 
+      // Check duplicates within the uploaded file itself
+      let isFileDuplicate = false;
+      if (fileHashMap.has(row.contentHash)) {
+        rowErrors.push(
+          `Duplicate question within the uploaded file (matches row ${fileHashMap.get(row.contentHash)})`,
+        );
+        duplicatesInFile++;
+        isFileDuplicate = true;
+      } else {
+        fileHashMap.set(row.contentHash, row.rowNumber);
+      }
+
       if (rowErrors.length > 0) {
         invalid++;
         errors.push({
           row: row.rowNumber,
           question: row.question || `Row ${row.rowNumber}`,
           error: rowErrors.join('. '),
+          isDuplicate: isFileDuplicate,
         });
-      } else {
-        validRows.push({
-          rowNumber: row.rowNumber,
-          question: row.question,
-          questionType: row.questionType,
-          topic: row.topic,
-          subtopic: row.subtopic || undefined,
-          difficulty: row.difficulty,
-          marks: row.marks,
-          negativeMarks: row.negativeMarks,
-          options: isChoice ? formattedOptions : undefined,
-          explanation: row.explanation || undefined,
-          codeSnippet: row.codeSnippet || undefined,
-          language: row.language !== 'general' ? row.language : undefined,
-          tags: row.tags,
-          constraints: row.constraints,
-          timeLimit: row.timeLimit,
-          memoryLimit: row.memoryLimit,
-          testCases: row.testCases,
-          isUpdate: row.isUpdate,
-          status: 'approved',
-        });
+        continue;
       }
+
+      // Option-Aware Duplicate & Conflict Detection against database
+      let matchStatus: 'new' | 'exact_duplicate' | 'conflict' = 'new';
+      let conflictReason = '';
+      let existingQuestion: QuestionEntity | null = null;
+
+      const normStemKey = `${row.topic.toLowerCase()}:::${this.normalizeQuestionStem(row.question)}`;
+      const candidates = dbStemToQuestions.get(normStemKey) || [];
+
+      if (candidates.length > 0) {
+        existingQuestion = candidates[0];
+        const existingOpts = this.normalizeOptionList(existingQuestion.options || []);
+        const importedOpts = this.normalizeOptionList(formattedOptions);
+
+        if (isChoice && existingOpts.length > 0 && importedOpts.length > 0) {
+          const sameLength = existingOpts.length === importedOpts.length;
+          const sameOpts = sameLength && existingOpts.every((opt, idx) => opt === importedOpts[idx]);
+
+          const importedCorrectIdx = formattedOptions.findIndex((o) => o.isCorrect);
+          const sameAnswer =
+            existingQuestion.correctAnswer === (importedCorrectIdx >= 0 ? importedCorrectIdx : 0);
+
+          if (sameOpts && sameAnswer) {
+            matchStatus = 'exact_duplicate';
+            conflictReason = 'Identical question with matching options and correct answer exists in bank';
+            exactDuplicatesCount++;
+          } else {
+            matchStatus = 'conflict';
+            const reasons: string[] = [];
+            if (!sameOpts) reasons.push('Option variation detected');
+            if (!sameAnswer) {
+              reasons.push(
+                `Correct answer difference (DB: option ${existingQuestion.correctAnswer + 1}, import: option ${importedCorrectIdx + 1})`,
+              );
+            }
+            conflictReason = reasons.join('; ');
+            conflictsCount++;
+          }
+        } else {
+          // Coding or matching without options
+          matchStatus = 'exact_duplicate';
+          conflictReason = 'Question statement already exists in this topic';
+          exactDuplicatesCount++;
+        }
+      } else {
+        matchStatus = 'new';
+        newCount++;
+      }
+
+      validRows.push({
+        rowNumber: row.rowNumber,
+        question: row.question,
+        questionType: row.questionType,
+        topic: row.topic,
+        subtopic: row.subtopic || undefined,
+        difficulty: row.difficulty,
+        marks: row.marks,
+        negativeMarks: row.negativeMarks,
+        options: isChoice ? formattedOptions : undefined,
+        explanation: row.explanation || undefined,
+        codeSnippet: row.codeSnippet || undefined,
+        language: row.language !== 'general' ? row.language : undefined,
+        tags: row.tags,
+        constraints: row.constraints,
+        timeLimit: row.timeLimit,
+        memoryLimit: row.memoryLimit,
+        testCases: row.testCases,
+        contentHash: row.contentHash,
+        matchStatus,
+        conflictReason: conflictReason || undefined,
+        existingQuestionId: existingQuestion?.id,
+        isUpdate: matchStatus !== 'new',
+        status: 'approved',
+      });
     }
 
     return {
@@ -1208,8 +1384,11 @@ export class QuestionsService {
         validCount: validRows.length,
         invalidCount: invalid,
         duplicateCount: duplicatesInFile,
-        toInsertCount: willInsertCount,
-        toUpdateCount: willUpdateCount,
+        newCount,
+        exactDuplicateCount: exactDuplicatesCount,
+        conflictCount: conflictsCount,
+        toInsertCount: newCount,
+        toUpdateCount: exactDuplicatesCount + conflictsCount,
       },
       validRows,
       errors,
@@ -1221,6 +1400,7 @@ export class QuestionsService {
     adminUser: any,
     ip = '',
     userAgent = '',
+    mergeStrategy: 'skip' | 'update' | 'merge' = 'skip',
   ) {
     if (!validRows || validRows.length === 0) {
       throw new BadRequestException('No valid question rows to import.');
@@ -1263,6 +1443,10 @@ export class QuestionsService {
             .map((c: string) => c.trim())
             .filter(Boolean);
 
+      const contentHash =
+        r.contentHash ||
+        this.calculateContentHash(r.question, r.questionType, r.topic);
+
       return {
         question: r.question,
         questionType: r.questionType || 'single_choice',
@@ -1282,6 +1466,9 @@ export class QuestionsService {
         createdBy_id: adminUser?.id || adminUser?._id,
         approvedBy_id: adminUser?.id || adminUser?._id,
         approvedAt: new Date(),
+        contentHash,
+        existingQuestionId: r.existingQuestionId,
+        matchStatus: r.matchStatus || 'new',
         ...(isCodingRow
           ? {
               problemStatement: r.question,
@@ -1294,27 +1481,92 @@ export class QuestionsService {
         metadata: {
           importedVia: 'bulk_csv',
           originalRow: r.rowNumber,
+          contentHash,
         },
       };
     });
 
-    let totalUpserted = 0;
-    let totalModified = 0;
+    let totalInserted = 0;
+    let totalUpdated = 0;
+    let totalSkipped = 0;
 
-    for (const doc of docs) {
-      const existing = await this.questionRepository.findOne({
-        where: { question: doc.question, topic: doc.topic }
-      });
-      if (existing) {
-        Object.assign(existing, doc);
-        await this.questionRepository.save(existing);
-        totalModified++;
-      } else {
-        const newDoc = this.questionRepository.create(doc as any);
-        await this.questionRepository.save(newDoc);
-        totalUpserted++;
+    // Execute transactional import with merge strategy protection
+    await this.questionRepository.manager.transaction(async (manager) => {
+      for (const doc of docs) {
+        let existing: QuestionEntity | null = null;
+
+        if (doc.existingQuestionId) {
+          existing = await manager.findOne(QuestionEntity, {
+            where: { id: doc.existingQuestionId },
+          });
+        }
+        if (!existing) {
+          existing = await manager.findOne(QuestionEntity, {
+            where: { question: doc.question, topic: doc.topic },
+          });
+        }
+
+        if (existing) {
+          if (mergeStrategy === 'skip') {
+            totalSkipped++;
+            continue;
+          }
+
+          if (mergeStrategy === 'update') {
+            // Update question in place while strictly preserving question ID and assessment integrity
+            existing.question = doc.question;
+            existing.questionType = doc.questionType;
+            existing.topic = doc.topic;
+            existing.subtopic = doc.subtopic;
+            existing.difficulty = doc.difficulty;
+            existing.marks = doc.marks;
+            existing.negativeMarks = doc.negativeMarks;
+            existing.options = doc.options;
+            existing.correctAnswer = doc.correctAnswer;
+            existing.correctAnswers = doc.correctAnswers;
+            existing.explanation = doc.explanation || existing.explanation;
+            existing.codeSnippet = doc.codeSnippet || existing.codeSnippet;
+            existing.language = doc.language || existing.language;
+            existing.tags = [...new Set([...(existing.tags || []), ...(doc.tags || [])])];
+            existing.metadata = {
+              ...(existing.metadata || {}),
+              ...doc.metadata,
+              lastMergedAt: new Date().toISOString(),
+              mergeStrategy: 'update',
+            };
+            if (doc.problemStatement) existing.problemStatement = doc.problemStatement;
+            if (doc.constraints) existing.constraints = doc.constraints;
+            if (doc.testCases && doc.testCases.length > 0) existing.testCases = doc.testCases;
+
+            await manager.save(existing);
+            totalUpdated++;
+          } else if (mergeStrategy === 'merge') {
+            // Safe merge: preserve existing answers, options, and marks, but enrich missing metadata
+            if (!existing.subtopic && doc.subtopic) existing.subtopic = doc.subtopic;
+            if (!existing.explanation && doc.explanation) existing.explanation = doc.explanation;
+            if (!existing.codeSnippet && doc.codeSnippet) existing.codeSnippet = doc.codeSnippet;
+            if (!existing.language && doc.language) existing.language = doc.language;
+            existing.tags = [...new Set([...(existing.tags || []), ...(doc.tags || [])])];
+            if ((!existing.testCases || existing.testCases.length === 0) && doc.testCases) {
+              existing.testCases = doc.testCases;
+            }
+            existing.metadata = {
+              ...(existing.metadata || {}),
+              ...doc.metadata,
+              lastMergedAt: new Date().toISOString(),
+              mergeStrategy: 'merge',
+            };
+            await manager.save(existing);
+            totalUpdated++;
+          }
+        } else {
+          const { existingQuestionId, matchStatus, ...newDocData } = doc;
+          const newDoc = manager.create(QuestionEntity, newDocData as any);
+          await manager.save(newDoc);
+          totalInserted++;
+        }
       }
-    }
+    });
 
     await this.cacheService.invalidatePrefix('problems:');
     const totalProcessed = docs.length;
@@ -1322,15 +1574,17 @@ export class QuestionsService {
     const auditLog = this.auditLogRepository.create({
       actorId: adminUser?.id || adminUser?._id,
       actorEmail: adminUser?.email || 'admin',
-      action: 'BULK_IMPORT_QUESTIONS_UPSERT',
+      action: 'BULK_IMPORT_QUESTIONS_MERGE',
       target: 'Question',
       targetType: 'Question',
       ipAddress: ip,
       userAgent: userAgent,
       metadata: {
         totalProcessed,
-        newlyInserted: totalUpserted,
-        updated: totalModified,
+        newlyInserted: totalInserted,
+        updated: totalUpdated,
+        skipped: totalSkipped,
+        mergeStrategy,
         sampleTopics: [...new Set(docs.map((d) => d.topic))].slice(0, 5),
       },
     });
@@ -1338,10 +1592,13 @@ export class QuestionsService {
 
     return {
       success: true,
-      message: `Successfully processed ${totalProcessed} questions (${totalUpserted} newly inserted, ${totalModified} updated).`,
+      message: `Import processed with '${mergeStrategy}' strategy: ${totalInserted} questions created, ${totalUpdated} updated, ${totalSkipped} duplicate questions skipped.`,
       count: totalProcessed,
-      insertedCount: totalUpserted,
-      updatedCount: totalModified,
+      totalProcessed,
+      insertedCount: totalInserted,
+      updatedCount: totalUpdated,
+      skippedCount: totalSkipped,
+      mergeStrategy,
     };
   }
 
@@ -1350,6 +1607,7 @@ export class QuestionsService {
     adminUser: any,
     ip = '',
     userAgent = '',
+    mergeStrategy: 'skip' | 'update' | 'merge' = 'skip',
   ) {
     const preview = await this.parseAndValidateQuestionsImport(fileBuffer);
     if (!preview.validRows || preview.validRows.length === 0) {
@@ -1362,6 +1620,7 @@ export class QuestionsService {
       adminUser,
       ip,
       userAgent,
+      mergeStrategy,
     );
     return {
       success: true,
@@ -1370,10 +1629,12 @@ export class QuestionsService {
         ...preview.summary,
         insertedCount: commit.insertedCount,
         updatedCount: commit.updatedCount,
+        skippedCount: commit.skippedCount,
       },
       validCount: preview.validRows.length,
       invalidCount: preview.summary.invalidCount,
       errors: preview.errors,
+      mergeStrategy,
     };
   }
 }

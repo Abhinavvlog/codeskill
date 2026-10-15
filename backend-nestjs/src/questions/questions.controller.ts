@@ -83,6 +83,7 @@ export class QuestionsController {
   )
   async autoImport(
     @UploadedFile() file: Express.Multer.File,
+    @Query('mergeStrategy') mergeStrategy: 'skip' | 'update' | 'merge' = 'skip',
     @CurrentUser() adminUser: any,
     @Req() req: any,
   ) {
@@ -96,16 +97,18 @@ export class QuestionsController {
       adminUser,
       ip,
       userAgent,
+      mergeStrategy,
     );
   }
 
   @Post('import/confirm')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Commit validated assessment questions into question bank',
+    summary: 'Commit validated assessment questions into question bank with merge strategy',
   })
   async confirmImport(
     @Body('validRows') validRows: any[],
+    @Body('mergeStrategy') mergeStrategy: 'skip' | 'update' | 'merge' = 'skip',
     @CurrentUser() adminUser: any,
     @Req() req: any,
   ) {
@@ -116,6 +119,7 @@ export class QuestionsController {
       adminUser,
       ip,
       userAgent,
+      mergeStrategy,
     );
   }
 
@@ -145,6 +149,19 @@ export class QuestionsController {
     const ip = req.ip || req.connection?.remoteAddress || '';
     const userAgent = req.headers['user-agent'] || '';
     return this.questionsService.create(dto, adminUser, ip, userAgent);
+  }
+
+  @Put('bulk')
+  @ApiOperation({ summary: 'Bulk update multiple assessment questions' })
+  async bulkUpdate(
+    @Body('ids') ids: string[],
+    @Body('updates') updates: UpdateQuestionDto,
+    @CurrentUser() adminUser: any,
+    @Req() req: any,
+  ) {
+    const ip = req.ip || req.connection?.remoteAddress || '';
+    const userAgent = req.headers['user-agent'] || '';
+    return this.questionsService.bulkUpdate(ids, updates, adminUser, ip, userAgent);
   }
 
   @Put(':id')

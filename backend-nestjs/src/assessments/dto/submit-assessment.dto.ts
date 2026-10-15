@@ -4,6 +4,11 @@ import {
   IsOptional,
   IsString,
   ValidateNested,
+  IsIn,
+  IsISO8601,
+  MaxLength,
+  IsObject,
+  ArrayMaxSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -67,4 +72,57 @@ export class SubmitAssessmentDto {
   @ValidateNested({ each: true })
   @Type(() => ProctoringViolationDto)
   violations?: ProctoringViolationDto[];
+}
+
+export class VerifyIdentityDto {
+  @IsArray()
+  @ArrayMaxSize(512)
+  @IsNumber({}, { each: true })
+  faceDescriptor: number[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4_000_000)
+  snapshot?: string;
+}
+
+export class RecordViolationDto {
+  @IsString()
+  @MaxLength(80)
+  type: string;
+
+  @IsOptional()
+  @IsISO8601()
+  timestamp?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  details?: string;
+
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4_000_000)
+  evidenceSnapshot?: string;
+}
+
+export class ProctorCaptureDto {
+  @IsIn(['screen'])
+  type: string;
+
+  @IsString()
+  @MaxLength(4_000_000)
+  image: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(180)
+  filename?: string;
+
+  @IsISO8601()
+  timestamp: string;
 }

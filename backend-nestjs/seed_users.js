@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const fs = require('fs');
 
 async function seed() {
-  const dbUrl = process.env.DATABASE_URL || "postgres://postgres:password123@127.0.0.1:5432/codeskill";
+  const dbUrl = process.env.DATABASE_URL || "postgres://postgres:password123@127.0.0.1:5432/codeskill_pg";
   const client = new Client({ connectionString: dbUrl });
   await client.connect();
 
@@ -15,17 +15,24 @@ async function seed() {
   
   // 5 Admins
   for (let i = 1; i <= 5; i++) {
-    const name = `Mustakim Admin ${i}`;
+    const name = `Mustakim`;
     const email = `mustakim_admin${i}@codeskill.com`;
     const uid = `ADM${i}`;
     csvLines.push(`admin,${name},${email},${uid},${password}`);
     
     try {
       await client.query(`
-        INSERT INTO users (name, email, password, role, uid, "isAdmin") 
-        VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (email) DO NOTHING
-      `, [name, email, hashedPassword, 'admin', uid, true]);
+        INSERT INTO users (name, email, password, role, uid, "isAdmin", "isActive", "forcePasswordChange") 
+        VALUES ($1, $2, $3, $4, $5, $6, true, false)
+        ON CONFLICT (email) DO UPDATE SET
+          name = EXCLUDED.name,
+          password = EXCLUDED.password,
+          role = EXCLUDED.role,
+          uid = EXCLUDED.uid,
+          "isAdmin" = true,
+          "isActive" = true,
+          "forcePasswordChange" = false
+      `, [name, email, hashedPassword, 'super_admin', uid, true]);
     } catch (e) { console.error("Error inserting admin:", e); }
   }
 
