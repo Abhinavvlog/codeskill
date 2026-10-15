@@ -1,4 +1,3 @@
-/Users/home/.rvm/scripts/rvm:29: operation not permitted: ps
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
