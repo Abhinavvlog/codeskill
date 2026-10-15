@@ -69,6 +69,12 @@ export class Assessment {
     description: string;
     order: number;
     timeLimit: number;
+    autoSelection?: {
+      topic: string;
+      easyCount: number;
+      mediumCount: number;
+      hardCount: number;
+    };
     questions: Array<{
       questionId: string;
       marks: number;
