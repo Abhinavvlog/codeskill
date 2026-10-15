@@ -1,7 +1,7 @@
 name: Piston integration validation
 on:
   pull_request:
-    paths: ['backend-nestjs/**', 'frontend-v2/**', 'deployment/piston/**', 'scripts/piston/**', 'terraform/modules/piston-execution/**', '.github/workflows/piston-validation.yml']
+    paths: ['backend-nestjs/**', 'frontend-v2/**', 'deployment/piston/**', 'scripts/piston/**', 'terraform/modules/piston-execution/**', '.github/scripts/**', '.github/workflows/deploy.yml', '.github/workflows/piston-validation.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate AWS deployment configuration checks
+        run: bash .github/scripts/test-aws-deployment-config.sh
       - uses: actions/setup-node@v4
         with:
           node-version: '20'

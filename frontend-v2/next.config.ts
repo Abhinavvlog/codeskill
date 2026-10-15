@@ -7,6 +7,15 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["@react-pdf/renderer"],
   webpack: (config) => {
+    // MediaPipe's prebuilt bundle contains an unused computed import.
+    // https://github.com/google-ai-edge/mediapipe/issues/6285
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings || []),
+      {
+        module: /[\\/]@mediapipe[\\/]tasks-vision[\\/]vision_bundle\.mjs/,
+        message: /Critical dependency: the request of a dependency is an expression/,
+      },
+    ];
     config.module.rules.push({
       test: /\.m?js$/,
       resolve: {

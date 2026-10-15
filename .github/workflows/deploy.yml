@@ -25,6 +25,14 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Check AWS deployment configuration
+        id: aws_auth
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: bash .github/scripts/check-aws-deployment-config.sh
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -77,11 +85,20 @@ jobs:
           cd deploy_package
           zip -r ../latest.zip .
 
-      - name: Configure AWS Credentials
+      - name: Configure AWS credentials through OIDC
+        if: steps.aws_auth.outputs.auth_mode == 'oidc'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials through repository secrets
+        if: steps.aws_auth.outputs.auth_mode == 'access_keys'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Upload Build to S3
