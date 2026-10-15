@@ -17,6 +17,7 @@ beforeEach(() => {
   Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
   getUserMedia.mockResolvedValue({ getTracks: () => [{ stop: videoStop }, { stop: audioStop }] });
   jest.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+  jest.spyOn(HTMLMediaElement.prototype, "play").mockReturnValue(undefined as unknown as Promise<void>);
   jest.mocked(studentAssessmentsAPI.startAttempt).mockResolvedValue({ data: { durationMinutes: 1, startedAt: new Date().toISOString(), questions: [{ _id: "q1", question: "Question", questionType: "MCQ", options: ["A", "B"], marks: 1, difficulty: "easy" }] } });
   jest.mocked(studentAssessmentsAPI.submitAttempt).mockImplementation(() => new Promise(() => {}));
 });

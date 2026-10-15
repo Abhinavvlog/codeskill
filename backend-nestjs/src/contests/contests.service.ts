@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { ContestReattemptGrant } from '../database/entities/contest-reattempt-gr
 
 @Injectable()
 export class ContestsService {
+  private readonly logger = new Logger(ContestsService.name);
   constructor(
     @InjectRepository(Contest)
     private readonly contestRepo: Repository<Contest>,
@@ -70,6 +72,12 @@ export class ContestsService {
       contest.participants = [...participants, userId];
       await this.contestRepo.save(contest);
     }
+
+    this.logger.log({
+      event: 'CONTEST_REGISTERED',
+      contestId: contest.id,
+      userId,
+    });
 
     return { success: true };
   }
@@ -369,6 +377,14 @@ export class ContestsService {
       attempt = await this.attemptRepo.save(newAttempt);
     }
 
+    this.logger.log({
+      event: 'CONTEST_ATTEMPT_STARTED',
+      contestId: contest.id,
+      userId,
+      sessionId: attempt.sessionId,
+      attemptNumber: attempt.attemptNumber || 1,
+    });
+
     return {
       contest: this.safeContest(contest),
       problems,
@@ -392,7 +408,12 @@ export class ContestsService {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pid),
     );
     let problemsSolved = 0;
-    if (problemIds.length > 0) {
+    if (problemIds.length > 0 && this.submissions?.isSharded) {
+      const solved = await this.submissions.contestSolvedProblems(problemIds, [
+        { userId, start: attempt.startedAt, end: new Date() },
+      ]);
+      problemsSolved = new Set(solved.map((row) => row.problemId)).size;
+    } else if (problemIds.length > 0) {
       try {
         const solved = await this.attemptRepo.query(
           `SELECT count(DISTINCT "problemId") as count 
@@ -423,6 +444,16 @@ export class ContestsService {
         status: 'InProgress',
       })
       .execute();
+
+    this.logger.log({
+      event: 'CONTEST_ATTEMPT_SUBMITTED',
+      contestId: contest.id,
+      attemptId: attempt.id,
+      userId,
+      sessionId,
+      score,
+      problemsSolved,
+    });
 
     return { success: true, slug: contest.slug, score, problemsSolved };
   }
@@ -477,6 +508,17 @@ export class ContestsService {
 
     const currentWarnings = rows[0].warnings;
     const forceSubmit = rows[0].status === 'Terminated' || rows[0].status === 'Locked';
+
+    this.logger.warn({
+      event: 'CONTEST_VIOLATION_RECORDED',
+      contestId: contest.id,
+      userId,
+      sessionId,
+      violationType: type,
+      warnings: currentWarnings,
+      forceSubmit,
+      status: rows[0].status,
+    });
 
     const result: any = {
       success: true,

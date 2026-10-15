@@ -603,10 +603,10 @@ export default function TakeAssessmentPage({
   const isTimeCritical = timeLeftSeconds < 300; // < 5 mins
 
   return (
-    <SafeExamBrowser 
+    <SafeExamBrowser
       isEnabled={!isSubmitting}
       onFullscreenEntered={beginAssessmentAfterFullscreen}
-      maxWarnings={maxTabSwitches} 
+      maxWarnings={maxTabSwitches}
       onTerminate={() => submitExam(true)}
       onViolation={recordViolation}
     >

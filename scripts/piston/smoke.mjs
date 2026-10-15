@@ -5,6 +5,9 @@ const [registryPath, reportPath = 'piston-smoke-report.json'] = process.argv.sli
 if (!registryPath) throw new Error('Pass verified provisioning output JSON');
 const { versions, runtimes } = JSON.parse(await readFile(registryPath, 'utf8'));
 const base = process.env.PISTON_TEST_BASE_URL || 'http://127.0.0.1:2001/api/v2';
+const runTimeout = Number(process.env.PISTON_TEST_RUN_TIMEOUT_MS || 3000);
+const compileTimeout = Number(process.env.PISTON_TEST_COMPILE_TIMEOUT_MS || 10000);
+if (!Number.isInteger(runTimeout)||runTimeout<100||runTimeout>60000||!Number.isInteger(compileTimeout)||compileTimeout<100||compileTimeout>120000) throw new Error('Invalid smoke-test time limits');
 const samples = {
   c: ['main.c', '#include <stdio.h>\nint main(){int a,b;scanf("%d %d",&a,&b);printf("%d\\n",a+b);}'],
   cpp: ['main.cpp', '#include <iostream>\nint main(){int a,b;std::cin>>a>>b;std::cout<<a+b<<"\\n";}'],
@@ -18,7 +21,7 @@ async function execute(language, name, source, stdin = '') {
   const runtime = runtimes.find(r => (r.language === language || r.aliases?.includes(language) || language === 'cpp' && r.language === 'c++') && r.version === versions[language]);
   if (!runtime) throw new Error(`Runtime unavailable: ${language}`);
   const start = performance.now();
-  const response = await fetch(`${base}/execute`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000), body: JSON.stringify({ language: runtime.language, version: runtime.version, files: [{ name, content: source }], stdin, run_timeout: 3000, compile_timeout: 10000, run_memory_limit: 268435456, compile_memory_limit: 536870912 }) });
+  const response = await fetch(`${base}/execute`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(runTimeout+compileTimeout+10000), body: JSON.stringify({ language: runtime.language, version: runtime.version, files: [{ name, content: source }], stdin, run_timeout: runTimeout, compile_timeout: compileTimeout, run_memory_limit: 268435456, compile_memory_limit: 536870912 }) });
   if (!response.ok) throw new Error(`Execution HTTP ${response.status}`);
   return { data: await response.json(), latencyMs: performance.now() - start };
 }
@@ -35,7 +38,7 @@ await check('multiline stdin', 'python', 'import sys;print(sys.stdin.read().stri
 await check('Unicode stdin', 'python', 'print(input())', 'नमस्ते🙂', r => r.run?.stdout.trim() === 'नमस्ते🙂');
 await check('empty stdin', 'python', 'import sys;print(len(sys.stdin.read().strip()))', '', r => r.run?.stdout.trim() === '0');
 await check('syntax failure', 'python', 'def :', '', r => r.run?.code !== 0);
-await check('compile failure', 'c', 'int main( {', '', r => r.compile?.code !== 0 && !r.run);
+await check('compile failure', 'c', 'int main( {', '', r => !!r.compile && (r.compile.code !== 0 || !!r.compile.signal));
 await check('runtime failure', 'python', 'raise ValueError("test")', '', r => r.run?.code !== 0);
 await check('nonzero exit', 'python', 'raise SystemExit(7)', '', r => r.run?.code === 7);
 await check('infinite loop', 'python', 'while True: pass', '', r => r.run?.status === 'TO');

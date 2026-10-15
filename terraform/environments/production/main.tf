@@ -146,4 +146,5 @@ module "monitoring" {
   asg_name         = module.asg.asg_name
   db_identifier    = module.rds.db_identifier
   redis_cluster_id = module.redis.redis_cluster_id
+  aws_region       = var.aws_region
 }

@@ -104,11 +104,17 @@ export default function AssessmentBriefingPage({
       setIsLoading(true);
       try {
         const res = await studentAssessmentsAPI.getOverview(id);
-        setData(res.data);
+        const nextData = res.data as {
+          assessment?: Record<string, unknown> | null;
+          attempt?: { status?: string } | null;
+          canRetake?: boolean;
+          completedAttemptsCount?: number;
+        };
+        setData(nextData);
         // Only redirect to result if student finished and cannot retake
         if (
-          (res.data.attempt?.status === "submitted" || res.data.attempt?.status === "auto_submitted") &&
-          res.data.canRetake === false
+          (nextData.attempt?.status === "submitted" || nextData.attempt?.status === "auto_submitted") &&
+          nextData.canRetake === false
         ) {
           router.replace(`/assessments/${id}/result`);
         }
@@ -127,24 +133,28 @@ export default function AssessmentBriefingPage({
   const handleStartExam = async () => {
     if (!agreedToRules || !cameraStreamRef.current) return;
     setIsStarting(true);
-    setStartError(null);
 
     try {
-      if (selectedCamera) setPreferredAssessmentCamera(id, selectedCamera);
-      handoffAssessmentStream(id, cameraStreamRef.current);
-      streamHandedOffRef.current = true;
-      const requestedRetake =
-        new URLSearchParams(window.location.search).get("retake") === "1" ||
-        (data?.completedAttemptsCount > 0 && data?.attempt?.status !== "in_progress") ||
-        (data?.attempt?.status === "in_progress" &&
-          data?.attempt?.startedAt &&
-          Date.now() - new Date(data.attempt.startedAt).getTime() >=
-            Math.max(1, Number(assessment?.durationMinutes) || 45) * 60_000);
-      router.push(`/assessments/${id}/take${requestedRetake ? "?retake=1" : ""}`);
-    } catch (error) {
-      setStartError(error instanceof Error ? error.message : "The assessment could not be started. Please try again.");
-      setIsStarting(false);
+      // Request Fullscreen if supported
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen().catch(() => { });
+      }
+    } catch (e) {
+      // Fullscreen prompt optional fallback
     }
+
+    const attemptToken = Date.now();
+
+    // If re-attempting after completing, ensure fresh attempt is initialized
+    if (data?.completedAttemptsCount > 0 && data?.attempt?.status !== "in_progress") {
+      try {
+        await studentAssessmentsAPI.retakeAttempt(id);
+      } catch (e) {
+        console.error("Retake attempt error:", e);
+      }
+    }
+
+    router.push(`/assessments/${id}/take?attempt=${attemptToken}`);
   };
 
   if (isLoading) {
@@ -228,8 +238,8 @@ export default function AssessmentBriefingPage({
                   {assessment.allowedAttempts === 1
                     ? "1 Attempt Allowed"
                     : assessment.allowedAttempts === 0
-                    ? "Multiple Attempts Allowed"
-                    : `${assessment.allowedAttempts} Attempts Allowed`}
+                      ? "Multiple Attempts Allowed"
+                      : `${assessment.allowedAttempts} Attempts Allowed`}
                 </span>
               </div>
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
@@ -319,8 +329,8 @@ export default function AssessmentBriefingPage({
               {(Array.isArray(assessment.instructions) && assessment.instructions.length > 0
                 ? assessment.instructions
                 : typeof assessment.instructions === "string" && assessment.instructions.trim().length > 0
-                ? assessment.instructions.split("\n").map((s: string) => s.trim()).filter(Boolean)
-                : [
+                  ? assessment.instructions.split("\n").map((s: string) => s.trim()).filter(Boolean)
+                  : [
                     "Camera & Microphone proctoring is enabled to monitor your test environment.",
                     "Fullscreen mode is strictly enforced. Tab switching or exiting fullscreen will trigger security warnings.",
                     "Copy, Paste, and inspect shortcuts are prohibited and recorded.",
@@ -427,8 +437,8 @@ export default function AssessmentBriefingPage({
                 {assessment.isAvailable === false
                   ? "This assessment is currently not accepting new attempts."
                   : data?.completedAttemptsCount > 0
-                  ? "Starting a new attempt will allow you to improve your score. The highest score is permanently saved."
-                  : "Review your devices and rules before entering the secure assessment."}
+                    ? "Starting a new attempt will allow you to improve your score. The highest score is permanently saved."
+                    : "Review your devices and rules before entering the secure assessment."}
               </span>
 
               <button
@@ -440,8 +450,8 @@ export default function AssessmentBriefingPage({
                 {isStarting
                   ? "Launching Exam..."
                   : assessment.isAvailable === false
-                  ? "Assessment Closed"
-                  : "Begin Assessment"}
+                    ? "Assessment Closed"
+                    : "Begin Assessment"}
               </button>
             </div>
           )}
