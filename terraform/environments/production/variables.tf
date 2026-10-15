@@ -88,29 +88,29 @@ variable "judge0_image_tag" {
   default     = "latest"
 }
 
-# Sizing and Instance Types (Cost-optimized AMD64)
+# Sizing and Instance Types (Free-tier eligible Intel x86_64)
 variable "frontend_instance_type" {
   description = "EC2 instance type for Next.js frontend"
   type        = string
-  default     = "t3a.small"
+  default     = "t3.small"
 }
 
 variable "backend_instance_type" {
   description = "EC2 instance type for NestJS backend"
   type        = string
-  default     = "t3a.medium"
+  default     = "t3.small"
 }
 
 variable "piston_instance_type" {
   description = "EC2 instance type for Piston execution engine"
   type        = string
-  default     = "t3a.small"
+  default     = "t3.small"
 }
 
 variable "judge0_instance_type" {
   description = "EC2 instance type for Judge0 execution engine"
   type        = string
-  default     = "t3a.small"
+  default     = "t3.small"
 }
 
 variable "jwt_secret" {
