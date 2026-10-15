@@ -45,6 +45,8 @@ else
   docker pull "$PISTON_IMAGE"
 fi
 
+mkdir -p /var/lib/piston/packages /var/lib/piston/jobs
+
 cat << EOF > /etc/systemd/system/codeskill-piston.service
 [Unit]
 Description=CodeSkill Piston Isolated Execution Engine
@@ -59,6 +61,7 @@ ExecStartPre=-/usr/bin/docker stop codeskill-piston
 ExecStartPre=-/usr/bin/docker rm codeskill-piston
 ExecStart=/usr/bin/docker run --rm --name codeskill-piston \\
   -p 2001:2000 \\
+  -v /var/lib/piston:/piston \\
   --privileged \\
   $PISTON_IMAGE
 ExecStop=/usr/bin/docker stop -t 15 codeskill-piston
