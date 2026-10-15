@@ -11,6 +11,10 @@ const getUserMedia = jest.fn();
 beforeEach(() => {
   jest.clearAllMocks();
   Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
+  // jsdom reports "Not implemented" through its VirtualConsole instead of
+  // throwing, so the hook's defensive try/catch cannot silence this call.
+  // Mock playback in tests; real browsers still exercise HTMLMediaElement.play.
+  jest.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(() => Promise.resolve());
   jest.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
 });
 afterEach(() => jest.restoreAllMocks());
