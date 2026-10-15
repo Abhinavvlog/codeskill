@@ -70,6 +70,37 @@ export class S3Service {
     }
   }
 
+  async uploadBase64Image(dataUrl: string, folder = 'proctoring', label = 'capture'): Promise<string> {
+    if (!this.bucketName) {
+      throw new InternalServerErrorException('S3 Bucket is not configured');
+    }
+    const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl || '');
+    if (!match) throw new InternalServerErrorException('Invalid image capture format');
+    const contentType = `image/${match[1]}`;
+    const body = Buffer.from(match[2], 'base64');
+    if (!body.length || body.length > 2 * 1024 * 1024) {
+      throw new InternalServerErrorException('Image capture exceeds the allowed size');
+    }
+
+    const safeFolder = folder.replace(/[^a-zA-Z0-9/_-]/g, '').replace(/^\/+|\/+$/g, '') || 'proctoring';
+    const safeLabel = label.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48) || 'capture';
+    const ext = match[1] === 'jpeg' ? 'jpg' : match[1];
+    const key = `${safeFolder}/${safeLabel}-${uuidv4()}.${ext}`;
+    try {
+      await this.s3Client.send(new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+        ServerSideEncryption: 'AES256',
+      }));
+      return `https://${this.bucketName}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
+    } catch (error) {
+      this.logger.error('Error uploading proctoring capture to S3', error);
+      throw new InternalServerErrorException('Failed to upload proctoring capture to S3');
+    }
+  }
+
   async deleteFile(fileUrl: string, allowedPrefix: string = 'avatars/'): Promise<void> {
     if (!this.bucketName || !fileUrl || typeof fileUrl !== 'string') {
       return;

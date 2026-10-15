@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { adminAssessmentsAPI, adminQuestionsAPI } from "@/config/api";
+import { adminAssessmentsAPI, adminQuestionsAPI, adminUsersAPI } from "@/config/api";
 import { useAssessmentStore } from "./_store/useAssessmentStore";
 import QuestionPicker from "./_components/QuestionPicker";
 import {
@@ -24,7 +24,7 @@ type AutoSelectionCriteria = {
 function yearLabel(year: string) {
   const suffix = Number(year) % 10 === 1 && Number(year) !== 11 ? "st"
     : Number(year) % 10 === 2 && Number(year) !== 12 ? "nd"
-      : Number(year) % 10 === 3 && Number(year) !== 13 ? "rd" : "th";
+    : Number(year) % 10 === 3 && Number(year) !== 13 ? "rd" : "th";
   return `${year}${suffix} Year`;
 }
 
@@ -168,7 +168,6 @@ function AssessmentBuilder() {
   const updateGroup = (group: "a" | "b" | "both") => {
     setTargetGroup(group);
   };
-
   const clearAutoSelection = (sectionId: string) => {
     setAutoSelections((current) => {
       const next = { ...current };

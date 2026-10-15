@@ -20,6 +20,7 @@ import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
 import { ExecutionService } from '../execution/execution.service';
 import { ExecutionAdmissionService } from '../execution/admission/execution-admission.service';
 import { randomUUID } from 'node:crypto';
+import { S3Service } from '../s3/s3.service';
 
 @Injectable()
 export class AssessmentsService {
@@ -36,6 +37,8 @@ export class AssessmentsService {
     @Optional()
     private readonly executionService?: ExecutionService,
     @Optional() private readonly admission?: ExecutionAdmissionService,
+    @Optional()
+    private readonly s3Service?: S3Service,
   ) {}
 
   private shuffleList<T>(items: T[]): T[] {
@@ -373,6 +376,10 @@ export class AssessmentsService {
       );
     }
 
+    if (dto.startTime && dto.endTime && new Date(dto.startTime) >= new Date(dto.endTime)) {
+      throw new BadRequestException('Assessment end time must be later than its start time.');
+    }
+
     const assessment = this.assessmentRepo.create({
       title: dto.title.trim(),
       code,
@@ -388,8 +395,9 @@ export class AssessmentsService {
       targetDepartments: dto.targetDepartments || [],
       targetCourses: dto.targetCourses || [],
       targetSections: dto.targetSections || [],
-      targetSemesters: dto.targetSemesters || [],
       targetGroups: this.normalizeTargetGroups(dto.targetGroups || []),
+      targetStudentIds: dto.targetStudentIds || [],
+      targetSemesters: dto.targetSemesters || [],
       startTime: dto.startTime ? new Date(dto.startTime) : undefined,
       endTime: dto.endTime ? new Date(dto.endTime) : undefined,
       shuffleQuestions: dto.shuffleQuestions ?? true,
@@ -558,10 +566,12 @@ export class AssessmentsService {
       assessment.allowedAttempts = Number(dto.allowedAttempts);
     if (dto.targetSections !== undefined)
       assessment.targetSections = dto.targetSections;
-    if (dto.targetSemesters !== undefined)
-      assessment.targetSemesters = dto.targetSemesters;
     if (dto.targetGroups !== undefined)
       assessment.targetGroups = this.normalizeTargetGroups(dto.targetGroups);
+    if (dto.targetStudentIds !== undefined)
+      assessment.targetStudentIds = dto.targetStudentIds;
+    if (dto.targetSemesters !== undefined)
+      assessment.targetSemesters = dto.targetSemesters;
     if (!assessment.created_by_id && (adminUser?.id || adminUser?._id)) {
       assessment.created_by_id = adminUser.id || adminUser._id;
     }
@@ -716,6 +726,7 @@ export class AssessmentsService {
         return {
           ...best,
           _id: best?.id,
+          candidateVerification: (best as any)?.candidateVerification || null,
           attemptNumber: studentAttempts.length,
           totalAttempts: studentAttempts.length,
           score: maxScore,
@@ -737,6 +748,8 @@ export class AssessmentsService {
               violationsCount: a.violations?.length || 0,
               responses: a.responses || [],
               violations: a.violations || [],
+              candidateVerification: (a as any).candidateVerification || null,
+              captures: (a as any).captures || [],
             })),
         };
       },
@@ -812,43 +825,45 @@ export class AssessmentsService {
   // STUDENT CANDIDATE METHODS
   // -------------------------------------------------------------
 
+  private isStudentTargeted(
+    assessment: Assessment,
+    studentUser: any,
+    profileContext?: { batch: string; dept: string; studentProfile: any },
+  ) {
+    const profile = profileContext?.studentProfile || studentUser.studentProfile || {};
+    const batch = profileContext?.batch ?? profile.batch ?? '';
+    const dept = profileContext?.dept ?? profile.department ?? '';
+    const studentKeys = [studentUser.id, studentUser._id, studentUser.uid]
+      .filter(Boolean)
+      .map(String);
+    const matches = (targets: string[] | undefined, value: string) =>
+      !targets?.length || (!!value && targets.includes(String(value)));
+    const group = String(profile.group || '')
+      .trim()
+      .replace(/^group[\s_-]*/i, '')
+      .toUpperCase();
+
+    return (
+      (!assessment.targetStudentIds?.length || studentKeys.some((key) => assessment.targetStudentIds.includes(key))) &&
+      matches(assessment.targetBatches, batch) &&
+      matches(assessment.targetDepartments, dept) &&
+      matches(assessment.targetCourses, profile.course || '') &&
+      matches(assessment.targetSemesters, profile.semester == null ? '' : String(profile.semester)) &&
+      matches(assessment.targetSections, profile.section || '') &&
+      matches(assessment.targetGroups, group)
+    );
+  }
+
   private normalizeTargetGroups(groups: string[]): string[] {
     return [...new Set((groups || []).map((group) =>
       String(group).trim().replace(/^group[\s_-]*/i, '').toUpperCase(),
     ).filter((group) => group === 'A' || group === 'B'))];
   }
 
-  private isStudentTargeted(assessment: Assessment, studentUser: any): boolean {
-    const profile = studentUser.studentProfile || {};
-    const batch = profile.batch || '';
-    const department = profile.department || '';
-    const studentKeys = [studentUser.id, studentUser._id, studentUser.uid]
-      .filter(Boolean)
-      .map(String);
-    const group = String(profile.group || '')
-      .trim()
-      .replace(/^group[\s_-]*/i, '')
-      .toUpperCase();
-    const matches = (targets: string[] | undefined, value: string) =>
-      !targets?.length || (!!value && targets.includes(String(value)));
-
-    return (
-      (!assessment.targetStudentIds?.length ||
-        studentKeys.some((key) => assessment.targetStudentIds.includes(key))) &&
-      matches(assessment.targetBatches, batch) &&
-      matches(assessment.targetDepartments, department) &&
-      matches(assessment.targetCourses, profile.course || '') &&
-      matches(
-        assessment.targetSemesters,
-        profile.semester == null ? '' : String(profile.semester),
-      ) &&
-      matches(assessment.targetSections, profile.section || '') &&
-      matches(assessment.targetGroups, group)
-    );
-  }
-
   async getStudentAssessments(studentUser: any) {
     const studentProfile = studentUser.studentProfile || {};
+    const batch = studentProfile.batch || '';
+    const dept = studentProfile.department || '';
 
     const assessments = await this.assessmentRepo
       .createQueryBuilder('a')
@@ -858,8 +873,8 @@ export class AssessmentsService {
       .orderBy('a.createdAt', 'DESC')
       .getMany();
 
-    const filteredAssessments = assessments.filter((assessment) =>
-      this.isStudentTargeted(assessment, studentUser),
+    const filteredAssessments = assessments.filter((a) =>
+      this.isStudentTargeted(a, studentUser, { batch, dept, studentProfile }),
     );
 
     const studentId = String(studentUser.id || studentUser._id);
@@ -1338,13 +1353,19 @@ export class AssessmentsService {
     }
 
     if (dto.violations && Array.isArray(dto.violations)) {
-      attempt.violations = dto.violations.map((v) => ({
+      attempt.violations = dto.violations.map((v: any) => ({
         type: v.type,
         timestamp: v.timestamp ? new Date(v.timestamp) : new Date(),
         details: v.details || '',
+        evidenceUrl: v.evidenceUrl || '',
+        metadata: v.metadata || {},
+        warningIndex: v.warningIndex,
       }));
       attempt.tabSwitchCount = attempt.violations.filter(
         (v) => v.type === 'tab_switch',
+      ).length;
+      attempt.fullscreenExitCount = attempt.violations.filter(
+        (v) => v.type === 'fullscreen_exit',
       ).length;
 
       for (const v of dto.violations) {
@@ -1648,13 +1669,19 @@ export class AssessmentsService {
         ? Math.round((totalCorrect / totalAttempted) * 100)
         : 0;
 
-    const violations = (dto.violations || []).map((v) => ({
+    const violations = (dto.violations || []).map((v: any) => ({
       type: v.type,
       timestamp: v.timestamp ? new Date(v.timestamp) : new Date(),
       details: v.details || '',
+      evidenceUrl: v.evidenceUrl || '',
+      metadata: v.metadata || {},
+      warningIndex: v.warningIndex,
     }));
     const tabSwitches = violations.filter(
       (v) => v.type === 'tab_switch',
+    ).length;
+    const fullscreenExits = violations.filter(
+      (v) => v.type === 'fullscreen_exit',
     ).length;
 
     const prevAttempts = await this.attemptRepo.find({
@@ -1690,6 +1717,7 @@ export class AssessmentsService {
     attempt.totalSkipped = totalSkipped;
     attempt.accuracy = accuracy;
     attempt.tabSwitchCount = tabSwitches;
+    attempt.fullscreenExitCount = fullscreenExits;
     attempt.violations = violations;
 
     await this.attemptRepo.save(attempt);
@@ -1859,6 +1887,154 @@ export class AssessmentsService {
       },
       topicBreakdown,
       reviewQuestions: assessment.allowReview ? reviewQuestions : [],
+    };
+  }
+
+  async verifyIdentity(
+    id: string,
+    dto: { faceDescriptor?: number[]; snapshot?: string },
+    studentUser: any,
+  ) {
+    const studentId = studentUser._id || studentUser.id;
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
+    if (!assessment) throw new NotFoundException('Assessment not found');
+
+    const attempt = await this.attemptRepo.findOne({
+      where: [{ assessmentId: assessment.id, studentId, status: 'in_progress' }],
+      order: { createdAt: 'DESC' },
+    });
+
+    let snapshotUrl = '';
+    if (dto.snapshot && this.s3Service) {
+      snapshotUrl = await this.s3Service.uploadBase64Image(dto.snapshot, 'proctoring', 'verified-ref');
+    }
+
+    const verificationRecord = {
+      faceDescriptor: dto.faceDescriptor || [],
+      snapshotUrl,
+      verifiedAt: new Date().toISOString(),
+    };
+
+    if (attempt) {
+      (attempt as any).candidateVerification = verificationRecord;
+      await this.attemptRepo.save(attempt);
+    }
+
+    return {
+      success: true,
+      verified: true,
+      snapshotUrl,
+    };
+  }
+
+  async recordViolation(
+    id: string,
+    dto: { type: string; timestamp?: string; details?: string; metadata?: any; evidenceSnapshot?: string },
+    studentUser: any,
+  ) {
+    const studentId = studentUser._id || studentUser.id;
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
+    if (!assessment) throw new NotFoundException('Assessment not found');
+
+    let attempt = await this.attemptRepo.findOne({
+      where: [{ assessmentId: assessment.id, studentId, status: 'in_progress' }],
+      order: { createdAt: 'DESC' },
+    });
+
+    if (!attempt) {
+      attempt = await this.attemptRepo.findOne({
+        where: [{ assessmentId: assessment.id, studentId }],
+        order: { createdAt: 'DESC' },
+      });
+    }
+
+    if (!attempt) {
+      throw new NotFoundException('Active assessment attempt not found');
+    }
+
+    let evidenceUrl = '';
+    if (dto.evidenceSnapshot && this.s3Service) {
+      evidenceUrl = await this.s3Service.uploadBase64Image(dto.evidenceSnapshot, 'proctoring', `violation-${dto.type}`);
+    }
+
+    const existingViolations = Array.isArray(attempt.violations) ? attempt.violations : [];
+    const warningIndex = existingViolations.length + 1;
+
+    const newViolation = {
+      type: dto.type,
+      timestamp: dto.timestamp ? new Date(dto.timestamp) : new Date(),
+      details: dto.details || '',
+      evidenceUrl,
+      metadata: dto.metadata || {},
+      warningIndex,
+    };
+
+    attempt.violations = [...existingViolations, newViolation];
+    if (dto.type === 'tab_switch') {
+      attempt.tabSwitchCount = (attempt.tabSwitchCount || 0) + 1;
+    }
+    if (dto.type === 'fullscreen_exit') {
+      attempt.fullscreenExitCount = (attempt.fullscreenExitCount || 0) + 1;
+    }
+
+    const faceWarningTypes = new Set([
+      'face_not_detected',
+      'multiple_faces',
+      'face_mismatch',
+      'looking_away',
+    ]);
+    const faceWarningCount = attempt.violations.filter((event: any) => faceWarningTypes.has(event.type)).length;
+    const warningLimit = 5;
+    const forceSubmit = faceWarningCount >= warningLimit;
+
+    await this.attemptRepo.save(attempt);
+
+    return {
+      success: true,
+      warnings: faceWarningCount,
+      warningLimit,
+      forceSubmit,
+      violation: newViolation,
+    };
+  }
+
+  async recordProctorCapture(
+    id: string,
+    dto: { type: string; image: string; filename?: string; timestamp?: string; identifier?: string; project?: string },
+    studentUser: any,
+  ) {
+    const studentId = studentUser._id || studentUser.id;
+    const assessment = await this.assessmentRepo.findOne({
+      where: [{ id }, { mongoId: id }],
+    });
+    if (!assessment) throw new NotFoundException('Assessment not found');
+
+    const attempt = await this.attemptRepo.findOne({
+      where: { assessmentId: assessment.id, studentId, status: 'in_progress' },
+      order: { createdAt: 'DESC' },
+    });
+    if (!attempt) throw new NotFoundException('Active assessment attempt not found');
+
+    const capturedAt = dto.timestamp ? new Date(dto.timestamp) : new Date();
+    if (Number.isNaN(capturedAt.getTime())) throw new BadRequestException('Invalid capture timestamp');
+    if (!this.s3Service) throw new BadRequestException('Proctoring storage is not available');
+    const url = await this.s3Service.uploadBase64Image(dto.image, 'proctoring', `capture-${dto.type}`);
+    const objectKey = decodeURIComponent(new URL(url).pathname.replace(/^\/+/, ''));
+
+    const captures = Array.isArray((attempt as any).captures) ? (attempt as any).captures : [];
+    (attempt as any).captures = [...captures, { type: dto.type, url, objectKey, timestamp: capturedAt, filename: dto.filename }];
+    await this.attemptRepo.save(attempt);
+
+    return {
+      success: true,
+      savedToS3: true,
+      url,
+      objectKey,
+      timestamp: capturedAt.toISOString(),
     };
   }
 }

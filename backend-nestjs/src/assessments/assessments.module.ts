@@ -9,10 +9,12 @@ import { AssessmentsAdminController } from './assessments-admin.controller';
 import { AssessmentsStudentController } from './assessments-student.controller';
 
 import { ExecutionModule } from '../execution/execution.module';
+import { S3Module } from '../s3/s3.module';
 
 @Module({
   imports: [
     ExecutionModule,
+    S3Module,
     TypeOrmModule.forFeature([
       Assessment,
       AssessmentAttempt,
