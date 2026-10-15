@@ -1,6 +1,5 @@
 import {
   IsString,
-  IsNotEmpty,
   IsOptional,
   IsNumber,
   IsBoolean,
@@ -12,38 +11,12 @@ import {
 import { Type } from 'class-transformer';
 import { AssessmentSectionDto } from './create-assessment.dto';
 
-class UpdateAssessmentProctoringDto {
-  @IsBoolean()
-  @IsOptional()
-  enforceFullscreen?: boolean;
-
-  @IsBoolean()
-  @IsOptional()
-  blockCopyPaste?: boolean;
-
-  @IsBoolean()
-  @IsOptional()
-  detectTabSwitch?: boolean;
-
-  @IsNumber()
-  @Type(() => Number)
-  @Min(0)
-  @IsOptional()
-  maxTabSwitches?: number;
-
-  @IsBoolean()
-  @IsOptional()
-  autoSubmitOnViolation?: boolean;
-}
-
 export class UpdateAssessmentDto {
   @IsString()
-  @IsNotEmpty()
   @IsOptional()
   title?: string;
 
   @IsString()
-  @IsNotEmpty()
   @IsOptional()
   code?: string;
 
@@ -56,21 +29,15 @@ export class UpdateAssessmentDto {
   @IsEnum(['mcq', 'coding', 'hybrid'])
   type?: 'mcq' | 'coding' | 'hybrid';
 
-  @IsString()
-  @IsOptional()
-  @IsEnum(['exam', 'quiz', 'practice', 'recruitment'])
-  category?: string;
-
   @IsNumber()
   @Type(() => Number)
-  @Min(5)
+  @Min(1)
   @IsOptional()
   durationMinutes?: number;
 
   @IsNumber()
   @Type(() => Number)
   @IsOptional()
-  @Min(0)
   passingMarks?: number;
 
   @IsBoolean()
@@ -135,10 +102,14 @@ export class UpdateAssessmentDto {
   @IsOptional()
   allowReview?: boolean;
 
-  @ValidateNested()
-  @Type(() => UpdateAssessmentProctoringDto)
   @IsOptional()
-  proctoring?: UpdateAssessmentProctoringDto;
+  proctoring?: {
+    enforceFullscreen?: boolean;
+    blockCopyPaste?: boolean;
+    detectTabSwitch?: boolean;
+    maxTabSwitches?: number;
+    autoSubmitOnViolation?: boolean;
+  };
 
   @IsArray()
   @IsString({ each: true })
