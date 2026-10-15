@@ -335,6 +335,7 @@ export class AssessmentsService {
           description: sec.description || '',
           order: sec.order || 0,
           timeLimit: sec.timeLimit || 0,
+          autoSelection: sec.autoSelection,
           questions: questionsToSave,
         });
       }
@@ -542,6 +543,7 @@ export class AssessmentsService {
     if (dto.title !== undefined) assessment.title = dto.title;
     if (dto.code !== undefined) assessment.code = dto.code.toUpperCase().trim();
     if (dto.description !== undefined) assessment.description = dto.description;
+    if (dto.category !== undefined) assessment.category = dto.category;
     if (dto.durationMinutes !== undefined)
       assessment.durationMinutes = dto.durationMinutes;
     if (dto.passingMarks !== undefined)
@@ -583,48 +585,66 @@ export class AssessmentsService {
       };
     }
 
-    if (
-      dto.sections &&
-      Array.isArray(dto.sections) &&
-      dto.sections.length > 0
-    ) {
+    if (dto.sections !== undefined && Array.isArray(dto.sections)) {
       const qIds: string[] = [];
       let tMarks = 0;
       const sectionsToSave: any[] = [];
 
-      dto.sections.forEach((sec) => {
-        sec.questions.forEach((q) => {
-          qIds.push(String(q.questionId));
-          tMarks += q.marks || 1;
+      for (const sec of dto.sections) {
+        const sectionQuestions = (sec.questions || []).map((question) => ({
+          questionId: String(question.questionId),
+          marks: Number(question.marks),
+          negativeMarks: Number(question.negativeMarks || 0),
+          order: Number(question.order || 0),
+        }));
+        sectionQuestions.forEach((question) => {
+          qIds.push(question.questionId);
+          tMarks += question.marks;
         });
         sectionsToSave.push({
           title: sec.title,
           description: sec.description || '',
           order: sec.order || 0,
           timeLimit: sec.timeLimit || 0,
-          questions: sec.questions.map((q) => ({
-            questionId: String(q.questionId),
-            marks: q.marks || 1,
-            negativeMarks: q.negativeMarks || 0,
-            order: q.order || 0,
-          })),
+          autoSelection: sec.autoSelection,
+          questions: sectionQuestions,
         });
+      }
+      if (qIds.length === 0) {
+        throw new BadRequestException('At least one question is required across the assessment sections.');
+      }
+      this.validateNoDuplicateQuestionIds(qIds);
+      const questionCount = await this.questionRepo.count({
+        where: [{ id: In(qIds) }, { mongoId: In(qIds) }],
       });
+      if (questionCount !== qIds.length) {
+        throw new BadRequestException('One or more valid questions could not be found.');
+      }
       assessment.sections = sectionsToSave;
       assessment.questions = qIds;
       assessment.totalMarks = tMarks;
     } else if (dto.questionIds && Array.isArray(dto.questionIds)) {
       const qIds = dto.questionIds.map((qId) => String(qId));
+      if (qIds.length === 0) {
+        throw new BadRequestException('At least one question is required for the assessment.');
+      }
+      this.validateNoDuplicateQuestionIds(qIds);
       assessment.questions = qIds;
       const questionsList = await this.questionRepo.find({
         where: [{ id: In(qIds) }, { mongoId: In(qIds) }],
       });
+      if (questionsList.length !== qIds.length) {
+        throw new BadRequestException('One or more valid questions could not be found.');
+      }
       assessment.totalMarks = questionsList.reduce(
         (sum, q) => sum + (q.marks || 1),
         0,
       );
     }
 
+    if (assessment.passingMarks < 0 || assessment.passingMarks > assessment.totalMarks) {
+      throw new BadRequestException('Passing marks must be between zero and total marks.');
+    }
     await this.assessmentRepo.save(assessment);
 
     await this.auditLogRepo.save(
