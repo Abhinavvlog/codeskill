@@ -25,9 +25,9 @@ afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
 it("stops both tracks before the manual submission API resolves", async () => {
   render(<Page params={Promise.resolve({ id: "exam" })} />);
   fireEvent.click(await screen.findByRole("button", { name: "Enter Fullscreen" }));
-  await screen.findByRole("button", { name: "Finish & Submit Test" });
+  await screen.findByRole("button", { name: "Submit Test" });
   await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(1));
-  fireEvent.click(screen.getByRole("button", { name: "Finish & Submit Test" }));
+  fireEvent.click(screen.getByRole("button", { name: "Submit Test" }));
   expect(videoStop).not.toHaveBeenCalled(); // Opening confirmation does not end the session.
   fireEvent.click(screen.getByRole("button", { name: "Yes, Submit Now" }));
   expect(videoStop).toHaveBeenCalledTimes(1); expect(audioStop).toHaveBeenCalledTimes(1);
