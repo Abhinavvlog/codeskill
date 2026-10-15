@@ -11,6 +11,7 @@ const getUserMedia = jest.fn();
 beforeEach(() => {
   jest.clearAllMocks();
   Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
+  jest.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
   jest.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
 });
 afterEach(() => jest.restoreAllMocks());

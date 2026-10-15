@@ -99,6 +99,7 @@ it("combines subject, dependent topic, difficulty, and search while retaining pa
   fireEvent.click(screen.getByText(secondQuestion.question).closest("div.flex.items-start")!);
 
   fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+  await screen.findByText("Page 1 of 1");
   expect(screen.getByRole("combobox", { name: "Subject" })).toHaveValue("");
   expect(screen.getByRole("combobox", { name: "Topic" })).toHaveValue("");
   expect(screen.getByRole("combobox", { name: "Difficulty Level" })).toHaveValue("");
