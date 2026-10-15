@@ -89,13 +89,15 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
   const containerRef = useRef<HTMLDivElement>(null);
 
   useGSAP(() => {
-    gsap.from(".coding-action-bar", {
-      opacity: 0,
-      y: 20,
-      duration: 0.4,
-      ease: "power2.out"
-    });
-  }, { scope: containerRef });
+    if (!loading && containerRef.current?.querySelector(".coding-action-bar")) {
+      gsap.from(".coding-action-bar", {
+        opacity: 0,
+        y: 20,
+        duration: 0.4,
+        ease: "power2.out"
+      });
+    }
+  }, { scope: containerRef, dependencies: [loading] });
   
   // Tab State
   const [activeSidebarTab, setActiveSidebarTab] = useState("description");

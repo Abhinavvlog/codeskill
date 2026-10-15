@@ -358,15 +358,22 @@ export const adminStudentsAPI = {
     api.put(`/admin/students/${id}/status`, { isActive }),
   deactivate: (id: string) => api.delete(`/admin/students/${id}`),
   resetPassword: (id: string) => api.post(`/admin/students/${id}/reset-password`),
-  importPreview: (file: File) => {
+  importPreview: (file: File, defaultOptions?: any) => {
     const formData = new FormData();
     formData.append("file", file);
+    if (defaultOptions) {
+      Object.entries(defaultOptions).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== "") {
+          formData.append(k, String(v));
+        }
+      });
+    }
     return api.post("/admin/students/import", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
-  confirmImport: (validRows: any[]) =>
-    api.post("/admin/students/import/confirm", { validRows }),
+  confirmImport: (validRows: any[], defaultOptions?: any) =>
+    api.post("/admin/students/import/confirm", { validRows, defaultOptions }),
   sendCredentials: (jobIds?: string[], portalUrl?: string) =>
     api.post("/admin/students/send-credentials", { jobIds, portalUrl }),
   sendSingleCredential: (studentId: string, portalUrl?: string) =>
@@ -395,6 +402,7 @@ export const adminQuestionsAPI = {
   getById: (id: string) => api.get(`/admin/questions/${id}`),
   create: (data: any) => api.post("/admin/questions", data),
   update: (id: string, data: any) => api.put(`/admin/questions/${id}`, data),
+  bulkUpdate: (ids: string[], updates: any) => api.put("/admin/questions/bulk", { ids, updates }),
   delete: (id: string) => api.delete(`/admin/questions/${id}`),
   approve: (id: string) => api.put(`/admin/questions/${id}/approve`),
   reject: (id: string, reason: string) => api.put(`/admin/questions/${id}/reject`, { reason }),
@@ -406,12 +414,12 @@ export const adminQuestionsAPI = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
-  confirmImport: (validRows: any[]) =>
-    api.post("/admin/questions/import/confirm", { validRows }),
-  autoImport: (file: File) => {
+  confirmImport: (validRows: any[], mergeStrategy?: 'skip' | 'update' | 'merge') =>
+    api.post("/admin/questions/import/confirm", { validRows, mergeStrategy }),
+  autoImport: (file: File, mergeStrategy?: 'skip' | 'update' | 'merge') => {
     const formData = new FormData();
     formData.append("file", file);
-    return api.post("/admin/questions/import/auto", formData, {
+    return api.post(`/admin/questions/import/auto${mergeStrategy ? `?mergeStrategy=${mergeStrategy}` : ""}`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },

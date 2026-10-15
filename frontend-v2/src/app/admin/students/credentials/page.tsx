@@ -128,9 +128,14 @@ export default function CredentialsPage() {
   };
 
   const handleSendSingle = async (job: EmailJob) => {
+    const studentTargetId = job.studentId || (job as any).student_id || job._id;
+    if (!studentTargetId || studentTargetId === "undefined") {
+      alert("Unable to find a valid student ID for this email job.");
+      return;
+    }
     setSendingSingleId(job._id);
     try {
-      await adminStudentsAPI.sendSingleCredential(job.studentId);
+      await adminStudentsAPI.sendSingleCredential(studentTargetId);
       fetchEmailStatus();
     } catch (err: any) {
       alert(err.response?.data?.message || "Failed to send credential email.");

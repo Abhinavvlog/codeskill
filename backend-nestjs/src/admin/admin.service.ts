@@ -404,9 +404,17 @@ export class AdminService {
     if (endTime <= startTime) {
       throw new BadRequestException('End time must be after start time');
     }
-    const problems = Array.isArray(body?.problems) ? body.problems : [];
+    const rawProblems = Array.isArray(body?.problems) ? body.problems : [];
+    if (rawProblems.length === 0) {
+      throw new BadRequestException('Select at least one problem');
+    }
+    const problems = rawProblems.map((p: any) => String(p).trim()).filter(Boolean);
     if (problems.length === 0) {
       throw new BadRequestException('Select at least one problem');
+    }
+    const uniqueProblems = [...new Set(problems)];
+    if (uniqueProblems.length !== problems.length) {
+      throw new BadRequestException('Contest contains duplicate problems');
     }
     if (body?.isPrivate && !String(body?.password || '').trim()) {
       throw new BadRequestException('Private contests require a password');
