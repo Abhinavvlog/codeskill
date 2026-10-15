@@ -3,6 +3,7 @@ import "@testing-library/jest-dom";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import Page from "@/app/assessments/[id]/take/page";
 import { studentAssessmentsAPI, azureRunAPI } from "@/config/api";
+import { clearAssessmentFaceReference, setAssessmentFaceReference } from "@/lib/assessment-face-verification";
 
 jest.mock("react", () => ({ ...jest.requireActual("react"), use: () => ({ id: "workspace" }) }));
 jest.mock("next/navigation", () => ({ useRouter: () => ({ replace: jest.fn() }) }));
@@ -15,7 +16,7 @@ jest.mock("@/config/api", () => ({
   azureRunAPI: { run: jest.fn() },
 }));
 jest.mock("@/hooks/useAssessmentMedia", () => ({ useAssessmentMedia: () => ({
-  attachVideo: jest.fn(), cameraActive: true, micActive: true, audioLevel: 0,
+  videoRef: { current: null }, attachVideo: jest.fn(), cameraActive: true, micActive: true, audioLevel: 0,
   faceCount: 1, faceDetectionStatus: "active", stopCamera: jest.fn(),
 }) }));
 jest.mock("@/components/assessment/SafeExamBrowser", () => ({ children, onFullscreenEntered }: any) =>
@@ -34,10 +35,12 @@ async function start() {
 }
 beforeEach(() => {
   jest.clearAllMocks();
+  setAssessmentFaceReference("workspace", { embedding: [0.1, 0.2], capturedAt: Date.now() });
   jest.mocked(studentAssessmentsAPI.startAttempt).mockResolvedValue({ data: { title: "Workspace check", durationMinutes: 60, startedAt: new Date().toISOString(), questions, savedResponses: [{ questionId: "coding", code: "", language: "python", selectedAnswer: -1, status: "unvisited" }] } });
   jest.mocked(studentAssessmentsAPI.submitAttempt).mockResolvedValue({} as any);
   jest.mocked(azureRunAPI.run).mockResolvedValue({ data: { passedCount: 1, totalCount: 1, results: [{ passed: true, stdout: "hello", status: "accepted" }] } } as any);
 });
+afterEach(() => clearAssessmentFaceReference("workspace"));
 
 it("keeps MCQ answers and coding drafts across sidebar navigation and review", async () => {
   await start();

@@ -3,6 +3,7 @@ import "@testing-library/jest-dom";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import Page from "@/app/assessments/[id]/take/page";
 import { studentAssessmentsAPI } from "@/config/api";
+import { clearAssessmentFaceReference, setAssessmentFaceReference } from "@/lib/assessment-face-verification";
 const replace = jest.fn();
 const mockRouter = { replace };
 jest.mock("react", () => ({ ...jest.requireActual("react"), use: () => ({ id: "exam" }) }));
@@ -14,6 +15,7 @@ const getUserMedia = jest.fn();
 let videoStop: jest.Mock; let audioStop: jest.Mock;
 beforeEach(() => {
   jest.clearAllMocks(); videoStop = jest.fn(); audioStop = jest.fn();
+  setAssessmentFaceReference("exam", { embedding: [0.1, 0.2], capturedAt: Date.now() });
   Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
   getUserMedia.mockResolvedValue({ getTracks: () => [{ stop: videoStop }, { stop: audioStop }] });
   jest.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
@@ -21,7 +23,7 @@ beforeEach(() => {
   jest.mocked(studentAssessmentsAPI.startAttempt).mockResolvedValue({ data: { durationMinutes: 1, startedAt: new Date().toISOString(), questions: [{ _id: "q1", question: "Question", questionType: "MCQ", options: ["A", "B"], marks: 1, difficulty: "easy" }] } });
   jest.mocked(studentAssessmentsAPI.submitAttempt).mockImplementation(() => new Promise(() => {}));
 });
-afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
+afterEach(() => { clearAssessmentFaceReference("exam"); jest.restoreAllMocks(); jest.useRealTimers(); });
 it("stops both tracks before the manual submission API resolves", async () => {
   render(<Page params={Promise.resolve({ id: "exam" })} />);
   fireEvent.click(await screen.findByRole("button", { name: "Enter Fullscreen" }));
@@ -38,8 +40,13 @@ it("stops media for forced termination even when submission fails", async () => 
   jest.spyOn(console, "error").mockImplementation(() => {});
   render(<Page params={Promise.resolve({ id: "exam" })} />); fireEvent.click(await screen.findByRole("button", { name: "Enter Fullscreen" })); await screen.findByRole("button", { name: "Force termination" });
   await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(1));
+  jest.useFakeTimers();
   fireEvent.click(screen.getByRole("button", { name: "Force termination" }));
-  await waitFor(() => expect(replace).toHaveBeenCalledWith("/assessments/exam/result"));
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  expect(studentAssessmentsAPI.submitAttempt).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("Finalizing your assessment")).toBeInTheDocument();
+  await act(async () => { jest.advanceTimersByTime(2500); await Promise.resolve(); });
+  expect(replace).toHaveBeenCalledWith("/assessments/exam/result");
   expect(videoStop).toHaveBeenCalledTimes(1); expect(audioStop).toHaveBeenCalledTimes(1);
   expect(getUserMedia).toHaveBeenCalledTimes(1);
 });
