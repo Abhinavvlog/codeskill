@@ -64,7 +64,7 @@ export default function CreateQuestionContent() {
 
 function UnifiedQuestionForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const searchParams = typeof useSearchParams === "function" ? useSearchParams() : null;
   const formRef = useRef<HTMLFormElement>(null);
   const [loading, setLoading] = useState(false);
   const { addToast } = useToast();
@@ -75,7 +75,12 @@ function UnifiedQuestionForm() {
 
   // React to ?type=mcq or ?type=coding from URL
   useEffect(() => {
-    const typeParam = searchParams?.get("type")?.toLowerCase();
+    let typeParam: string | null | undefined = null;
+    if (searchParams && typeof searchParams.get === "function") {
+      typeParam = searchParams.get("type")?.toLowerCase();
+    } else if (typeof window !== "undefined" && window.location?.search) {
+      typeParam = new URLSearchParams(window.location.search).get("type")?.toLowerCase();
+    }
     if (typeParam === "mcq" || typeParam === "multiple_choice") {
       updateMetadata({ questionType: "MCQ" });
     } else if (typeParam === "coding" || typeParam === "dsa") {

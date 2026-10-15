@@ -6,7 +6,11 @@ import EditQuestion from "@/app/admin/questions/[id]/edit/page";
 import { useQuestionStore } from "@/app/admin/questions/create/_store/useQuestionStore";
 import { adminQuestionsAPI, adminProblemsAPI } from "@/config/api";
 
-jest.mock("next/navigation", () => ({ useRouter: () => ({ push: jest.fn() }), useParams: () => ({ id: "question-1" }) }));
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ push: jest.fn() }),
+  useParams: () => ({ id: "question-1" }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 jest.mock("@/config/api", () => ({
   adminQuestionsAPI: { create: jest.fn(), getById: jest.fn(), update: jest.fn() },
   adminProblemsAPI: { getById: jest.fn(), update: jest.fn() },
