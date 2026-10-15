@@ -8,7 +8,7 @@ const replace = jest.fn();
 const mockRouter = { replace };
 jest.mock("react", () => ({ ...jest.requireActual("react"), use: () => ({ id: "exam" }) }));
 jest.mock("next/navigation", () => ({ useRouter: () => mockRouter }));
-jest.mock("@/config/api", () => ({ studentAssessmentsAPI: { startAttempt: jest.fn(), submitAttempt: jest.fn(), saveProgress: jest.fn().mockResolvedValue({}) } }));
+jest.mock("@/config/api", () => ({ studentAssessmentsAPI: { getOverview: jest.fn().mockResolvedValue({ data: { assessment: { proctoring: {} } } }), startAttempt: jest.fn(), submitAttempt: jest.fn(), saveProgress: jest.fn().mockResolvedValue({}) } }));
 jest.mock("@/components/assessment/DSAAssessmentEditor", () => () => null);
 jest.mock("@/components/assessment/SafeExamBrowser", () => ({ children, onTerminate, onFullscreenEntered }: { children: React.ReactNode; onTerminate: () => void; onFullscreenEntered: () => void }) => <div><button onClick={onFullscreenEntered}>Enter Fullscreen</button>{children}<button onClick={onTerminate}>Force termination</button></div>);
 const getUserMedia = jest.fn();

@@ -15,6 +15,10 @@ import { AssessmentSectionDto } from './create-assessment.dto';
 class UpdateAssessmentProctoringDto {
   @IsBoolean()
   @IsOptional()
+  useCamera?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
   enforceFullscreen?: boolean;
 
   @IsBoolean()

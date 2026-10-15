@@ -408,6 +408,7 @@ export class AssessmentsService {
       allowedAttempts:
         dto.allowedAttempts !== undefined ? Number(dto.allowedAttempts) : 1,
       proctoring: dto.proctoring || {
+        useCamera: true,
         enforceFullscreen: true,
         blockCopyPaste: true,
         detectTabSwitch: true,

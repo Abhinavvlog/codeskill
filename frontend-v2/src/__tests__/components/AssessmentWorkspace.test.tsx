@@ -12,7 +12,7 @@ jest.mock("next/dynamic", () => () => function MockEditor({ value, onChange, opt
 });
 jest.mock("@/hooks/useExecutionRuntimes", () => ({ useExecutionRuntimes: () => [] }));
 jest.mock("@/config/api", () => ({
-  studentAssessmentsAPI: { startAttempt: jest.fn(), submitAttempt: jest.fn(), saveProgress: jest.fn().mockResolvedValue({}) },
+  studentAssessmentsAPI: { getOverview: jest.fn().mockResolvedValue({ data: { assessment: { proctoring: {} } } }), startAttempt: jest.fn(), submitAttempt: jest.fn(), saveProgress: jest.fn().mockResolvedValue({}) },
   azureRunAPI: { run: jest.fn() },
 }));
 jest.mock("@/hooks/useAssessmentMedia", () => ({ useAssessmentMedia: () => ({
