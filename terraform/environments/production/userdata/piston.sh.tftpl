@@ -35,7 +35,11 @@ PISTON_IMAGE="${piston_image}"
 if [ -n "$PISTON_IMAGE" ] && [ "$PISTON_IMAGE" != "none" ]; then
   ECR_REGISTRY="${ecr_registry}"
   aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY" || true
-  docker pull "$PISTON_IMAGE" || true
+  if ! docker pull "$PISTON_IMAGE"; then
+    echo "ECR pull failed, falling back to public ghcr.io/engineer-man/piston"
+    PISTON_IMAGE="ghcr.io/engineer-man/piston"
+    docker pull "$PISTON_IMAGE"
+  fi
 else
   PISTON_IMAGE="ghcr.io/engineer-man/piston"
   docker pull "$PISTON_IMAGE"

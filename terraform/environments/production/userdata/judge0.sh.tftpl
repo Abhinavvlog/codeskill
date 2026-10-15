@@ -35,7 +35,11 @@ JUDGE0_IMAGE="${judge0_image}"
 if [ -n "$JUDGE0_IMAGE" ] && [ "$JUDGE0_IMAGE" != "none" ]; then
   ECR_REGISTRY="${ecr_registry}"
   aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY" || true
-  docker pull "$JUDGE0_IMAGE" || true
+  if ! docker pull "$JUDGE0_IMAGE"; then
+    echo "ECR pull failed, falling back to public judge0/judge0:latest"
+    JUDGE0_IMAGE="judge0/judge0:latest"
+    docker pull "$JUDGE0_IMAGE" || true
+  fi
 else
   JUDGE0_IMAGE="judge0/judge0:latest"
   docker pull "$JUDGE0_IMAGE" || true
