@@ -23,6 +23,7 @@ import {
   canonicalLanguage,
 } from '../execution/execution.types';
 import { ProblemsService } from '../problems/problems.service';
+import { ExecutionAdmissionService } from '../execution/admission/execution-admission.service';
 
 export enum SubmissionStatus {
   QUEUED = 'queued',
@@ -51,6 +52,7 @@ export class SubmissionsService {
     private readonly redisService: RedisService,
     private readonly problemsService: ProblemsService,
     @Optional() private readonly executionService?: ExecutionService,
+    @Optional() private readonly admission?: ExecutionAdmissionService,
   ) {}
 
   async createSubmission(userId: string, data: unknown) {
@@ -116,8 +118,18 @@ export class SubmissionsService {
         throw new BadRequestException('This language runtime is unavailable');
     }
 
-    // 1. Create submission in PostgreSQL with status 'queued'
+    if (!this.admission)
+      throw new ServiceUnavailableException(
+        'Execution admission control is unavailable',
+      );
+    const admissionId = await this.admission.reserve(userId, {
+      kind: 'submission',
+      problemId: problem.id,
+      language: resolvedLanguage,
+      code,
+    });
     const submission = this.submissionRepo.create({
+      id: admissionId,
       userId,
       user: { id: userId },
       problemId: problem.id,
@@ -128,28 +140,8 @@ export class SubmissionsService {
       queuedAt: new Date(),
       testResults: [],
     });
-    await this.submissionRepo.save(submission);
-
-    // 2. Increment active running jobs for user in Redis
-    const client = this.redisService.getClient();
-    if (client) {
-      const reserved = Number(await client.eval(`
-        local count = tonumber(redis.call('GET', KEYS[1]) or '0')
-        if count >= tonumber(ARGV[1]) then return 0 end
-        redis.call('INCR', KEYS[1])
-        redis.call('EXPIRE', KEYS[1], 3600)
-        return 1
-      `, 1, `active:submissions:${userId}`, Number(process.env.MAX_CONCURRENT_JOBS_PER_USER) || 2));
-      if (!reserved) {
-        submission.status = SubmissionStatus.CANCELLED;
-        submission.completedAt = new Date();
-        await this.submissionRepo.save(submission);
-        throw new HttpException('Too many outstanding submissions', HttpStatus.TOO_MANY_REQUESTS);
-      }
-    }
-
-    // 3. Enqueue to BullMQ runner queue
     try {
+      await this.submissionRepo.save(submission);
       await this.submissionQueue.add(
         'evaluate-code',
         {
@@ -159,22 +151,27 @@ export class SubmissionsService {
           code,
           language: langLower,
           userId,
+          admissionId,
         },
         {
-          jobId: String(submission.id),
+          jobId: admissionId,
           attempts: 2,
-          backoff: { type: 'exponential', delay: 2_000 },
+          backoff: { type: 'exponential', delay: 2_000, jitter: 0.25 },
+          priority: 100,
           removeOnComplete: { age: 24 * 60 * 60, count: 5000 },
           removeOnFail: { age: 7 * 24 * 60 * 60, count: 5000 },
         },
       );
     } catch {
-      submission.status = SubmissionStatus.INTERNAL_ERROR;
-      submission.compileOutput =
-        'Unable to queue this submission. Please retry.';
-      submission.completedAt = new Date();
-      await this.submissionRepo.save(submission);
-      if (client) await client.decr(`active:submissions:${userId}`);
+      try {
+        submission.status = SubmissionStatus.INTERNAL_ERROR;
+        submission.compileOutput =
+          'Unable to queue this submission. Please retry.';
+        submission.completedAt = new Date();
+        await this.submissionRepo.save(submission);
+      } finally {
+        await this.admission.release(userId, admissionId);
+      }
       throw new ServiceUnavailableException(
         'Unable to queue this submission. Please retry.',
       );
@@ -289,25 +286,27 @@ export class SubmissionsService {
       );
     }
 
-    try {
-      const job = await this.submissionQueue.getJob(submissionId);
-      if (job) {
+    const job = await this.submissionQueue.getJob(submissionId);
+    if (job) {
+      if ((await job.getState()) === 'active')
+        throw new BadRequestException(
+          'A running submission cannot be cancelled',
+        );
+      try {
         await job.remove();
+      } catch {
+        throw new ServiceUnavailableException(
+          'Submission could not be cancelled; it may have started running',
+        );
       }
-    } catch (err: any) {
-      this.logger.warn(
-        `Could not remove job ${submissionId} from queue: ${err.message}`,
-      );
     }
 
     submission.status = SubmissionStatus.CANCELLED;
     submission.completedAt = new Date();
     await this.submissionRepo.save(submission);
 
-    const client = this.redisService.getClient();
-    if (client) {
-      await client.decr(`active:submissions:${userId}`);
-    }
+    if (this.admission)
+      await this.admission.release(submission.userId, submission.id);
 
     this.appGateway.emitToUser(userId, 'submission_status', {
       submissionId: submission.id,

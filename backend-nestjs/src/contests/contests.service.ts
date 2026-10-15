@@ -408,7 +408,12 @@ export class ContestsService {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pid),
     );
     let problemsSolved = 0;
-    if (problemIds.length > 0) {
+    if (problemIds.length > 0 && this.submissions?.isSharded) {
+      const solved = await this.submissions.contestSolvedProblems(problemIds, [
+        { userId, start: attempt.startedAt, end: new Date() },
+      ]);
+      problemsSolved = new Set(solved.map((row) => row.problemId)).size;
+    } else if (problemIds.length > 0) {
       try {
         const solved = await this.attemptRepo.query(
           `SELECT count(DISTINCT "problemId") as count 

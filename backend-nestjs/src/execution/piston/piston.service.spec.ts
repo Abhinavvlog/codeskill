@@ -21,12 +21,14 @@ describe('Piston contract client (mock transport, not sandbox verification)', ()
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.PISTON_RUNTIME_VERSIONS = JSON.stringify({ python: '3.12.0' });
-    (axios.create as jest.Mock).mockReturnValue({ get, post });
+    (axios.create as jest.Mock).mockReturnValue({ get, post, defaults: {} });
     get.mockResolvedValue({ data: registry });
     post.mockResolvedValue({
       data: { language: 'python', version: '3.12.0', run: stage },
     });
-    service = new PistonService();
+    service = new PistonService({
+      getClient: () => ({ eval: jest.fn().mockResolvedValue(1) }),
+    } as never);
   });
   afterEach(() => {
     process.env = { ...original };
@@ -63,12 +65,12 @@ describe('Piston contract client (mock transport, not sandbox verification)', ()
   });
   it('disables unconfigured versions even if installed', async () => {
     delete service.config.versions.python;
-    await expect(run()).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run()).rejects.toBeInstanceOf(PistonUnavailableError);
     expect(post).not.toHaveBeenCalled();
   });
   it('disables a missing runtime', async () => {
     get.mockResolvedValue({ data: [] });
-    await expect(run()).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run()).rejects.toBeInstanceOf(PistonUnavailableError);
   });
   it('rejects an unsupported language', async () => {
     await expect(
@@ -98,7 +100,10 @@ describe('Piston contract client (mock transport, not sandbox verification)', ()
     expect(service.metrics().circuitOpen).toBe(true);
   });
   it('bounds active HTTP executions without an unbounded in-process queue', async () => {
-    service.config.concurrency = 1;
+    process.env.PISTON_MAX_CONCURRENT_EXECUTIONS = '1';
+    service = new PistonService({
+      getClient: () => ({ eval: jest.fn().mockResolvedValue(1) }),
+    } as never);
     let finish!: (value: unknown) => void;
     post.mockImplementation(
       () =>

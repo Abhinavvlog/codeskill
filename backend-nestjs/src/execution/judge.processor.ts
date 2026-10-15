@@ -1,6 +1,12 @@
-import { PistonUnavailableError } from './piston/piston.types';
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import {
+  JudgeCapacityError,
+  PistonUnavailableError,
+} from './piston/piston.types';
+import { ExecutionAdmissionService } from './admission/execution-admission.service';
+import { randomUUID } from 'node:crypto';
+import { DelayedError, UnrecoverableError } from 'bullmq';
+import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
+import { Logger, Optional } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -43,6 +49,7 @@ export class JudgeProcessor extends WorkerHost {
     private readonly userRepo: Repository<User>,
     private readonly appGateway: AppGateway,
     private readonly redisService: RedisService,
+    @Optional() private readonly admission?: ExecutionAdmissionService,
   ) {
     super();
     this.logger.log(
@@ -50,7 +57,140 @@ export class JudgeProcessor extends WorkerHost {
     );
   }
 
-  async process(job: Job<any, any, string>): Promise<any> {
+  async process(job: Job<any, any, string>, token?: string): Promise<any> {
+    const { admissionId, userId } = job.data as {
+      admissionId?: string;
+      userId?: string;
+    };
+    if (!admissionId) return this.processJob(job);
+    if (!userId || !this.admission)
+      throw new UnrecoverableError('Execution admission control is required');
+    const owner = randomUUID();
+    if (job.timestamp && Date.now() - job.timestamp > this.admission.leaseMs) {
+      await this.admission.release(userId, admissionId);
+      throw new UnrecoverableError('Execution queue deadline expired');
+    }
+    const claim = await this.admission.claim(userId, admissionId, owner);
+    if (claim === 'busy') {
+      // A stalled replay must not consume retries or release the original owner.
+      if (!token) throw new PistonUnavailableError();
+      await job.moveToDelayed(
+        Date.now() + this.admission.heartbeatMs * 2,
+        token,
+      );
+      throw new DelayedError();
+    }
+    if (claim === 'expired') {
+      if (job.name === 'evaluate-code') {
+        const submission = await this.submissionRepo.findOne({
+          where: { id: job.data.submissionId, userId },
+        });
+        if (submission && !submission.completedAt) {
+          submission.status = 'cancelled';
+          submission.completedAt = new Date();
+          submission.compileOutput =
+            'This execution expired while waiting in the queue. Please submit again.';
+          await this.submissionRepo.save(submission);
+        }
+      }
+      throw new UnrecoverableError('Execution reservation expired');
+    }
+    let renewing = false,
+      retry = false;
+    const heartbeat = setInterval(() => {
+      if (renewing) return;
+      renewing = true;
+      void this.admission!.renew(userId, admissionId, owner)
+        .catch(() => this.logger.warn('Execution lease heartbeat unavailable'))
+        .finally(() => {
+          renewing = false;
+        });
+    }, this.admission.heartbeatMs);
+    heartbeat.unref();
+    try {
+      return await this.processJob(job);
+    } catch (error) {
+      if (error instanceof JudgeCapacityError && token) {
+        retry = true;
+        this.appGateway.emitToUser(
+          userId,
+          job.name === 'run-code' ? 'run_status' : 'submission_status',
+          {
+            jobId: job.id,
+            submissionId: job.data.submissionId,
+            status: SubmissionStatus.QUEUED,
+            message: 'Waiting for available judge capacity.',
+          },
+        );
+        await job.moveToDelayed(
+          Date.now() + 2000 + Math.floor(Math.random() * 2000),
+          token,
+        );
+        throw new DelayedError();
+      }
+      retry =
+        error instanceof PistonUnavailableError &&
+        job.attemptsMade + 1 < (job.opts?.attempts || 1);
+      throw error;
+    } finally {
+      clearInterval(heartbeat);
+      if (retry) await this.admission.unclaim(userId, admissionId, owner);
+      else await this.admission.release(userId, admissionId, owner);
+    }
+  }
+
+  @OnWorkerEvent('failed')
+  async onFailed(job: Job | undefined, error: Error) {
+    if (
+      !job ||
+      (job.attemptsMade < (job.opts.attempts || 1) &&
+        !(error instanceof UnrecoverableError))
+    )
+      return;
+    if (job.name === 'evaluate-code') {
+      // Covers failures before processJob (e.g. admission Redis unavailable).
+      // Never overwrite a verdict already committed by a stalled worker.
+      const { userId, submissionId } = job.data;
+      if (userId && submissionId) {
+        try {
+          const changed = await this.submissionRepo.transaction(
+            userId,
+            async (manager) => {
+              const sub = await manager.findOne(Submission, {
+                where: { id: submissionId },
+                lock: { mode: 'pessimistic_write' },
+              });
+              if (!sub || sub.completedAt) return false;
+              sub.status = SubmissionStatus.SYSTEM_ERROR;
+              sub.compileOutput =
+                'Code execution is temporarily unavailable. Please submit again.';
+              sub.completedAt = new Date();
+              await manager.save(Submission, sub);
+              return true;
+            },
+          );
+          if (changed)
+            this.appGateway.emitToUser(userId, 'execution_error', {
+              submissionId,
+              status: SubmissionStatus.SYSTEM_ERROR,
+              error: 'Code execution is temporarily unavailable.',
+            });
+        } catch {
+          this.logger.error('Could not finalize failed submission');
+        }
+      }
+    }
+    if (job.name === 'run-code' && job.data.userId)
+      this.appGateway.emitToUser(job.data.userId, 'execution_error', {
+        jobId: job.id,
+        status: SubmissionStatus.SYSTEM_ERROR,
+        error: 'Code execution is temporarily unavailable.',
+      });
+    if (job.data.userId && job.data.admissionId && this.admission)
+      await this.admission.release(job.data.userId, job.data.admissionId);
+  }
+
+  private async processJob(job: Job<any, any, string>): Promise<any> {
     this.logger.log(
       `[Judge:${this.runnerId}] Processing job ${job.id} — type: ${job.name}`,
     );
@@ -370,8 +510,9 @@ export class JudgeProcessor extends WorkerHost {
         });
 
         const willRetry =
-          err instanceof PistonUnavailableError &&
-          job.attemptsMade + 1 < (job.opts?.attempts || 1);
+          err instanceof JudgeCapacityError ||
+          (err instanceof PistonUnavailableError &&
+            job.attemptsMade + 1 < (job.opts?.attempts || 1));
         const sub = await this.submissionRepo.findOne({
           where: this.submissionLookup(submissionId, userId || job.data.userId),
         });
@@ -400,13 +541,17 @@ export class JudgeProcessor extends WorkerHost {
         throw err;
       } finally {
         const client = this.redisService.getClient();
-        if (client && userId && finalizedHere) {
+        if (client && userId && finalizedHere && !job.data.admissionId) {
           try {
             const latest = await this.submissionRepo.findOne({
               where: { id: submissionId },
             });
             if (latest?.completedAt)
-              await client.eval("local n = tonumber(redis.call('GET', KEYS[1]) or '0'); if n > 0 then return redis.call('DECR', KEYS[1]) end; return 0", 1, `active:submissions:${userId}`);
+              await client.eval(
+                "local n = tonumber(redis.call('GET', KEYS[1]) or '0'); if n > 0 then return redis.call('DECR', KEYS[1]) end; return 0",
+                1,
+                `active:submissions:${userId}`,
+              );
           } catch (e) {
             // Ignore redis cleanup error
           }

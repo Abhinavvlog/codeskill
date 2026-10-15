@@ -1,3 +1,5 @@
+import { ServiceUnavailableException } from '@nestjs/common';
+
 export interface PistonRuntime {
   language: string;
   version: string;
@@ -32,8 +34,12 @@ export interface PistonRequest {
   run_memory_limit: number;
   compile_memory_limit: number;
 }
-export class PistonUnavailableError extends Error {
+export type CircuitState = 'closed' | 'open' | 'half-open';
+export class PistonUnavailableError extends ServiceUnavailableException {
   constructor() {
     super('Code execution is temporarily unavailable. Please retry.');
   }
 }
+
+/** A healthy fleet is occupied; queued work should wait without a student verdict. */
+export class JudgeCapacityError extends PistonUnavailableError {}

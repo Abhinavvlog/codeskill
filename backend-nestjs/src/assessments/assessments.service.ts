@@ -18,6 +18,8 @@ import { CreateAssessmentDto } from './dto/create-assessment.dto';
 import { UpdateAssessmentDto } from './dto/update-assessment.dto';
 import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
 import { ExecutionService } from '../execution/execution.service';
+import { ExecutionAdmissionService } from '../execution/admission/execution-admission.service';
+import { randomUUID } from 'node:crypto';
 
 @Injectable()
 export class AssessmentsService {
@@ -33,7 +35,8 @@ export class AssessmentsService {
     private readonly auditLogRepo: Repository<AuditLog>,
     @Optional()
     private readonly executionService?: ExecutionService,
-  ) { }
+    @Optional() private readonly admission?: ExecutionAdmissionService,
+  ) {}
 
   private shuffleList<T>(items: T[]): T[] {
     const next = [...items];
@@ -404,9 +407,7 @@ export class AssessmentsService {
       });
     }
 
-    const qMap = new Map(
-      questionsList.map((q) => [q.id, { ...q, _id: q.id }]),
-    );
+    const qMap = new Map(questionsList.map((q) => [q.id, { ...q, _id: q.id }]));
 
     // Populate questions in sections if present
     const sections = (assessment.sections || []).map((sec) => ({
@@ -458,7 +459,9 @@ export class AssessmentsService {
     if (dto.negativeMarking !== undefined)
       assessment.negativeMarking = dto.negativeMarking;
     if (dto.startTime !== undefined)
-      assessment.startTime = dto.startTime ? new Date(dto.startTime) : undefined;
+      assessment.startTime = dto.startTime
+        ? new Date(dto.startTime)
+        : undefined;
     if (dto.endTime !== undefined)
       assessment.endTime = dto.endTime ? new Date(dto.endTime) : undefined;
     if (dto.status !== undefined) assessment.status = dto.status;
@@ -787,11 +790,20 @@ export class AssessmentsService {
       order: { score: 'DESC', createdAt: 'DESC' },
     });
 
-    const questionIds = [...new Set(filteredAssessments.flatMap(a => a.questions || []))];
-    const questionMetadata = questionIds.length ? await this.questionRepo.find({
-      where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
-      select: { id: true, mongoId: true, questionType: true, difficulty: true },
-    }) : [];
+    const questionIds = [
+      ...new Set(filteredAssessments.flatMap((a) => a.questions || [])),
+    ];
+    const questionMetadata = questionIds.length
+      ? await this.questionRepo.find({
+          where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
+          select: {
+            id: true,
+            mongoId: true,
+            questionType: true,
+            difficulty: true,
+          },
+        })
+      : [];
 
     const items = filteredAssessments.map((a) => {
       const allForAssessment = existingAttempts.filter(
@@ -827,8 +839,28 @@ export class AssessmentsService {
         allowedAttempts,
         completedAttemptsCount: completedCount,
         questionCount: a.questions?.length || 0,
-        questionTypes: [...new Set(questionMetadata.filter(q => a.questions?.includes(q.id) || (!!q.mongoId && a.questions?.includes(q.mongoId))).map(q => q.questionType))],
-        difficulties: [...new Set(questionMetadata.filter(q => a.questions?.includes(q.id) || (!!q.mongoId && a.questions?.includes(q.mongoId))).map(q => q.difficulty))],
+        questionTypes: [
+          ...new Set(
+            questionMetadata
+              .filter(
+                (q) =>
+                  a.questions?.includes(q.id) ||
+                  (!!q.mongoId && a.questions?.includes(q.mongoId)),
+              )
+              .map((q) => q.questionType),
+          ),
+        ],
+        difficulties: [
+          ...new Set(
+            questionMetadata
+              .filter(
+                (q) =>
+                  a.questions?.includes(q.id) ||
+                  (!!q.mongoId && a.questions?.includes(q.mongoId)),
+              )
+              .map((q) => q.difficulty),
+          ),
+        ],
         attemptStatus: isCompleted
           ? 'submitted'
           : inProgressAttempt
@@ -857,14 +889,15 @@ export class AssessmentsService {
     }
 
     const studentId = String(studentUser.id || studentUser._id);
-    const whereConditions: any[] = [
-      { assessmentId: assessment.id, studentId },
-    ];
+    const whereConditions: any[] = [{ assessmentId: assessment.id, studentId }];
     if (id && id !== assessment.id) {
       whereConditions.push({ assessmentId: id, studentId });
     }
     if (studentUser.uid) {
-      whereConditions.push({ assessmentId: assessment.id, studentUid: studentUser.uid });
+      whereConditions.push({
+        assessmentId: assessment.id,
+        studentUid: studentUser.uid,
+      });
     }
     const allAttempts = await this.attemptRepo.find({
       where: whereConditions,
@@ -990,6 +1023,7 @@ export class AssessmentsService {
           where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
         })
         : [];
+    const qMap = new Map(questionsList.map((q) => [q.id, q]));
 
     const studentId = String(studentUser.id || studentUser._id);
     let attempt = await this.attemptRepo.findOne({
@@ -1051,6 +1085,9 @@ export class AssessmentsService {
         maxScore: assessment.totalMarks,
         responses: orderedIds.map((qId) => ({
           questionId: qId,
+          optionOrder: assessment.shuffleOptions
+            ? this.buildOptionOrder(qMap.get(String(qId)))
+            : null,
           selectedAnswer: -1,
           isCorrect: false,
           marksAwarded: 0,
@@ -1062,11 +1099,16 @@ export class AssessmentsService {
       await this.attemptRepo.save(attempt);
     }
 
-    const qMap = new Map(questionsList.map((q) => [q.id, q]));
     const sanitizedQuestions = (attempt.questionOrder || [])
       .map((qId, index) => {
         const q = qMap.get(String(qId));
         if (!q) return null;
+        const options = Array.isArray(q.options)
+          ? q.options.map((opt: any) =>
+            typeof opt === 'string' ? opt : opt?.text || String(opt || ''),
+          )
+          : [];
+        const optionOrder = this.getQuestionOptionOrderByQuestionId(attempt, q.id);
         return {
           _id: q.id,
           id: q.id,
@@ -1078,11 +1120,7 @@ export class AssessmentsService {
           difficulty: q.difficulty,
           marks: q.marks || 1,
           negativeMarks: assessment.negativeMarking ? q.negativeMarks || 0 : 0,
-          options: Array.isArray(q.options)
-            ? q.options.map((opt: any) =>
-              typeof opt === 'string' ? opt : opt?.text || String(opt || ''),
-            )
-            : [],
+          options: optionOrder ? optionOrder.map((index) => options[index]) : options,
           codeSnippet: q.codeSnippet,
           starterCode:
             (q.metadata as any)?.starterCode ||
@@ -1185,8 +1223,10 @@ export class AssessmentsService {
     }
 
     if (dto.responses && Array.isArray(dto.responses)) {
-      attempt.responses = dto.responses.map((r) => ({
+      const previousResponses = attempt.responses || [];
+      const updatedResponses = dto.responses.map((r) => ({
         questionId: String(r.questionId),
+        optionOrder: this.getQuestionOptionOrderByQuestionId(attempt, String(r.questionId)),
         selectedAnswer: r.selectedAnswer ?? -1,
         selectedAnswers: r.selectedAnswers,
         code: r.code || '',
@@ -1204,6 +1244,11 @@ export class AssessmentsService {
             ? 'answered'
             : 'unvisited'),
       }));
+      const updatedIds = new Set(updatedResponses.map((r) => r.questionId));
+      attempt.responses = [
+        ...previousResponses.filter((r) => !updatedIds.has(String(r.questionId))),
+        ...updatedResponses,
+      ];
     }
 
     if (dto.timeSpentSeconds) {
@@ -1237,6 +1282,48 @@ export class AssessmentsService {
   }
 
   async submitAttempt(id: string, dto: SubmitAssessmentDto, studentUser: any) {
+    const hasCode = dto.responses?.some(
+      (response) =>
+        typeof response.code === 'string' && response.code.trim().length > 0,
+    );
+    if (!hasCode) return this.evaluateAttempt(id, dto, studentUser);
+    if (!this.admission) throw new PistonUnavailableError();
+    const userId = String(studentUser.id || studentUser._id);
+    const reservation = await this.admission.reserve(userId, {
+      kind: 'assessment',
+      id,
+      responses: dto.responses,
+    });
+    const owner = randomUUID();
+    let heartbeat: NodeJS.Timeout | undefined;
+    try {
+      if (
+        (await this.admission.claim(userId, reservation, owner)) !== 'claimed'
+      )
+        throw new PistonUnavailableError();
+      let renewing = false;
+      heartbeat = setInterval(() => {
+        if (renewing) return;
+        renewing = true;
+        void this.admission!.renew(userId, reservation, owner)
+          .catch(() => {})
+          .finally(() => {
+            renewing = false;
+          });
+      }, this.admission.heartbeatMs);
+      heartbeat.unref();
+      return await this.evaluateAttempt(id, dto, studentUser);
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+      await this.admission.release(userId, reservation, owner);
+    }
+  }
+
+  private async evaluateAttempt(
+    id: string,
+    dto: SubmitAssessmentDto,
+    studentUser: any,
+  ) {
     const assessment = await this.assessmentRepo.findOne({
       where: [{ id }, { mongoId: id }],
     });
@@ -1275,7 +1362,9 @@ export class AssessmentsService {
     if (assessment.endTime) {
       const deadline = new Date(assessment.endTime);
       if (now > deadline) {
-        throw new BadRequestException('The examination submission deadline has expired.');
+        throw new BadRequestException(
+          'The examination submission deadline has expired.',
+        );
       }
     }
 
@@ -1297,7 +1386,7 @@ export class AssessmentsService {
 
     const evaluatedResponses: any[] = [];
 
-    for (const r of (dto.responses || [])) {
+    for (const r of dto.responses || []) {
       const q = questionMap.get(String(r.questionId));
       if (!q) {
         evaluatedResponses.push({
@@ -1312,7 +1401,15 @@ export class AssessmentsService {
       }
 
       const qType = (q.questionType || '').toLowerCase();
-      const isCoding = qType === 'coding' || qType === 'algorithmic' || qType === 'dsa';
+      const optionOrder = this.getQuestionOptionOrderByQuestionId(attempt, q.id);
+      const selectedAnswer = this.mapDisplayedAnswerToCanonical(
+        r.selectedAnswer, optionOrder,
+      ) as number | undefined;
+      const selectedAnswers = this.mapDisplayedAnswerToCanonical(
+        r.selectedAnswers, optionOrder,
+      ) as number[] | undefined;
+      const isCoding =
+        qType === 'coding' || qType === 'algorithmic' || qType === 'dsa';
       let isAttempted = false;
       let isCorrect = false;
       let marksAwarded = 0;
@@ -1326,8 +1423,16 @@ export class AssessmentsService {
           totalAttempted++;
 
           const submittedLanguage = canonicalLanguage(r.language || 'python');
-          if (!submittedLanguage || (q.supportedLanguages?.length && !q.supportedLanguages.some(lang => canonicalLanguage(lang) === submittedLanguage))) {
-            throw new BadRequestException('This language is not enabled for the assessment question');
+          if (
+            !submittedLanguage ||
+            (q.supportedLanguages?.length &&
+              !q.supportedLanguages.some(
+                (lang) => canonicalLanguage(lang) === submittedLanguage,
+              ))
+          ) {
+            throw new BadRequestException(
+              'This language is not enabled for the assessment question',
+            );
           }
           // Server-side code execution against verified test cases (AUD-002)
           const testCases = Array.isArray(q.testCases) ? q.testCases : [];
@@ -1362,7 +1467,10 @@ export class AssessmentsService {
             testCasesPassed = 0;
           }
 
-          const ratio = totalTestCases > 0 ? Math.min(1, Math.max(0, testCasesPassed / totalTestCases)) : 0;
+          const ratio =
+            totalTestCases > 0
+              ? Math.min(1, Math.max(0, testCasesPassed / totalTestCases))
+              : 0;
           marksAwarded = Math.round(ratio * (q.marks || 5) * 10) / 10;
           isCorrect = ratio >= 0.99;
 
@@ -1374,13 +1482,15 @@ export class AssessmentsService {
         }
       } else {
         // MCQ (single choice or multiple choice)
-        const isMulti = qType === 'multiple_choice' || (Array.isArray(q.correctAnswers) && q.correctAnswers.length > 0);
+        const isMulti =
+          qType === 'multiple_choice' ||
+          (Array.isArray(q.correctAnswers) && q.correctAnswers.length > 0);
 
         if (isMulti) {
-          const selectedList = Array.isArray(r.selectedAnswers)
-            ? r.selectedAnswers
-            : r.selectedAnswer !== undefined && r.selectedAnswer >= 0
-              ? [r.selectedAnswer]
+          const selectedList = Array.isArray(selectedAnswers)
+            ? selectedAnswers
+            : selectedAnswer !== undefined && selectedAnswer >= 0
+              ? [selectedAnswer]
               : [];
           isAttempted = selectedList.length > 0;
           if (isAttempted) {
@@ -1398,7 +1508,9 @@ export class AssessmentsService {
               marksAwarded = q.marks || 1;
               totalCorrect++;
             } else {
-              const negMarks = assessment.negativeMarking ? (q.negativeMarks || 0) : 0;
+              const negMarks = assessment.negativeMarking
+                ? q.negativeMarks || 0
+                : 0;
               marksAwarded = negMarks > 0 ? -negMarks : 0;
               totalWrong++;
             }
@@ -1407,15 +1519,17 @@ export class AssessmentsService {
           }
         } else {
           // Single-choice MCQ
-          isAttempted = r.selectedAnswer !== undefined && r.selectedAnswer >= 0;
+          isAttempted = selectedAnswer !== undefined && selectedAnswer >= 0;
           if (isAttempted) {
             totalAttempted++;
-            isCorrect = r.selectedAnswer === q.correctAnswer;
+            isCorrect = selectedAnswer === q.correctAnswer;
             if (isCorrect) {
               marksAwarded = q.marks || 1;
               totalCorrect++;
             } else {
-              const negMarks = assessment.negativeMarking ? (q.negativeMarks || 0) : 0;
+              const negMarks = assessment.negativeMarking
+                ? q.negativeMarks || 0
+                : 0;
               marksAwarded = negMarks > 0 ? -negMarks : 0;
               totalWrong++;
             }
@@ -1429,8 +1543,9 @@ export class AssessmentsService {
 
       evaluatedResponses.push({
         questionId: q.id,
-        selectedAnswer: r.selectedAnswer ?? -1,
-        selectedAnswers: r.selectedAnswers,
+        selectedAnswer: selectedAnswer ?? -1,
+        selectedAnswers,
+        optionOrder,
         code: r.code || '',
         language: r.language || 'python',
         testCasesPassed,
@@ -1629,7 +1744,10 @@ export class AssessmentsService {
       canRetake:
         assessment.allowedAttempts === 0
           ? true
-          : submittedCount < (assessment.allowedAttempts !== undefined ? assessment.allowedAttempts : 1),
+          : submittedCount <
+            (assessment.allowedAttempts !== undefined
+              ? assessment.allowedAttempts
+              : 1),
       assessment: {
         title: assessment.title,
         code: assessment.code,
