@@ -48,8 +48,9 @@ export default function SafeExamBrowser({
   useEffect(() => {
     if (!isEnabled) return;
     let away = false;
+    let engaged = !requireFullscreen || Boolean(document.fullscreenElement);
     const warnAway = (type: string, message: string) => {
-      if (!monitorViolations || away) return;
+      if (!monitorViolations || !engaged || away) return;
       away = true;
       handleWarning(type, message);
     };
@@ -62,6 +63,7 @@ export default function SafeExamBrowser({
     const checkFullscreen = () => {
       const fullscreen = Boolean(document.fullscreenElement);
       setIsFullscreen(fullscreen);
+      if (fullscreen) engaged = true;
       if (requireFullscreen && !fullscreen) {
         warnAway('fullscreen_exit', 'Exiting fullscreen is not allowed during the exam.');
       }
