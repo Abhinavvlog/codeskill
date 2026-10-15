@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useMemo, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { adminProblemsAPI, adminQuestionsAPI } from "@/config/api";
 import { useQuestionStore } from "./_store/useQuestionStore";
 import Link from "next/link";
@@ -55,20 +55,33 @@ import { Spinner } from "@/components/ui/spinner";
 export default function CreateQuestionContent() {
   return (
     <ToastProvider>
-      <UnifiedQuestionForm />
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Spinner className="w-8 h-8 animate-spin text-amber-500" /></div>}>
+        <UnifiedQuestionForm />
+      </Suspense>
     </ToastProvider>
   );
 }
 
 function UnifiedQuestionForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const formRef = useRef<HTMLFormElement>(null);
   const [loading, setLoading] = useState(false);
   const { addToast } = useToast();
 
   const store = useQuestionStore();
-  const { lastSaved, markSaved, getProgress, activeSection, setActiveSection } = store;
+  const { lastSaved, markSaved, getProgress, activeSection, setActiveSection, updateMetadata } = store;
   const questionType = store.metadata.questionType;
+
+  // React to ?type=mcq or ?type=coding from URL
+  useEffect(() => {
+    const typeParam = searchParams?.get("type")?.toLowerCase();
+    if (typeParam === "mcq" || typeParam === "multiple_choice") {
+      updateMetadata({ questionType: "MCQ" });
+    } else if (typeParam === "coding" || typeParam === "dsa") {
+      updateMetadata({ questionType: "DSA" });
+    }
+  }, [searchParams, updateMetadata]);
 
   // Dynamically compute nav items based on questionType
   const navItems = useMemo(() => {
@@ -196,7 +209,7 @@ function UnifiedQuestionForm() {
         categories: store.metadata.categories,
         difficulty: store.metadata.difficulty.toLowerCase(),
         marks: store.metadata.points,
-        negativeMarks: 0,
+        negativeMarks: store.metadata.negativeMarks ?? 0,
         status,
         tags: store.metadata.tags,
         explanation: store.solutionExplanation.content,
@@ -320,6 +333,86 @@ function UnifiedQuestionForm() {
           {/* Main form */}
           <div className="flex-1 w-full min-w-0 pb-32">
             <form ref={formRef} id="question-form" onSubmit={handleSubmit} className="space-y-8 max-w-4xl [&>div[id]]:scroll-mt-[100px]">
+              {/* Question Mode: 2 Primary Options (MCQ vs Coding Problem) */}
+              <div className="bg-card border border-border rounded-2xl p-4 shadow-sm">
+                <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">
+                  Choose Question Format
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateMetadata({ questionType: "MCQ" });
+                      if (typeof window !== "undefined") {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set("type", "mcq");
+                        window.history.replaceState(null, "", url.toString());
+                      }
+                    }}
+                    className={`flex items-start gap-3.5 p-4 rounded-xl border text-left transition-all ${
+                      ["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE", "CODE_OUTPUT"].includes(questionType)
+                        ? "bg-amber-500/10 border-amber-500 text-foreground ring-1 ring-amber-500 shadow-sm"
+                        : "bg-muted/30 border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                    }`}
+                  >
+                    <div className={`p-2.5 rounded-lg shrink-0 ${
+                      ["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE", "CODE_OUTPUT"].includes(questionType)
+                        ? "bg-amber-500 text-zinc-950 font-bold"
+                        : "bg-muted text-muted-foreground"
+                    }`}>
+                      <ListChecks className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm flex items-center gap-2">
+                        Multiple Choice Question (MCQ)
+                        {["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE", "CODE_OUTPUT"].includes(questionType) && (
+                          <span className="text-[10px] bg-amber-500 text-zinc-950 px-1.5 py-0.5 rounded font-mono font-semibold">Active</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Single or multiple choice options, true/false, explanations, and negative marks deduction.
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateMetadata({ questionType: "DSA" });
+                      if (typeof window !== "undefined") {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set("type", "coding");
+                        window.history.replaceState(null, "", url.toString());
+                      }
+                    }}
+                    className={`flex items-start gap-3.5 p-4 rounded-xl border text-left transition-all ${
+                      questionType === "DSA"
+                        ? "bg-amber-500/10 border-amber-500 text-foreground ring-1 ring-amber-500 shadow-sm"
+                        : "bg-muted/30 border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                    }`}
+                  >
+                    <div className={`p-2.5 rounded-lg shrink-0 ${
+                      questionType === "DSA"
+                        ? "bg-amber-500 text-zinc-950 font-bold"
+                        : "bg-muted text-muted-foreground"
+                    }`}>
+                      <Code2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm flex items-center gap-2">
+                        Coding Question (DSA)
+                        {questionType === "DSA" && (
+                          <span className="text-[10px] bg-amber-500 text-zinc-950 px-1.5 py-0.5 rounded font-mono font-semibold">Active</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Algorithmic challenges, code templates, I/O formats, test cases, and sandbox execution limits.
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               <BasicInfo />
               
               {["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType) && (

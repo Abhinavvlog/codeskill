@@ -71,6 +71,7 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${roboto.variable} h-full antialiased`}
+      data-scroll-behavior="smooth"
       suppressHydrationWarning
     >
       <head>

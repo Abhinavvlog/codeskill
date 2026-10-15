@@ -2,8 +2,8 @@
 
 import { getQuestionTypeLabel, getTopicCategories } from "@/lib/question-types";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { adminQuestionsAPI, adminQuestionBanksAPI, adminProblemsAPI } from "@/config/api";
 import Link from "next/link";
 import { VTable3 } from "@/components/ui/v-table-3";
@@ -29,11 +29,19 @@ import {
   HelpCircle,
   ChevronRight,
   RefreshCw,
-  X
+  X,
+  SlidersHorizontal
 } from "lucide-react";
 
-export default function QuestionsAdminPage() {
+function QuestionsAdminContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialTopic = searchParams?.get("topic") || "";
+  const initialDiff = searchParams?.get("difficulty") || "";
+  const initialType = searchParams?.get("type") || searchParams?.get("questionType") || "";
+  const initialSearch = searchParams?.get("search") || "";
+  const initialStatus = searchParams?.get("status") || "";
+
   const [activeTab, setActiveTab] = useState<"questions" | "banks" | "coding">("questions");
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -43,14 +51,82 @@ export default function QuestionsAdminPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [search, setSearch] = useState("");
-  const [selectedTopic, setSelectedTopic] = useState("");
-  const [selectedDifficulty, setSelectedDifficulty] = useState("");
-  const [selectedType, setSelectedType] = useState("");
-  const [selectedStatus, setSelectedStatus] = useState("");
+  const [search, setSearch] = useState(initialSearch);
+  const [selectedTopic, setSelectedTopic] = useState(initialTopic);
+  const [selectedDifficulty, setSelectedDifficulty] = useState(initialDiff);
+  const [selectedType, setSelectedType] = useState(initialType);
+  const [selectedStatus, setSelectedStatus] = useState(initialStatus);
   const [topicsList, setTopicsList] = useState<any[]>([]);
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
   const [deletingQuestions, setDeletingQuestions] = useState(false);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [bulkForm, setBulkForm] = useState({
+    difficulty: "",
+    topic: "",
+    marks: "",
+    negativeMarks: "",
+    status: "",
+  });
+
+  // Two-way synchronization: update filter state whenever URL searchParams change
+  useEffect(() => {
+    const topicFromUrl = searchParams?.get("topic") || "";
+    const diffFromUrl = searchParams?.get("difficulty") || "";
+    const typeFromUrl = searchParams?.get("type") || searchParams?.get("questionType") || "";
+    const searchFromUrl = searchParams?.get("search") || "";
+    const statusFromUrl = searchParams?.get("status") || "";
+
+    setSelectedTopic(topicFromUrl);
+    setSelectedDifficulty(diffFromUrl);
+    setSelectedType(typeFromUrl);
+    setSearch(searchFromUrl);
+    setSelectedStatus(statusFromUrl);
+    setSelectedQuestionIds([]);
+    setPage(1);
+  }, [searchParams]);
+
+  // Two-way URL updater helper
+  const updateUrlParam = (key: string, val: string) => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (val) {
+      url.searchParams.set(key, val);
+    } else {
+      url.searchParams.delete(key);
+    }
+    url.searchParams.delete("page");
+    router.replace(url.pathname + (url.search ? url.search : ""));
+  };
+
+  const handleBulkEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedQuestionIds.length || bulkUpdating) return;
+    setBulkUpdating(true);
+    try {
+      const updates: any = {};
+      if (bulkForm.difficulty) updates.difficulty = bulkForm.difficulty;
+      if (bulkForm.topic) {
+        updates.topic = bulkForm.topic;
+        updates.categories = [bulkForm.topic];
+      }
+      if (bulkForm.marks !== "") updates.marks = Number(bulkForm.marks);
+      if (bulkForm.negativeMarks !== "") updates.negativeMarks = Number(bulkForm.negativeMarks);
+      if (bulkForm.status) updates.status = bulkForm.status;
+
+      await adminQuestionsAPI.bulkUpdate(selectedQuestionIds, updates);
+      setBulkEditOpen(false);
+      setBulkForm({ difficulty: "", topic: "", marks: "", negativeMarks: "", status: "" });
+      setSelectedQuestionIds([]);
+      await fetchQuestions();
+      alert(`Successfully updated ${selectedQuestionIds.length} questions!`);
+    } catch (err: any) {
+      console.error("Failed to bulk update questions", err);
+      alert(err.response?.data?.message || "Failed to bulk update questions");
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
 
   // Modals & Inspect
   const [inspectQuestion, setInspectQuestion] = useState<any | null>(null);
@@ -219,6 +295,7 @@ export default function QuestionsAdminPage() {
     setSelectedType("");
     setSelectedStatus("");
     setPage(1);
+    router.replace("/admin/questions");
   };
 
   const handleApprove = async (id: string) => {
@@ -457,15 +534,38 @@ export default function QuestionsAdminPage() {
           questions={questions}
           loading={loading}
           search={search}
-          onSearchChange={setSearch}
+          onSearchChange={(val) => {
+            setSearch(val);
+            updateUrlParam("search", val);
+          }}
           selectedTopic={selectedTopic}
-          onTopicChange={(val) => { setSelectedQuestionIds([]); setSelectedTopic(val); setPage(1); }}
+          onTopicChange={(val) => {
+            setSelectedQuestionIds([]);
+            setSelectedTopic(val);
+            setPage(1);
+            updateUrlParam("topic", val);
+          }}
           selectedDifficulty={selectedDifficulty}
-          onDifficultyChange={(val) => { setSelectedQuestionIds([]); setSelectedDifficulty(val); setPage(1); }}
+          onDifficultyChange={(val) => {
+            setSelectedQuestionIds([]);
+            setSelectedDifficulty(val);
+            setPage(1);
+            updateUrlParam("difficulty", val);
+          }}
           selectedType={selectedType}
-          onTypeChange={(val) => { setSelectedQuestionIds([]); setSelectedType(val); setPage(1); }}
+          onTypeChange={(val) => {
+            setSelectedQuestionIds([]);
+            setSelectedType(val);
+            setPage(1);
+            updateUrlParam("type", val);
+          }}
           selectedStatus={selectedStatus}
-          onStatusChange={(val) => { setSelectedQuestionIds([]); setSelectedStatus(val); setPage(1); }}
+          onStatusChange={(val) => {
+            setSelectedQuestionIds([]);
+            setSelectedStatus(val);
+            setPage(1);
+            updateUrlParam("status", val);
+          }}
           topicsList={topicsList}
           onSearchSubmit={handleSearchSubmit}
           onClearFilters={handleClearFilters}
@@ -482,6 +582,7 @@ export default function QuestionsAdminPage() {
           onTogglePage={handleTogglePage}
           onBulkDelete={handleBulkDelete}
           deletingQuestions={deletingQuestions}
+          onBulkEdit={() => setBulkEditOpen(true)}
         />
       )}
 
@@ -612,7 +713,8 @@ export default function QuestionsAdminPage() {
                     <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700">Topic: {getTopicCategories(inspectQuestion).join(', ') || 'General'}</span>
                     <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700">Type: {getQuestionTypeLabel(inspectQuestion.questionType)}</span>
                     <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 capitalize">Difficulty: {inspectQuestion.difficulty || 'Easy'}</span>
-                    <span className="px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-700 font-semibold">Marks: {inspectQuestion.marks || 1}</span>
+                    <span className="px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-700 font-semibold">Marks: +{inspectQuestion.marks || 1}</span>
+                    <span className="px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-700 font-semibold">Negative: -{inspectQuestion.negativeMarks ?? 0}</span>
                   </div>
                 </div>
               </div>
@@ -900,6 +1002,136 @@ export default function QuestionsAdminPage() {
           </form>
         </div>
       )}
+
+      {/* Bulk Edit Modal */}
+      {bulkEditOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-lg p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-5 h-5 text-amber-500" />
+                <h3 className="font-bold text-foreground text-base">
+                  Bulk Edit Questions ({selectedQuestionIds.length} Selected)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBulkEditOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Update properties across all {selectedQuestionIds.length} selected questions simultaneously. Fields left blank will remain unchanged.
+            </p>
+
+            <form onSubmit={handleBulkEditSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-foreground">Difficulty</label>
+                  <select
+                    value={bulkForm.difficulty}
+                    onChange={(e) => setBulkForm({ ...bulkForm, difficulty: e.target.value })}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="">Keep Unchanged</option>
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-foreground">Status</label>
+                  <select
+                    value={bulkForm.status}
+                    onChange={(e) => setBulkForm({ ...bulkForm, status: e.target.value })}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="">Keep Unchanged</option>
+                    <option value="active">Active (Published)</option>
+                    <option value="draft">Draft</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-foreground">Topic / Category</label>
+                <input
+                  type="text"
+                  placeholder="Leave blank to keep unchanged (e.g. Arrays, Functions)"
+                  value={bulkForm.topic}
+                  onChange={(e) => setBulkForm({ ...bulkForm, topic: e.target.value })}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-foreground">Marks (Points)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Keep unchanged"
+                    value={bulkForm.marks}
+                    onChange={(e) => setBulkForm({ ...bulkForm, marks: e.target.value })}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-foreground">Negative Marks</label>
+                  <input
+                    type="number"
+                    step="0.25"
+                    min="0"
+                    placeholder="e.g. 0.25, 0.5, 1"
+                    value={bulkForm.negativeMarks}
+                    onChange={(e) => setBulkForm({ ...bulkForm, negativeMarks: e.target.value })}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setBulkEditOpen(false)}
+                  className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={bulkUpdating}
+                  className="px-5 py-2 text-sm font-semibold bg-amber-500 text-zinc-950 rounded-lg hover:bg-amber-400 disabled:opacity-50"
+                >
+                  {bulkUpdating ? "Applying Updates..." : "Apply Bulk Updates"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function QuestionsAdminPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-8 font-sans max-w-7xl mx-auto space-y-6">
+          <div className="flex items-center justify-center p-16">
+            <RefreshCw className="w-8 h-8 animate-spin text-amber-500" />
+          </div>
+        </div>
+      }
+    >
+      <QuestionsAdminContent />
+    </Suspense>
   );
 }

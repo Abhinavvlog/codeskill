@@ -114,6 +114,9 @@ function EditQuestionContent() {
             questionId: data._id || data.id || "",
             estimatedSolveTime: 30, // Default if not in backend
             points: data.marks || 1,
+            negativeMarks: data.negativeMarks ?? 0,
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
             questionType: qType,
           },
           options: data.options,
@@ -288,6 +291,7 @@ function EditQuestionContent() {
         categories: store.metadata.categories,
         difficulty: store.metadata.difficulty.toLowerCase(),
         marks: store.metadata.points || 1,
+        negativeMarks: store.metadata.negativeMarks ?? 0,
         status: visibility === "Published" ? "approved" : "draft",
         tags: store.metadata.tags,
         explanation: store.solutionExplanation?.content || "",
@@ -400,6 +404,17 @@ function EditQuestionContent() {
             <div className="hidden lg:block w-48">
               <ProgressBar value={progress} />
             </div>
+
+            {(store.metadata.createdAt || store.metadata.updatedAt) && (
+              <div className="hidden xl:flex flex-col text-[11px] text-muted-foreground border-l border-border pl-4">
+                {store.metadata.createdAt && (
+                  <span>Created: {new Date(store.metadata.createdAt).toLocaleString()}</span>
+                )}
+                {store.metadata.updatedAt && (
+                  <span>Last Modified: {new Date(store.metadata.updatedAt).toLocaleString()}</span>
+                )}
+              </div>
+            )}
           </div>
           
           <div className="flex items-center gap-4">

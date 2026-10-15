@@ -20,6 +20,8 @@ import {
   Check,
   X,
   FileCode,
+  GitMerge,
+  ShieldCheck,
 } from "lucide-react";
 import { adminQuestionsAPI } from "@/config/api";
 import { Spinner } from "@/components/ui/spinner";
@@ -30,11 +32,14 @@ interface PreviewData {
     validCount: number;
     invalidCount: number;
     duplicateCount: number;
+    newCount?: number;
+    exactDuplicateCount?: number;
+    conflictCount?: number;
     toInsertCount?: number;
     toUpdateCount?: number;
   };
   validRows: any[];
-  errors: { row: number; question?: string; error: string }[];
+  errors: { row: number; question?: string; error: string; isDuplicate?: boolean }[];
 }
 
 export default function ImportQuestionsPage() {
@@ -42,12 +47,16 @@ export default function ImportQuestionsPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
-  const [instantPush, setInstantPush] = useState(true);
+  const [instantPush, setInstantPush] = useState(false);
+  const [mergeStrategy, setMergeStrategy] = useState<"skip" | "update" | "merge">("skip");
+  const [activeTab, setActiveTab] = useState<"all" | "new" | "duplicates" | "conflicts" | "errors">("all");
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [importResult, setImportResult] = useState<{
     totalProcessed: number;
     insertedCount: number;
     updatedCount: number;
+    skippedCount?: number;
+    mergeStrategy?: string;
     message?: string;
   } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -94,12 +103,14 @@ export default function ImportQuestionsPage() {
     setIsCommitting(true);
     setErrorMessage(null);
     try {
-      const res = await adminQuestionsAPI.autoImport(selectedFile);
+      const res = await adminQuestionsAPI.autoImport(selectedFile, mergeStrategy);
       const data = res.data;
       setImportResult({
         totalProcessed: data.count || data.validCount || 0,
         insertedCount: data.summary?.insertedCount ?? data.insertedCount ?? 0,
         updatedCount: data.summary?.updatedCount ?? data.updatedCount ?? 0,
+        skippedCount: data.summary?.skippedCount ?? data.skippedCount ?? 0,
+        mergeStrategy: data.mergeStrategy || mergeStrategy,
         message: data.message,
       });
     } catch (err: any) {
@@ -135,12 +146,14 @@ export default function ImportQuestionsPage() {
     setIsCommitting(true);
     setErrorMessage(null);
     try {
-      const res = await adminQuestionsAPI.confirmImport(previewData.validRows);
+      const res = await adminQuestionsAPI.confirmImport(previewData.validRows, mergeStrategy);
       const data = res.data;
       setImportResult({
-        totalProcessed: data.count || previewData.validRows.length,
-        insertedCount: data.insertedCount || previewData.summary.toInsertCount || 0,
-        updatedCount: data.updatedCount || previewData.summary.toUpdateCount || 0,
+        totalProcessed: data.totalProcessed || data.count || previewData.validRows.length,
+        insertedCount: data.insertedCount ?? 0,
+        updatedCount: data.updatedCount ?? 0,
+        skippedCount: data.skippedCount ?? 0,
+        mergeStrategy: data.mergeStrategy || mergeStrategy,
         message: data.message,
       });
     } catch (err: any) {
@@ -209,6 +222,15 @@ export default function ImportQuestionsPage() {
     document.body.removeChild(link);
   };
 
+  const filteredPreviewRows = () => {
+    if (!previewData) return [];
+    if (activeTab === "all") return previewData.validRows;
+    if (activeTab === "new") return previewData.validRows.filter((r) => r.matchStatus === "new");
+    if (activeTab === "duplicates") return previewData.validRows.filter((r) => r.matchStatus === "exact_duplicate");
+    if (activeTab === "conflicts") return previewData.validRows.filter((r) => r.matchStatus === "conflict");
+    return previewData.validRows;
+  };
+
   return (
     <div className="p-6 md:p-8 max-w-6xl mx-auto space-y-6 font-sans">
       {/* Product of Chandigarh University Branding Banner */}
@@ -235,9 +257,9 @@ export default function ImportQuestionsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-            <Zap className="w-3 h-3 text-emerald-400" />
-            Bulk Upsert Enabled (Update or Insert in 1 Attempt)
+          <span className="text-[11px] font-semibold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+            <ShieldCheck className="w-3 h-3 text-emerald-500" />
+            Duplicate Detection & Merge Protection Active
           </span>
         </div>
       </div>
@@ -254,7 +276,7 @@ export default function ImportQuestionsPage() {
             </span>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Automatically convert and push algorithmic DSA and MCQ scenario questions in a single attempt. Existing questions will be updated; new questions will be inserted.
+            Import MCQs and coding questions with normalized stem hashing, option-aware conflict detection, and configurable merge strategies.
           </p>
         </div>
 
@@ -284,32 +306,94 @@ export default function ImportQuestionsPage() {
         </div>
       </div>
 
-      {/* Mode Toggle Banner */}
-      <div className="p-4 rounded-2xl bg-card border border-border flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${instantPush ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
-            <Zap className="w-5 h-5" />
+      {/* Merge Strategy Config Card */}
+      <div className="p-4 rounded-2xl bg-card border border-border space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <GitMerge className="w-4 h-4 text-primary" />
+            <span className="text-sm font-bold text-foreground">Duplicate Handling & Merge Strategy</span>
           </div>
-          <div>
-            <p className="text-sm font-bold text-foreground">
-              Instant 1-Attempt Upload & Sync
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {instantPush
-                ? "Automatic Mode: Selecting a CSV will immediately parse, convert, and push all questions into database in 1 attempt."
-                : "Preview Mode: Shows detailed row preview before confirming."}
-            </p>
-          </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-muted-foreground hover:text-foreground">
+            <input
+              type="checkbox"
+              checked={instantPush}
+              onChange={(e) => setInstantPush(e.target.checked)}
+              className="w-4 h-4 rounded text-primary focus:ring-primary accent-primary"
+            />
+            Auto-commit upon file upload
+          </label>
         </div>
-        <label className="flex items-center gap-2.5 cursor-pointer select-none text-xs font-semibold text-foreground">
-          <input
-            type="checkbox"
-            checked={instantPush}
-            onChange={(e) => setInstantPush(e.target.checked)}
-            className="w-4 h-4 rounded text-primary focus:ring-primary accent-primary"
-          />
-          Auto-push in 1 attempt (Recommended)
-        </label>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+          <label
+            className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+              mergeStrategy === "skip"
+                ? "border-emerald-500 bg-emerald-500/5 ring-1 ring-emerald-500"
+                : "border-border hover:border-muted-foreground/30 bg-muted/20"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="mergeStrategy"
+                value="skip"
+                checked={mergeStrategy === "skip"}
+                onChange={() => setMergeStrategy("skip")}
+                className="accent-emerald-500"
+              />
+              <span className="text-xs font-bold text-foreground">Skip Duplicates (Safe)</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1.5">
+              Preserves existing questions in the bank untouched. Only brand-new questions are added.
+            </p>
+          </label>
+
+          <label
+            className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+              mergeStrategy === "update"
+                ? "border-primary bg-primary/5 ring-1 ring-primary"
+                : "border-border hover:border-muted-foreground/30 bg-muted/20"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="mergeStrategy"
+                value="update"
+                checked={mergeStrategy === "update"}
+                onChange={() => setMergeStrategy("update")}
+                className="accent-primary"
+              />
+              <span className="text-xs font-bold text-foreground">Update Existing (Upsert)</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1.5">
+              Updates matching question content while strictly preserving question IDs and assessment links.
+            </p>
+          </label>
+
+          <label
+            className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+              mergeStrategy === "merge"
+                ? "border-amber-500 bg-amber-500/5 ring-1 ring-amber-500"
+                : "border-border hover:border-muted-foreground/30 bg-muted/20"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="mergeStrategy"
+                value="merge"
+                checked={mergeStrategy === "merge"}
+                onChange={() => setMergeStrategy("merge")}
+                className="accent-amber-500"
+              />
+              <span className="text-xs font-bold text-foreground">Merge Missing Details</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1.5">
+              Preserves existing options and correct answers, only filling in missing explanations and tags.
+            </p>
+          </label>
+        </div>
       </div>
 
       {/* Success View */}
@@ -320,25 +404,29 @@ export default function ImportQuestionsPage() {
           </div>
           <div>
             <h2 className="text-xl font-bold text-foreground">
-              Questions Processed Successfully!
+              Questions Import Completed!
             </h2>
             <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
-              {importResult.message || `Processed ${importResult.totalProcessed} questions in one attempt.`}
+              {importResult.message || `Processed ${importResult.totalProcessed} questions using '${importResult.mergeStrategy}' strategy.`}
             </p>
           </div>
 
-          <div className="flex items-center justify-center gap-6 py-2">
+          <div className="flex items-center justify-center gap-4 py-2 flex-wrap">
             <div className="text-center px-4 py-2 rounded-xl bg-muted/40 border border-border">
               <p className="text-xs text-muted-foreground font-medium">Total Processed</p>
               <p className="text-xl font-black text-foreground font-mono">{importResult.totalProcessed}</p>
             </div>
             <div className="text-center px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-              <p className="text-xs text-emerald-400 font-medium">Newly Inserted</p>
-              <p className="text-xl font-black text-emerald-400 font-mono">+{importResult.insertedCount}</p>
+              <p className="text-xs text-emerald-500 font-medium">Newly Created</p>
+              <p className="text-xl font-black text-emerald-500 font-mono">+{importResult.insertedCount}</p>
             </div>
             <div className="text-center px-4 py-2 rounded-xl bg-primary/10 border border-primary/20">
-              <p className="text-xs text-primary font-medium">Updated Existing</p>
+              <p className="text-xs text-primary font-medium">Updated</p>
               <p className="text-xl font-black text-primary font-mono">{importResult.updatedCount}</p>
+            </div>
+            <div className="text-center px-4 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+              <p className="text-xs text-amber-500 font-medium">Skipped Duplicates</p>
+              <p className="text-xl font-black text-amber-500 font-mono">{importResult.skippedCount ?? 0}</p>
             </div>
           </div>
 
@@ -352,7 +440,7 @@ export default function ImportQuestionsPage() {
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border hover:bg-muted text-sm font-semibold transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
-              Upload Another CSV
+              Upload Another Spreadsheet
             </button>
             <Link
               href="/admin/questions"
@@ -413,8 +501,8 @@ export default function ImportQuestionsPage() {
                 <Spinner className="w-7 h-7 text-primary animate-spin" />
                 <p className="text-xs font-bold text-primary animate-pulse">
                   {isCommitting
-                    ? "Converting & Upserting questions into bank in 1 attempt..."
-                    : "Parsing spreadsheet schema..."}
+                    ? `Executing ${mergeStrategy} import in database transaction...`
+                    : "Analyzing spreadsheet & detecting duplicates..."}
                 </p>
               </div>
             )}
@@ -427,7 +515,7 @@ export default function ImportQuestionsPage() {
             </div>
           )}
 
-          {/* Preview Results (when not auto-pushed) */}
+          {/* Preview Results */}
           {previewData && !importResult && (
             <div className="space-y-6">
               {/* Summary Stats Cards */}
@@ -439,21 +527,21 @@ export default function ImportQuestionsPage() {
                   </p>
                 </div>
                 <div className="p-4 rounded-2xl bg-card border border-emerald-500/20 bg-emerald-500/5">
-                  <p className="text-xs text-emerald-400 font-medium">Ready to Insert (New)</p>
-                  <p className="text-2xl font-black text-emerald-400 font-mono mt-1">
-                    {previewData.summary.toInsertCount ?? previewData.summary.validCount}
+                  <p className="text-xs text-emerald-500 font-semibold">New Questions</p>
+                  <p className="text-2xl font-black text-emerald-500 font-mono mt-1">
+                    {previewData.summary.newCount ?? previewData.summary.toInsertCount ?? 0}
                   </p>
                 </div>
                 <div className="p-4 rounded-2xl bg-card border border-primary/20 bg-primary/5">
-                  <p className="text-xs text-primary font-medium">Ready to Update (Existing)</p>
+                  <p className="text-xs text-primary font-semibold">Exact Duplicates</p>
                   <p className="text-2xl font-black text-primary font-mono mt-1">
-                    {previewData.summary.toUpdateCount ?? 0}
+                    {previewData.summary.exactDuplicateCount ?? 0}
                   </p>
                 </div>
-                <div className="p-4 rounded-2xl bg-card border border-destructive/20 bg-destructive/5">
-                  <p className="text-xs text-destructive font-medium">Invalid Rows</p>
-                  <p className="text-2xl font-black text-destructive font-mono mt-1">
-                    {previewData.summary.invalidCount}
+                <div className="p-4 rounded-2xl bg-card border border-amber-500/20 bg-amber-500/5">
+                  <p className="text-xs text-amber-500 font-semibold">Option / Answer Conflicts</p>
+                  <p className="text-2xl font-black text-amber-500 font-mono mt-1">
+                    {previewData.summary.conflictCount ?? 0}
                   </p>
                 </div>
               </div>
@@ -462,10 +550,10 @@ export default function ImportQuestionsPage() {
               <div className="flex items-center justify-between gap-4 flex-wrap bg-card border border-border p-4 rounded-2xl">
                 <div>
                   <p className="text-sm font-bold text-foreground">
-                    {previewData.validRows.length} questions validated & ready to push
+                    {previewData.validRows.length} questions validated & ready to process
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Will update matching questions and insert brand new ones.
+                    Selected strategy: <strong className="text-foreground capitalize">{mergeStrategy}</strong>
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -487,30 +575,62 @@ export default function ImportQuestionsPage() {
                     {isCommitting ? (
                       <>
                         <Spinner className="w-4 h-4 animate-spin" />
-                        Pushing to Bank…
+                        Executing Import…
                       </>
                     ) : (
                       <>
                         <Check className="w-4 h-4" />
-                        Confirm & Push All ({previewData.validRows.length})
+                        Confirm & Process ({previewData.validRows.length})
                       </>
                     )}
                   </button>
                 </div>
               </div>
 
+              {/* Filter Tabs */}
+              <div className="flex gap-2 border-b border-border pb-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("all")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    activeTab === "all" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  All Valid ({previewData.validRows.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("new")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    activeTab === "new" ? "bg-emerald-500/10 text-emerald-600" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  New ({previewData.summary.newCount ?? 0})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("duplicates")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    activeTab === "duplicates" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Exact Duplicates ({previewData.summary.exactDuplicateCount ?? 0})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("conflicts")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    activeTab === "conflicts" ? "bg-amber-500/10 text-amber-600" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Conflicts ({previewData.summary.conflictCount ?? 0})
+                </button>
+              </div>
+
               {/* Valid Questions Preview Table */}
               <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                <div className="px-5 py-3 border-b border-border bg-muted/40 flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    Questions Preview (Showing first 20 rows)
-                  </h3>
-                  <span className="text-xs text-muted-foreground font-medium">
-                    Total: {previewData.validRows.length} valid
-                  </span>
-                </div>
                 <div className="divide-y divide-border max-h-96 overflow-y-auto">
-                  {previewData.validRows.slice(0, 20).map((row, idx) => (
+                  {filteredPreviewRows().slice(0, 50).map((row, idx) => (
                     <div key={idx} className="p-4 hover:bg-muted/20 transition-colors flex items-start gap-3">
                       <span className="text-xs font-mono font-bold text-muted-foreground mt-0.5">
                         #{row.rowNumber}
@@ -518,13 +638,19 @@ export default function ImportQuestionsPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-semibold text-foreground">{row.question}</p>
-                          {row.isUpdate ? (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                              UPDATE
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          {row.matchStatus === "new" && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
                               NEW
+                            </span>
+                          )}
+                          {row.matchStatus === "exact_duplicate" && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                              EXACT DUPLICATE
+                            </span>
+                          )}
+                          {row.matchStatus === "conflict" && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20" title={row.conflictReason}>
+                              CONFLICT: {row.conflictReason}
                             </span>
                           )}
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-muted text-muted-foreground uppercase">

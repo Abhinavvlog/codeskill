@@ -1,0 +1,192 @@
+jest.mock('@nestjs/typeorm', () => ({ InjectRepository: () => () => {} }));
+jest.mock('@nestjs/bullmq', () => ({ InjectQueue: () => () => {} }));
+
+import { StudentsService } from './students.service';
+import * as xlsx from 'xlsx';
+
+describe('Students Bulk Import & Validation', () => {
+  let service: StudentsService;
+  let userRepo: any;
+  let auditLogRepo: any;
+  let emailJobRepo: any;
+  let queue: any;
+
+  const admin = { id: 'admin-uuid-1', email: 'admin@codeskill.com' };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    userRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((data: any) => ({ id: 'new-user-id', ...data })),
+      save: jest.fn((data: any) => Promise.resolve(data)),
+      manager: {
+        transaction: jest.fn(async (cb: any) => {
+          return cb({
+            save: jest.fn((data: any) => Promise.resolve(data)),
+          });
+        }),
+      },
+    };
+    auditLogRepo = {
+      create: jest.fn((data: any) => data),
+      save: jest.fn().mockResolvedValue(true),
+    };
+    emailJobRepo = {
+      create: jest.fn((data: any) => ({ id: 'job-id', ...data })),
+      save: jest.fn().mockResolvedValue(true),
+    };
+    queue = {
+      add: jest.fn().mockResolvedValue(true),
+    };
+
+    service = new StudentsService(
+      userRepo as any,
+      auditLogRepo as any,
+      emailJobRepo as any,
+      queue as any,
+    );
+  });
+
+  const createWorkbookBuffer = (rows: Record<string, any>[]): Buffer => {
+    const ws = xlsx.utils.json_to_sheet(rows);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, 'Students');
+    return xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  };
+
+  it('validates required fields, formats, and phone numbers', async () => {
+    const rows = [
+      {
+        uid: 'CU101',
+        name: 'Alice Smith',
+        email: 'alice@example.com',
+        batch: '2022-2026',
+        year: 2026,
+        semester: 6,
+        mobile: '+919876543210',
+      },
+      {
+        uid: 'INVALID UID!',
+        name: 'Bob Jones',
+        email: 'not-an-email',
+        batch: '',
+        year: 1980, // out of range
+        semester: 15, // out of range
+        mobile: '12345', // too short
+      },
+    ];
+
+    const buffer = createWorkbookBuffer(rows);
+    const result = await service.parseAndValidateImport(buffer);
+
+    expect(result.total).toBe(2);
+    expect(result.valid).toBe(1);
+    expect(result.invalid).toBe(1);
+    expect(result.errors.length).toBeGreaterThan(0);
+    const invalidErr = result.errors.find((e) => e.row === 3);
+    expect(invalidErr?.error).toContain('Invalid email format');
+    expect(invalidErr?.error).toContain('Batch/class is missing');
+    expect(invalidErr?.error).toContain('Invalid mobile number');
+  });
+
+  it('detects duplicates within uploaded file and against existing database records', async () => {
+    userRepo.find.mockImplementation(({ where }: any) => {
+      if (where.uid) {
+        return Promise.resolve([{ uid: 'CU_EXISTING', email: 'existing@example.com' }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const rows = [
+      {
+        uid: 'CU_EXISTING', // in DB
+        name: 'Existing Student',
+        email: 'unique1@example.com',
+        batch: '2022-2026',
+        year: 2026,
+        semester: 6,
+      },
+      {
+        uid: 'CU_NEW_1',
+        name: 'First New',
+        email: 'new1@example.com',
+        batch: '2022-2026',
+        year: 2026,
+        semester: 6,
+      },
+      {
+        uid: 'CU_NEW_1', // duplicate in file!
+        name: 'Repeated New',
+        email: 'new2@example.com',
+        batch: '2022-2026',
+        year: 2026,
+        semester: 6,
+      },
+    ];
+
+    const buffer = createWorkbookBuffer(rows);
+    const result = await service.parseAndValidateImport(buffer);
+
+    expect(result.duplicates).toBe(2); // 1 DB duplicate, 1 file duplicate
+    expect(result.valid).toBe(1);
+    expect(result.validRows[0].uid).toBe('CU_NEW_1');
+  });
+
+  it('supports assigning default batch, department, course, and semester during import', async () => {
+    const rows = [
+      {
+        uid: 'CU202',
+        name: 'Charlie Brown',
+        email: 'charlie@example.com',
+        // batch and department missing in row
+      },
+    ];
+
+    const buffer = createWorkbookBuffer(rows);
+    const result = await service.parseAndValidateImport(buffer, {
+      defaultBatch: 'Batch-2026-A',
+      defaultDepartment: 'Computer Science',
+      defaultCourse: 'B.Tech CSE',
+      defaultSemester: 6,
+      defaultYear: 2026,
+    });
+
+    expect(result.valid).toBe(1);
+    expect(result.validRows[0].batch).toBe('Batch-2026-A');
+    expect(result.validRows[0].department).toBe('Computer Science');
+    expect(result.validRows[0].course).toBe('B.Tech CSE');
+    expect(result.validRows[0].semester).toBe(6);
+  });
+
+  it('re-uploading the same file performs idempotent processing and does not fail', async () => {
+    // Simulate database returning existing records for confirm check
+    userRepo.find.mockResolvedValue([
+      { uid: 'CU_ALREADY_THERE', email: 'already@example.com' },
+    ]);
+
+    const validRows = [
+      {
+        rowNumber: 2,
+        uid: 'CU_ALREADY_THERE',
+        email: 'already@example.com',
+        name: 'Already Exists',
+        batch: '2026',
+      },
+      {
+        rowNumber: 3,
+        uid: 'CU_BRAND_NEW',
+        email: 'brandnew@example.com',
+        name: 'Brand New',
+        batch: '2026',
+      },
+    ];
+
+    const result = await service.confirmImport(validRows, admin);
+
+    expect(result.success).toBe(true);
+    expect(result.importedCount).toBe(1);
+    expect(result.skippedCount).toBe(1);
+    expect(result.skippedDuplicates[0].uid).toBe('CU_ALREADY_THERE');
+  });
+});

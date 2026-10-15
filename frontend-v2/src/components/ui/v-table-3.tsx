@@ -33,7 +33,9 @@ import {
   Code,
   Sparkles,
   BookOpen,
-  Plus
+  Plus,
+  SlidersHorizontal,
+  Clock
 } from "lucide-react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
@@ -70,6 +72,7 @@ interface VTable3Props {
   onTogglePage: () => void;
   onBulkDelete: () => void;
   deletingQuestions: boolean;
+  onBulkEdit?: () => void;
 }
 
 export function VTable3({
@@ -101,6 +104,7 @@ export function VTable3({
   onTogglePage,
   onBulkDelete,
   deletingQuestions,
+  onBulkEdit,
 }: VTable3Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -108,15 +112,17 @@ export function VTable3({
     try {
       if (typeof window === "undefined" || !containerRef.current) return;
       if (!loading && questions.length > 0) {
-        const mm = gsap.matchMedia();
-        mm.add("(prefers-reduced-motion: no-preference)", () => {
-          gsap.from(".question-row", {
-            opacity: 0,
-            y: 8,
-            stagger: 0.03,
-            duration: 0.3
+        const rows = containerRef.current.querySelectorAll(".question-row");
+        if (rows.length > 0) {
+          const mm = gsap.matchMedia();
+          mm.add("(prefers-reduced-motion: no-preference)", () => {
+            gsap.fromTo(
+              rows,
+              { opacity: 0, y: 6 },
+              { opacity: 1, y: 0, stagger: 0.02, duration: 0.25, clearProps: "all" }
+            );
           });
-        });
+        }
       }
     } catch (_) {}
   }, { scope: containerRef, dependencies: [questions, loading] });
@@ -158,15 +164,27 @@ export function VTable3({
           </div>
           <div className="flex items-center gap-2">
             {selectedQuestionIds.length > 0 && (
-              <button
-                type="button"
-                onClick={onBulkDelete}
-                disabled={deletingQuestions}
-                className="inline-flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3.5 py-2 text-sm font-semibold text-rose-600 transition-colors hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Trash2 className="h-4 w-4" />
-                {deletingQuestions ? "Deleting…" : `Delete selected (${selectedQuestionIds.length})`}
-              </button>
+              <div className="flex items-center gap-2">
+                {onBulkEdit && (
+                  <button
+                    type="button"
+                    onClick={onBulkEdit}
+                    className="inline-flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-sm font-semibold text-amber-500 transition-colors hover:bg-amber-500/20"
+                  >
+                    <SlidersHorizontal className="h-4 w-4" />
+                    Bulk Edit ({selectedQuestionIds.length})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onBulkDelete}
+                  disabled={deletingQuestions}
+                  className="inline-flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3.5 py-2 text-sm font-semibold text-rose-600 transition-colors hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {deletingQuestions ? "Deleting…" : `Delete (${selectedQuestionIds.length})`}
+                </button>
+              </div>
             )}
             <Link
               href="/admin/questions/create"
@@ -196,6 +214,11 @@ export function VTable3({
             className="px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-amber-500"
           >
             <option value="">All Topics</option>
+            {selectedTopic && !topicsList.some((t) => (t.topic || "").toLowerCase() === selectedTopic.toLowerCase()) && (
+              <option value={selectedTopic}>
+                {selectedTopic} (Current Filter)
+              </option>
+            )}
             {Array.isArray(topicsList) && topicsList.map((t) => (
               <option key={t.topic} value={t.topic}>
                 {t.topic} ({t.total})
@@ -336,7 +359,7 @@ export function VTable3({
                 const statusStr = (q.status || "active").replace("_", " ");
 
                 return (
-                  <TableRow key={qId || Math.random()} className="question-row group hover:bg-muted/20">
+                  <TableRow key={qId || Math.random()} className="question-row group hover:bg-muted/30 transition-colors opacity-100">
                     <TableCell>
                       <input
                         type="checkbox"
@@ -348,7 +371,7 @@ export function VTable3({
                     </TableCell>
                     <TableCell className="max-w-[300px]">
                       <div className="flex flex-col gap-1">
-                        <div className="font-medium text-foreground truncate" title={q.question || q.title}>
+                        <div className="font-semibold text-foreground text-sm truncate" title={q.question || q.title}>
                           {q.question || q.title}
                         </div>
                         <div className="flex items-center gap-2">
@@ -402,9 +425,14 @@ export function VTable3({
                     </TableCell>
                     
                     <TableCell>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString() : "-"}
-                      </span>
+                      <div className="flex flex-col text-xs font-mono" title={`Created: ${q.createdAt ? new Date(q.createdAt).toLocaleString() : "-"}\nUpdated: ${q.updatedAt ? new Date(q.updatedAt).toLocaleString() : "-"}`}>
+                        <span className="text-foreground font-medium whitespace-nowrap">
+                          {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString() : q.createdAt ? new Date(q.createdAt).toLocaleDateString() : "-"}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                          {q.updatedAt ? new Date(q.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : ""}
+                        </span>
+                      </div>
                     </TableCell>
                     
                     <TableCell className="text-right">

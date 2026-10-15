@@ -32,6 +32,27 @@ export class AssessmentQuestionConfigDto {
   order?: number;
 }
 
+export class AssessmentAutoSelectionDto {
+  @IsString()
+  @IsNotEmpty()
+  topic: string;
+
+  @IsInt()
+  @Min(0)
+  @Type(() => Number)
+  easyCount: number;
+
+  @IsInt()
+  @Min(0)
+  @Type(() => Number)
+  mediumCount: number;
+
+  @IsInt()
+  @Min(0)
+  @Type(() => Number)
+  hardCount: number;
+}
+
 export class AssessmentSectionDto {
   @IsString()
   @IsNotEmpty()
@@ -60,27 +81,6 @@ export class AssessmentSectionDto {
   @Type(() => AssessmentAutoSelectionDto)
   @IsOptional()
   autoSelection?: AssessmentAutoSelectionDto;
-}
-
-export class AssessmentAutoSelectionDto {
-  @IsString()
-  @IsNotEmpty()
-  topic: string;
-
-  @IsInt()
-  @Min(0)
-  @Type(() => Number)
-  easyCount: number;
-
-  @IsInt()
-  @Min(0)
-  @Type(() => Number)
-  mediumCount: number;
-
-  @IsInt()
-  @Min(0)
-  @Type(() => Number)
-  hardCount: number;
 }
 
 export class CreateAssessmentDto {

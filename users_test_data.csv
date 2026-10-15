@@ -1,9 +1,9 @@
 role,name,email,uid,password
-admin,Mustakim Admin 1,mustakim_admin1@codeskill.com,ADM1,12345678
-admin,Mustakim Admin 2,mustakim_admin2@codeskill.com,ADM2,12345678
-admin,Mustakim Admin 3,mustakim_admin3@codeskill.com,ADM3,12345678
-admin,Mustakim Admin 4,mustakim_admin4@codeskill.com,ADM4,12345678
-admin,Mustakim Admin 5,mustakim_admin5@codeskill.com,ADM5,12345678
+admin,Mustakim,mustakim_admin1@codeskill.com,ADM1,12345678
+admin,Mustakim,mustakim_admin2@codeskill.com,ADM2,12345678
+admin,Mustakim,mustakim_admin3@codeskill.com,ADM3,12345678
+admin,Mustakim,mustakim_admin4@codeskill.com,ADM4,12345678
+admin,Mustakim,mustakim_admin5@codeskill.com,ADM5,12345678
 student,Student 1,student1@codeskill.com,STU1,12345678
 student,Student 2,student2@codeskill.com,STU2,12345678
 student,Student 3,student3@codeskill.com,STU3,12345678
