@@ -66,7 +66,7 @@ module "service_discovery" {
 # A. ALB Security Group (Preserved in Terraform State)
 resource "aws_security_group" "alb" {
   name        = "${local.name_prefix}-alb-sg"
-  description = "Public HTTP and HTTPS ingress to ALB"
+  description = "Managed by Terraform"
   vpc_id      = module.vpc.vpc_id
 
   ingress {
