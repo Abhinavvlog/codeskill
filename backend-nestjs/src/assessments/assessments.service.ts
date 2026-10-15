@@ -220,6 +220,59 @@ export class AssessmentsService {
     return finalSelected.map((question) => question.id);
   }
 
+  private async selectQuestionsForCreation(
+    selection: {
+      topic: string;
+      easyCount: number;
+      mediumCount: number;
+      hardCount: number;
+    },
+    excludedIds: Set<string>,
+  ): Promise<Question[]> {
+    const topic = String(selection.topic || '').trim();
+    const requested = {
+      easy: Number(selection.easyCount),
+      medium: Number(selection.mediumCount),
+      hard: Number(selection.hardCount),
+    };
+    const total = requested.easy + requested.medium + requested.hard;
+
+    if (!topic || total <= 0 || Object.values(requested).some((count) => !Number.isInteger(count) || count < 0)) {
+      throw new BadRequestException('Auto-selection requires a topic and non-negative whole-number difficulty counts, with at least one question.');
+    }
+
+    const candidates = await this.questionRepo.find({
+      where: { topic, status: 'approved' },
+    });
+    const available = {
+      easy: [] as Question[],
+      medium: [] as Question[],
+      hard: [] as Question[],
+    };
+
+    candidates.forEach((question) => {
+      const ids = [question.id, question.mongoId].filter(Boolean).map(String);
+      if (ids.some((id) => excludedIds.has(id))) return;
+      const difficulty = String(question.difficulty || '').trim().toLowerCase();
+      if (difficulty === 'easy' || difficulty === 'medium' || difficulty === 'hard') {
+        available[difficulty].push(question);
+      }
+    });
+
+    const insufficient = (['easy', 'medium', 'hard'] as const).filter(
+      (level) => available[level].length < requested[level],
+    );
+    if (insufficient.length > 0) {
+      throw new BadRequestException(
+        `Not enough approved questions in topic '${topic}' for the requested difficulty counts.`,
+      );
+    }
+
+    return (['easy', 'medium', 'hard'] as const).flatMap((level) =>
+      this.shuffleList(available[level]).slice(0, requested[level]),
+    );
+  }
+
   // -------------------------------------------------------------
   // ADMIN METHODS
   // -------------------------------------------------------------
@@ -235,8 +288,42 @@ export class AssessmentsService {
     const sectionsToSave: any[] = [];
 
     if (dto.sections && dto.sections.length > 0) {
-      dto.sections.forEach((sec) => {
-        sec.questions.forEach((q) => {
+      const excludedIds = new Set(
+        dto.sections
+          .filter((section) => !section.autoSelection)
+          .flatMap((section) => section.questions.map((question) => String(question.questionId))),
+      );
+
+      for (const sec of dto.sections) {
+        let questionsToSave: Array<{
+          questionId: string;
+          marks: number;
+          negativeMarks: number;
+          order: number;
+        }>;
+
+        if (sec.autoSelection) {
+          const selectedQuestions = await this.selectQuestionsForCreation(sec.autoSelection, excludedIds);
+          questionsToSave = selectedQuestions.map((question, index) => {
+            excludedIds.add(String(question.id));
+            if (question.mongoId) excludedIds.add(String(question.mongoId));
+            return {
+              questionId: String(question.id),
+              marks: question.marks || 1,
+              negativeMarks: question.negativeMarks || 0,
+              order: index,
+            };
+          });
+        } else {
+          questionsToSave = sec.questions.map((question) => ({
+            questionId: String(question.questionId),
+            marks: question.marks || 1,
+            negativeMarks: question.negativeMarks || 0,
+            order: question.order || 0,
+          }));
+        }
+
+        questionsToSave.forEach((q) => {
           questionObjIds.push(String(q.questionId));
           totalMarks += q.marks || 1;
         });
@@ -245,14 +332,9 @@ export class AssessmentsService {
           description: sec.description || '',
           order: sec.order || 0,
           timeLimit: sec.timeLimit || 0,
-          questions: sec.questions.map((q) => ({
-            questionId: String(q.questionId),
-            marks: q.marks || 1,
-            negativeMarks: q.negativeMarks || 0,
-            order: q.order || 0,
-          })),
+          questions: questionsToSave,
         });
-      });
+      }
     } else if (dto.questionIds && dto.questionIds.length > 0) {
       questionObjIds = dto.questionIds.map((id) => String(id));
       const questions = await this.questionRepo.find({
