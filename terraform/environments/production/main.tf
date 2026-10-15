@@ -214,6 +214,32 @@ resource "aws_security_group" "judge0" {
   }
 }
 
+# F. RDS PostgreSQL Security Group
+resource "aws_security_group" "rds" {
+  name        = "${local.name_prefix}-rds-sg"
+  description = "Allow PostgreSQL 5432 from backend application"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    description     = "PostgreSQL from backend"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.backend.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-rds-sg"
+  }
+}
+
 # -----------------------------------------------------------------------------
 # 5. Application Load Balancer
 # -----------------------------------------------------------------------------
@@ -251,7 +277,7 @@ module "rds" {
   name_prefix           = local.name_prefix
   vpc_id                = module.vpc.vpc_id
   private_db_subnet_ids = module.vpc.private_db_subnet_ids
-  security_group_ids    = [aws_security_group.backend.id]
+  security_group_ids    = [aws_security_group.rds.id]
   db_name               = var.db_name
   db_username           = var.db_username
   db_password           = var.db_password
