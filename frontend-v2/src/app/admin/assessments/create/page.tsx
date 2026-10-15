@@ -24,7 +24,7 @@ type AutoSelectionCriteria = {
 function yearLabel(year: string) {
   const suffix = Number(year) % 10 === 1 && Number(year) !== 11 ? "st"
     : Number(year) % 10 === 2 && Number(year) !== 12 ? "nd"
-      : Number(year) % 10 === 3 && Number(year) !== 13 ? "rd" : "th";
+    : Number(year) % 10 === 3 && Number(year) !== 13 ? "rd" : "th";
   return `${year}${suffix} Year`;
 }
 
@@ -168,7 +168,6 @@ function AssessmentBuilder() {
   const updateGroup = (group: "a" | "b" | "both") => {
     setTargetGroup(group);
   };
-
   const clearAutoSelection = (sectionId: string) => {
     setAutoSelections((current) => {
       const next = { ...current };

@@ -452,6 +452,8 @@ export const studentAssessmentsAPI = {
   submitAttempt: (id: string, data: any) => api.post(`/assessments/${id}/submit`, data),
   getResult: (id: string) => api.get(`/assessments/${id}/result`),
   retakeAttempt: (id: string) => api.post(`/assessments/${id}/retake`),
+  recordProctorCapture: (id: string, data: { type: string; image: string; filename: string; timestamp: string }) =>
+    api.post(`/assessments/${id}/proctor-capture`, data),
 };
 
 

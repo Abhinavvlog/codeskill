@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { RedisIoAdapter } from './gateway/redis-io.adapter';
 import { WinstonModule } from 'nest-winston';
 import * as winston from 'winston';
+import { json } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -65,7 +66,10 @@ async function bootstrap() {
     });
   });
 
-  const app = await NestFactory.create(AppModule, { logger });
+  const app = await NestFactory.create(AppModule, { logger, bodyParser: false });
+  // Screen captures are authenticated JPEG data URLs; allow the compressed
+  // payload while keeping a bounded request size.
+  app.use(json({ limit: '4mb' }));
   app.enableShutdownHooks();
 
   // HTTP access logging middleware to file & console

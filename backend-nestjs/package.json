@@ -11,6 +11,7 @@
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "typeorm:sync": "node dist/sync-db.js",
+    "db:assessment-proctor-captures:migrate": "ts-node -r tsconfig-paths/register src/database/run-assessment-proctor-captures-migration.ts",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
@@ -74,7 +75,6 @@
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.3",
     "typeorm": "^1.1.1",
-    "uuid": "^14.0.1",
     "winston": "^3.19.0",
     "xlsx": "^0.18.5"
   },
@@ -93,7 +93,6 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/supertest": "^7.0.0",
-    "@types/uuid": "^10.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",

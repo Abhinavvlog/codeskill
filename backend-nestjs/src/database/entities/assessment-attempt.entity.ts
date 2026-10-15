@@ -132,6 +132,9 @@ export class AssessmentAttempt {
   @Column({ type: 'jsonb', default: [] })
   violations: any[];
 
+  @Column({ type: 'jsonb', default: [] })
+  captures: Array<{ type: string; url: string; timestamp: Date; filename?: string }>;
+
   @Column({ type: 'text', nullable: true, default: '' })
   disqualifiedReason?: string;
 
