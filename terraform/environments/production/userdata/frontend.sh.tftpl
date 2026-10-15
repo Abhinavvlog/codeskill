@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -euo pipefail
+exec > >(tee -a /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+echo "=========================================================="
+echo " Starting CodeSkill Frontend Bootstrap (Immutable Docker) "
+echo " Architecture: $(uname -m), Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "=========================================================="
+
+# 1. Install Docker & AWS CLI if not present
+if command -v dnf &>/dev/null; then
+  dnf update -y
+  dnf install -y docker aws-cli curl jq
+  systemctl enable --now docker
+elif command -v apt-get &>/dev/null; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -y
+  apt-get install -y docker.io awscli curl jq
+  systemctl enable --now docker
+fi
+
+# Ensure SSM agent is active for keyless administration
+systemctl enable --now amazon-ssm-agent || true
+
+# 2. Authenticate to Amazon ECR
+REGION="${aws_region}"
+ECR_REGISTRY="${ecr_registry}"
+IMAGE="${frontend_image}"
+
+echo "Authenticating Docker with Amazon ECR ($REGION)..."
+for i in {1..5}; do
+  aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY" && break || sleep 5
+done
+
+# 3. Pull Versioned Immutable Frontend Docker Image
+echo "Pulling immutable image: $IMAGE..."
+docker pull "$IMAGE"
+
+# 4. Create Systemd Service for CodeSkill Frontend
+cat << EOF > /etc/systemd/system/codeskill-frontend.service
+[Unit]
+Description=CodeSkill Next.js Frontend Container
+After=docker.service
+Requires=docker.service
+
+[Service]
+TimeoutStartSec=0
+Restart=always
+RestartSec=5
+ExecStartPre=-/usr/bin/docker stop codeskill-frontend
+ExecStartPre=-/usr/bin/docker rm codeskill-frontend
+ExecStart=/usr/bin/docker run --rm --name codeskill-frontend \\
+  -p 3000:3000 \\
+  -e NODE_ENV=production \\
+  -e PORT=3000 \\
+  -e NEXT_PUBLIC_API_URL=https://${domain_name}/api \\
+  -e NEXT_PUBLIC_SOCKET_URL=https://${domain_name} \\
+  -e INTERNAL_BACKEND_URL=https://${domain_name}/api \\
+  $IMAGE
+ExecStop=/usr/bin/docker stop -t 15 codeskill-frontend
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 5. Start Frontend Service
+systemctl daemon-reload
+systemctl enable --now codeskill-frontend.service
+
+# 6. Verify Readiness Probe before signaling bootstrap completion
+echo "Waiting for frontend readiness probe (/health/ready)..."
+for i in {1..30}; do
+  if curl -sf http://127.0.0.1:3000/health/ready >/dev/null 2>&1; then
+    echo "Frontend readiness probe passed on attempt $i."
+    break
+  fi
+  sleep 3
+done
+
+echo "CodeSkill Frontend instance ready at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"

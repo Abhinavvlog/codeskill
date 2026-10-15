@@ -27,6 +27,7 @@ const nextConfig: NextConfig = {
     config.resolve.alias = {
       ...config.resolve.alias,
       "monaco-editor/esm/vs/editor/editor.api": path.resolve(process.cwd(), "node_modules/monaco-editor/esm/vs/editor/editor.api.js"),
+      "@vladmandic/human": path.resolve(process.cwd(), "node_modules/@vladmandic/human/dist/human.esm.js"),
     };
     
     return config;

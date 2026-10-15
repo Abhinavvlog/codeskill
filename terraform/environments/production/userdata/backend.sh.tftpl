@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+set -euo pipefail
+exec > >(tee -a /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+echo "=========================================================="
+echo " Starting CodeSkill Backend Bootstrap (Immutable Docker)  "
+echo " Architecture: $(uname -m), Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "=========================================================="
+
+# 1. Install Docker & AWS CLI if not present
+if command -v dnf &>/dev/null; then
+  dnf update -y
+  dnf install -y docker aws-cli curl jq
+  systemctl enable --now docker
+elif command -v apt-get &>/dev/null; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -y
+  apt-get install -y docker.io awscli curl jq
+  systemctl enable --now docker
+fi
+
+systemctl enable --now amazon-ssm-agent || true
+
+# 2. Retrieve Secure Configuration from AWS Secrets Manager
+REGION="${aws_region}"
+DB_SECRET_ARN="${db_secret_arn}"
+DB_HOST=""
+DB_USER=""
+DB_PASS=""
+DB_NAME=""
+DB_PORT="5432"
+
+if [ -n "$DB_SECRET_ARN" ]; then
+  SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$DB_SECRET_ARN" --region "$REGION" --query SecretString --output text 2>/dev/null || echo "{}")
+  if [ -n "$SECRET_JSON" ] && [ "$SECRET_JSON" != "{}" ]; then
+    DB_HOST=$(echo "$SECRET_JSON" | jq -r '.host // empty')
+    DB_USER=$(echo "$SECRET_JSON" | jq -r '.username // empty')
+    DB_PASS=$(echo "$SECRET_JSON" | jq -r '.password // empty')
+    DB_NAME=$(echo "$SECRET_JSON" | jq -r '.dbname // empty')
+    DB_PORT=$(echo "$SECRET_JSON" | jq -r '.port // "5432"')
+  fi
+fi
+
+DB_HOST="$${DB_HOST:-${db_host}}"
+DB_USER="$${DB_USER:-${db_username}}"
+DB_PASS="$${DB_PASS:-${db_password}}"
+DB_NAME="$${DB_NAME:-${db_name}}"
+
+# 3. Authenticate to Amazon ECR & Pull Backend Image
+ECR_REGISTRY="${ecr_registry}"
+IMAGE="${backend_image}"
+
+echo "Authenticating Docker with Amazon ECR ($REGION)..."
+for i in {1..5}; do
+  aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY" && break || sleep 5
+done
+
+echo "Pulling immutable image: $IMAGE..."
+docker pull "$IMAGE"
+
+# 4. Create Environment Configuration File
+mkdir -p /opt/codeskill
+cat << EOF > /opt/codeskill/backend.env
+NODE_ENV=production
+PORT=5001
+DATABASE_URL=postgresql://$DB_USER:$DB_PASS@$DB_HOST:$DB_PORT/$DB_NAME?sslmode=prefer
+REDIS_HOST=${redis_host}
+REDIS_PORT=6379
+REDIS_CLUSTER_MODE=${redis_cluster_mode}
+REDIS_TLS=${redis_tls}
+JWT_SECRET=${jwt_secret}
+CLIENT_URL=https://${domain_name}
+PISTON_BASE_URL=${piston_base_url}
+JUDGE0_BASE_URL=${judge0_base_url}
+S3_BUCKET_NAME=${s3_bucket_name}
+AWS_REGION=$REGION
+EOF
+chmod 600 /opt/codeskill/backend.env
+
+# 5. Create Systemd Service for CodeSkill Backend
+cat << EOF > /etc/systemd/system/codeskill-backend.service
+[Unit]
+Description=CodeSkill NestJS Backend Container
+After=docker.service
+Requires=docker.service
+
+[Service]
+TimeoutStartSec=0
+Restart=always
+RestartSec=5
+ExecStartPre=-/usr/bin/docker stop codeskill-backend
+ExecStartPre=-/usr/bin/docker rm codeskill-backend
+ExecStart=/usr/bin/docker run --rm --name codeskill-backend \\
+  -p 5001:5001 \\
+  --env-file /opt/codeskill/backend.env \\
+  $IMAGE
+ExecStop=/usr/bin/docker stop -t 30 codeskill-backend
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 6. Start Backend Service
+systemctl daemon-reload
+systemctl enable --now codeskill-backend.service
+
+# 7. Verify Readiness Probe before signaling bootstrap completion
+echo "Waiting for backend readiness probe (/api/health/ready)..."
+for i in {1..40}; do
+  if curl -sf http://127.0.0.1:5001/api/health/ready >/dev/null 2>&1; then
+    echo "Backend readiness probe passed on attempt $i."
+    break
+  fi
+  sleep 3
+done
+
+echo "CodeSkill Backend instance ready at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"

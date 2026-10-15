@@ -1,0 +1,105 @@
+[
+  {
+    "name": "CodeSkill Production Website",
+    "type": "http",
+    "url": "https://codeskill.novaserve.cloud/",
+    "method": "GET",
+    "interval": 60,
+    "retryInterval": 20,
+    "maxretries": 2,
+    "accepted_statuscodes": ["200-299"],
+    "description": "Public HTTPS availability of CodeSkill platform"
+  },
+  {
+    "name": "NestJS Backend (Readiness Probe)",
+    "type": "http",
+    "url": "https://codeskill.novaserve.cloud/api/health/ready",
+    "method": "GET",
+    "interval": 60,
+    "retryInterval": 15,
+    "maxretries": 2,
+    "accepted_statuscodes": ["200"],
+    "description": "Verifies API server, PostgreSQL database, and Redis connectivity"
+  },
+  {
+    "name": "Next.js Frontend (Readiness Probe)",
+    "type": "http",
+    "url": "https://codeskill.novaserve.cloud/health/ready",
+    "method": "GET",
+    "interval": 60,
+    "retryInterval": 15,
+    "maxretries": 2,
+    "accepted_statuscodes": ["200"],
+    "description": "Verifies Next.js SSR server readiness and HTTP listener"
+  },
+  {
+    "name": "Piston Code Execution Engine",
+    "type": "http",
+    "url": "http://piston.codeskill.internal:2001/api/v2/runtimes",
+    "method": "GET",
+    "interval": 60,
+    "retryInterval": 20,
+    "maxretries": 3,
+    "accepted_statuscodes": ["200"],
+    "description": "Private Cloud Map health check for Piston runtime engine"
+  },
+  {
+    "name": "Judge0 Online Judge Engine",
+    "type": "http",
+    "url": "http://judge0.codeskill.internal:2358/about",
+    "method": "GET",
+    "interval": 60,
+    "retryInterval": 20,
+    "maxretries": 3,
+    "accepted_statuscodes": ["200"],
+    "description": "Private Cloud Map health check for Judge0 submission engine"
+  },
+  {
+    "name": "Amazon RDS PostgreSQL (Port 5432)",
+    "type": "port",
+    "hostname": "codeskill-prod-postgres.cnqeo68ks0b7.ap-south-1.rds.amazonaws.com",
+    "port": 5432,
+    "interval": 60,
+    "retryInterval": 20,
+    "maxretries": 2,
+    "description": "Private TCP socket probe for managed PostgreSQL RDS"
+  },
+  {
+    "name": "Amazon ElastiCache Redis OSS (Port 6379)",
+    "type": "port",
+    "hostname": "codeskill-prod-redis.tl3zxl.clustercfg.aps1.cache.amazonaws.com",
+    "port": 6379,
+    "interval": 60,
+    "retryInterval": 20,
+    "maxretries": 2,
+    "description": "Private TCP socket probe for managed Redis OSS cluster"
+  },
+  {
+    "name": "BullMQ Background Worker Heartbeat",
+    "type": "push",
+    "interval": 60,
+    "retryInterval": 30,
+    "maxretries": 2,
+    "description": "Push monitor expecting regular worker heartbeats from backend execution queue"
+  },
+  {
+    "name": "Application Load Balancer (ALB)",
+    "type": "http",
+    "url": "https://codeskill.novaserve.cloud/api/health/live",
+    "method": "GET",
+    "interval": 60,
+    "retryInterval": 15,
+    "maxretries": 2,
+    "accepted_statuscodes": ["200"],
+    "description": "Ensures ALB routing and HTTPS listener are responsive"
+  },
+  {
+    "name": "SSL / TLS Certificate Expiry",
+    "type": "http",
+    "url": "https://codeskill.novaserve.cloud/",
+    "interval": 86400,
+    "expiryNotification": true,
+    "expiryNotificationDays": 14,
+    "description": "Daily verification of ACM TLS certificate expiration"
+  }
+]

@@ -37,6 +37,7 @@ export const awsConfig = registerAs('aws', () => ({
 }));
 
 export const oauthConfig = registerAs('oauth', () => ({
+  googleEnabled: process.env.ENABLE_GOOGLE_LOGIN === 'true',
   googleClientId: process.env.GOOGLE_CLIENT_ID,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
   githubClientId: process.env.GITHUB_CLIENT_ID,

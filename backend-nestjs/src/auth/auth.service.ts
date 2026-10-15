@@ -380,6 +380,11 @@ export class AuthService {
   }
 
   async googleLogin(dto: OAuthDto) {
+    const isGoogleEnabled = this.configService.get<boolean>('oauth.googleEnabled');
+    if (!isGoogleEnabled) {
+      throw new UnauthorizedException('Google Sign-In is disabled.');
+    }
+
     let payload;
     try {
       const ticket = await this.googleClient.verifyIdToken({

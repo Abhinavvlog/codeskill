@@ -49,7 +49,7 @@ async function getHuman() {
     // alone cannot establish whether two faces belong to the same person.
     // Import the ESM browser bundle explicitly: the package's default Node
     // entry depends on @tensorflow/tfjs-node, which is not a browser runtime.
-    humanPromise = import("../../node_modules/@vladmandic/human/dist/human.esm.js").then(async (humanModule) => {
+    humanPromise = import("@vladmandic/human").then(async (humanModule) => {
       const Human = (humanModule as unknown as { default: new (config: any) => any }).default;
       const human = new Human({
         modelBasePath: HUMAN_MODELS,

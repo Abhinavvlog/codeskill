@@ -49,6 +49,10 @@ Thumbs.db
 *.tfvars.json
 terraform.tfstate*
 .terraform.lock.hcl
+*.tfplan
+*.tfplan*
+tfplan*
+*.plan
 
 # Next.js / Frontend builds
 .next/

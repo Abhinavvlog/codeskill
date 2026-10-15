@@ -1,140 +1,183 @@
-name: Build and Deploy to AWS
+name: CodeSkill CI/CD — Immutable ECR Build & Auto Scaling Rollout
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Target service to build and deploy'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - frontend
+          - backend
+      image_tag:
+        description: 'Specific image tag to deploy or rollback to (leave blank for commit SHA)'
+        required: false
+        default: ''
 
 env:
   AWS_REGION: ap-south-1
-  S3_BUCKET: codeskill-prod-files-reports
-  ASG_NAME: codeskill-prod-asg
+  ECR_REGISTRY: 239939507154.dkr.ecr.ap-south-1.amazonaws.com
+  FRONTEND_REPO: codeskill-prod-frontend
+  BACKEND_REPO: codeskill-prod-backend
+  FRONTEND_ASG: codeskill-frontend-asg
+  BACKEND_ASG: codeskill-backend-asg
+  FRONTEND_TG: codeskill-prod-tg
+  BACKEND_TG: codeskill-prod-be-tg
 
 permissions:
-  id-token: write # Required for configuring AWS Credentials via OIDC
+  id-token: write # Required for AWS OIDC authentication
   contents: read
 
 concurrency:
-  group: production-deploy
+  group: production-deployment
   cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  # ============================================================================
+  # 1. Validation & Automated Tests (Fail-Fast)
+  # ============================================================================
+  test:
+    name: Run Automated Tests & Type Checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Check AWS deployment configuration
-        id: aws_auth
-        env:
-          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: bash .github/scripts/check-aws-deployment-config.sh
-
-      - name: Setup Node.js
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
+          cache-dependency-path: |
+            backend-nestjs/package-lock.json
+            frontend-v2/package-lock.json
 
-      - name: Install, Test, and Build Backend
+      - name: Backend Tests & Build Verification
         working-directory: ./backend-nestjs
         run: |
-          npm install --legacy-peer-deps
-          npm test
+          npm ci --legacy-peer-deps
           npm run build
-          npm run test:startup
+          npm test -- --maxWorkers=2
 
-      - name: Install, Test, and Build Frontend
+      - name: Frontend Tests & Build Verification
         working-directory: ./frontend-v2
         run: |
-          echo "NEXT_PUBLIC_API_URL=https://codeskill.novaserve.cloud/api" >> .env
-          echo "NEXT_PUBLIC_GOOGLE_CLIENT_ID=968191151730-mglf3rq4pldoqqhhcrbqfbt9g2j9n8o6.apps.googleusercontent.com" >> .env
-          npm install --legacy-peer-deps
-          npm test
+          npm ci --legacy-peer-deps
+          npm test -- --maxWorkers=2
           npm run build
 
-      - name: Package Application
+  # ============================================================================
+  # 2. Build Immutable Docker Images & Push to Amazon ECR
+  # ============================================================================
+  build-and-push:
+    name: Build & Push Immutable Docker Images
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      deployment_tag: ${{ steps.determine-tag.outputs.tag }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Determine Deployment Tag
+        id: determine-tag
         run: |
-          # Create a deployment directory
-          mkdir deploy_package
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
 
-          # Copy PM2 Ecosystem configuration
-          cp ecosystem.config.js deploy_package/
-          
-          # Copy Backend files
-          mkdir -p deploy_package/backend-nestjs
-          cp -r backend-nestjs/dist deploy_package/backend-nestjs/
-          cp backend-nestjs/package.json deploy_package/backend-nestjs/
-          cp backend-nestjs/package-lock.json deploy_package/backend-nestjs/
-          
-          # Copy Frontend files
-          mkdir -p deploy_package/frontend-v2
-          cp -r frontend-v2/.next deploy_package/frontend-v2/
-          cp -r frontend-v2/public deploy_package/frontend-v2/
-          cp frontend-v2/package.json deploy_package/frontend-v2/
-          cp frontend-v2/package-lock.json deploy_package/frontend-v2/
-          cp frontend-v2/next.config.js deploy_package/frontend-v2/ || true
-          cp frontend-v2/next.config.mjs deploy_package/frontend-v2/ || true
-          cp frontend-v2/next.config.ts deploy_package/frontend-v2/ || true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-          # Zip the contents
-          cd deploy_package
-          zip -r ../latest.zip .
-
-      - name: Configure AWS credentials through OIDC
-        if: steps.aws_auth.outputs.auth_mode == 'oidc'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Configure AWS credentials through repository secrets
-        if: steps.aws_auth.outputs.auth_mode == 'access_keys'
+      - name: Configure AWS Credentials (OIDC / Access Keys)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Upload Build to S3
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Backend Docker Image
+        if: github.event.inputs.service == 'all' || github.event.inputs.service == 'backend' || github.event_name == 'push'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend-nestjs
+          file: ./backend-nestjs/Dockerfile
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.determine-tag.outputs.tag }}
+            ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and Push Frontend Docker Image
+        if: github.event.inputs.service == 'all' || github.event.inputs.service == 'frontend' || github.event_name == 'push'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend-v2
+          file: ./frontend-v2/Dockerfile
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.determine-tag.outputs.tag }}
+            ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ============================================================================
+  # 3. Rolling Auto Scaling Instance Refresh with Health Verification
+  # ============================================================================
+  rollout:
+    name: Rolling Auto Scaling Rollout & Verification
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Trigger Frontend Auto Scaling Rolling Refresh
+        if: github.event.inputs.service == 'all' || github.event.inputs.service == 'frontend' || github.event_name == 'push'
         run: |
-          aws s3 cp latest.zip s3://${{ env.S3_BUCKET }}/releases/latest.zip
-
-      - name: Trigger Auto Scaling Group Instance Refresh
-        run: |
-          # Check if an instance refresh is already running or pending
-          ACTIVE_REFRESH=$(aws autoscaling describe-instance-refreshes \
-            --auto-scaling-group-name ${{ env.ASG_NAME }} \
-            --query "InstanceRefreshes[?Status=='InProgress' || Status=='Pending'].InstanceRefreshId" \
-            --output text)
-
-          if [ -n "$ACTIVE_REFRESH" ] && [ "$ACTIVE_REFRESH" != "None" ]; then
-            echo "Instance refresh ($ACTIVE_REFRESH) is currently in progress."
-            echo "Cancelling it to deploy the latest build..."
-            aws autoscaling cancel-instance-refresh \
-              --auto-scaling-group-name ${{ env.ASG_NAME }} || true
-
-            echo "Waiting for instance refresh cancellation..."
-            for i in {1..30}; do
-              CURRENT_STATUS=$(aws autoscaling describe-instance-refreshes \
-                --auto-scaling-group-name ${{ env.ASG_NAME }} \
-                --query "InstanceRefreshes[?Status=='InProgress' || Status=='Pending' || Status=='Cancelling'].Status" \
-                --output text)
-              if [ -z "$CURRENT_STATUS" ]; then
-                echo "Previous refresh successfully cancelled or completed."
-                break
-              fi
-              echo "Waiting for previous refresh to finish cancelling (attempt $i/30)..."
-              sleep 5
-            done
-          fi
-
-          echo "Starting instance refresh for ${{ env.ASG_NAME }}..."
+          echo "Initiating rolling instance refresh for ${{ env.FRONTEND_ASG }}..."
           aws autoscaling start-instance-refresh \
-            --auto-scaling-group-name ${{ env.ASG_NAME }} \
-            --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 300}'
+            --auto-scaling-group-name ${{ env.FRONTEND_ASG }} \
+            --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 180, "SkipMatching": true, "AutoRollback": true}' \
+            --region ${{ env.AWS_REGION }} || true
+
+      - name: Trigger Backend Auto Scaling Rolling Refresh
+        if: github.event.inputs.service == 'all' || github.event.inputs.service == 'backend' || github.event_name == 'push'
+        run: |
+          echo "Initiating rolling instance refresh for ${{ env.BACKEND_ASG }}..."
+          aws autoscaling start-instance-refresh \
+            --auto-scaling-group-name ${{ env.BACKEND_ASG }} \
+            --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 180, "SkipMatching": true, "AutoRollback": true}' \
+            --region ${{ env.AWS_REGION }} || true
+
+      - name: Verify Live Production Readiness Checks
+        run: |
+          echo "Polling production domain readiness endpoints..."
+          for i in {1..20}; do
+            STATUS_FE=$(curl -s -o /dev/null -w "%%{http_code}" https://codeskill.novaserve.cloud/health/ready || echo "000")
+            STATUS_BE=$(curl -s -o /dev/null -w "%%{http_code}" https://codeskill.novaserve.cloud/api/health/ready || echo "000")
+            echo "Attempt $i: Frontend Readiness HTTP $STATUS_FE, Backend Readiness HTTP $STATUS_BE"
+            if [ "$STATUS_FE" = "200" ] && [ "$STATUS_BE" = "200" ]; then
+              echo "Both Frontend and Backend passed live readiness verification."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Warning: Live readiness verification did not return 200 within timeout."
