@@ -1,7 +1,11 @@
 import { PistonUnavailableError } from '../execution/piston/piston.types';
 jest.mock('@nestjs/typeorm', () => ({ InjectRepository: () => () => { } }));
 
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { AssessmentsService } from './assessments.service';
 
 describe('Assessment Integrity & Server-Side Scoring (AUD-002, NEW-001, NEW-002, NEW-003)', () => {
@@ -11,6 +15,7 @@ describe('Assessment Integrity & Server-Side Scoring (AUD-002, NEW-001, NEW-002,
     findOne: jest.fn(),
   };
   const mockAttemptRepo = {
+    create: jest.fn((attempt: any) => attempt),
     findOne: jest.fn(),
     find: jest.fn(),
     save: jest.fn(),
@@ -54,22 +59,56 @@ describe('Assessment Integrity & Server-Side Scoring (AUD-002, NEW-001, NEW-002,
       mockQuestionRepo as never,
       mockAuditLogRepo as never,
       mockExecutionService as never,
+      {
+        reserve: jest.fn().mockResolvedValue('assessment-reservation'),
+        claim: jest.fn().mockResolvedValue('claimed'),
+        renew: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
+        heartbeatMs: 15000,
+      } as never,
     );
   });
 
+  afterEach(() => jest.restoreAllMocks());
+
   const codingAttempt = () => {
     const now = Date.now();
-    mockAssessmentRepo.findOne.mockResolvedValue({ ...mockAssessment, endTime: new Date(now + 1000) });
-    mockAttemptRepo.findOne.mockResolvedValue({ id: 'attempt-1', assessmentId, studentId: studentUser.id, status: 'in_progress', startedAt: new Date(now - 1000) });
+    mockAssessmentRepo.findOne.mockResolvedValue({
+      ...mockAssessment,
+      endTime: new Date(now + 1000),
+    });
+    mockAttemptRepo.findOne.mockResolvedValue({
+      id: 'attempt-1',
+      assessmentId,
+      studentId: studentUser.id,
+      status: 'in_progress',
+      startedAt: new Date(now - 1000),
+    });
     mockAttemptRepo.find.mockResolvedValue([]);
-    mockQuestionRepo.find.mockResolvedValue([{ id: 'q-coding-1', questionType: 'coding', marks: 5, supportedLanguages: ['python'], testCases: [{ id: 'tc-1', input: '', expectedOutput: '2' }] }]);
-    return { responses: [{ questionId: 'q-coding-1', code: 'print(2)', language: 'python' }] };
+    mockQuestionRepo.find.mockResolvedValue([
+      {
+        id: 'q-coding-1',
+        questionType: 'coding',
+        marks: 5,
+        supportedLanguages: ['python'],
+        testCases: [{ id: 'tc-1', input: '', expectedOutput: '2' }],
+      },
+    ]);
+    return {
+      responses: [
+        { questionId: 'q-coding-1', code: 'print(2)', language: 'python' },
+      ],
+    };
   };
 
   it('does not finalize a zero-score result during Piston infrastructure failure', async () => {
     const dto = codingAttempt();
-    mockExecutionService.runCode.mockRejectedValueOnce(new PistonUnavailableError());
-    await expect(service.submitAttempt(assessmentId, dto as never, studentUser)).rejects.toBeInstanceOf(PistonUnavailableError);
+    mockExecutionService.runCode.mockRejectedValueOnce(
+      new PistonUnavailableError(),
+    );
+    await expect(
+      service.submitAttempt(assessmentId, dto as never, studentUser),
+    ).rejects.toBeInstanceOf(PistonUnavailableError);
     expect(mockAttemptRepo.save).not.toHaveBeenCalled();
   });
 
@@ -83,14 +122,21 @@ describe('Assessment Integrity & Server-Side Scoring (AUD-002, NEW-001, NEW-002,
         return [{ passed: true, status: 'accepted' }];
       });
       await service.submitAttempt(assessmentId, dto as never, studentUser);
-      expect(mockAttemptRepo.save.mock.calls[0][0].submittedAt).toEqual(acceptedAt);
+      expect(mockAttemptRepo.save.mock.calls[0][0].submittedAt).toEqual(
+        acceptedAt,
+      );
       expect(mockAttemptRepo.save.mock.calls[0][0].score).toBe(5);
-    } finally { jest.useRealTimers(); }
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('rejects disallowed assessment languages before execution', async () => {
-    const dto = codingAttempt(); dto.responses[0].language = 'java';
-    await expect(service.submitAttempt(assessmentId, dto as never, studentUser)).rejects.toBeInstanceOf(BadRequestException);
+    const dto = codingAttempt();
+    dto.responses[0].language = 'java';
+    await expect(
+      service.submitAttempt(assessmentId, dto as never, studentUser),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(mockExecutionService.runCode).not.toHaveBeenCalled();
   });
 
@@ -154,7 +200,10 @@ describe('Assessment Integrity & Server-Side Scoring (AUD-002, NEW-001, NEW-002,
       studentUser,
     );
 
-    expect(service.getStudentResult).toHaveBeenCalledWith(assessmentId, studentUser);
+    expect(service.getStudentResult).toHaveBeenCalledWith(
+      assessmentId,
+      studentUser,
+    );
     expect(mockAttemptRepo.save).not.toHaveBeenCalled();
   });
 
@@ -227,12 +276,16 @@ describe('Assessment Integrity & Server-Side Scoring (AUD-002, NEW-001, NEW-002,
     const savedAttempt = mockAttemptRepo.save.mock.calls[0][0];
 
     // MCQ answer 3 was wrong, so marksAwarded = 0
-    const mcqResponse = savedAttempt.responses.find((r: any) => r.questionId === 'q-mcq-1');
+    const mcqResponse = savedAttempt.responses.find(
+      (r: any) => r.questionId === 'q-mcq-1',
+    );
     expect(mcqResponse.isCorrect).toBe(false);
     expect(mcqResponse.marksAwarded).toBe(0);
 
     // Coding question: ExecutionService reported 1 out of 2 passed (50% of 5 marks = 2.5 marks)
-    const codingResponse = savedAttempt.responses.find((r: any) => r.questionId === 'q-coding-1');
+    const codingResponse = savedAttempt.responses.find(
+      (r: any) => r.questionId === 'q-coding-1',
+    );
     expect(codingResponse.testCasesPassed).toBe(1);
     expect(codingResponse.totalTestCases).toBe(2);
     expect(codingResponse.marksAwarded).toBe(2.5);
@@ -362,5 +415,69 @@ describe('Assessment Integrity & Server-Side Scoring (AUD-002, NEW-001, NEW-002,
     expect(firstOrder).not.toEqual(secondOrder);
 
     randomSpy.mockRestore();
+  });
+
+  it('reuses saved option order when resuming an existing attempt', async () => {
+    mockAssessmentRepo.findOne.mockResolvedValue({ ...mockAssessment, shuffleOptions: true });
+    mockAttemptRepo.findOne.mockResolvedValue({
+      id: 'attempt-1', assessmentId, studentId: studentUser.id,
+      status: 'in_progress', startedAt: new Date(), questionOrder: ['q-mcq-1'],
+      responses: [{ questionId: 'q-mcq-1', selectedAnswer: 0, optionOrder: [2, 0, 1] }],
+    });
+    mockQuestionRepo.find.mockResolvedValue([
+      { id: 'q-mcq-1', questionType: 'single_choice', options: ['A', 'B', 'C'] },
+    ]);
+    const randomSpy = jest.spyOn(Math, 'random');
+
+    const resumed = await service.startStudentAttempt(assessmentId, studentUser);
+
+    expect(resumed.questions[0].options).toEqual(['C', 'A', 'B']);
+    expect(resumed.savedResponses[0].selectedAnswer).toBe(0);
+    expect(randomSpy).not.toHaveBeenCalled();
+    expect(mockAttemptRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('grades shuffled multiple-choice answers using the stored order, ignoring client mappings', async () => {
+    mockAssessmentRepo.findOne.mockResolvedValue(mockAssessment);
+    mockAttemptRepo.findOne.mockResolvedValue({
+      id: 'attempt-1', assessmentId, studentId: studentUser.id,
+      status: 'in_progress', startedAt: new Date(),
+      responses: [{ questionId: 'q-mcq-1', optionOrder: [2, 0, 1] }],
+    });
+    mockAttemptRepo.find.mockResolvedValue([]);
+    mockQuestionRepo.find.mockResolvedValue([
+      { id: 'q-mcq-1', questionType: 'multiple_choice', correctAnswers: [1, 2], marks: 5 },
+    ]);
+
+    const submitted = await service.submitAttempt(assessmentId, {
+      responses: [{ questionId: 'q-mcq-1', selectedAnswers: [0, 2], optionOrder: [0, 1, 2] }],
+    } as never, studentUser);
+
+    expect(submitted.result.score).toBe(5);
+    const savedResponse = mockAttemptRepo.save.mock.calls.at(-1)?.[0].responses[0];
+    expect(savedResponse.isCorrect).toBe(true);
+    expect(savedResponse.selectedAnswers).toEqual([2, 1]);
+    expect(savedResponse.optionOrder).toEqual([2, 0, 1]);
+  });
+
+  it('keeps server option mappings across partial progress saves', async () => {
+    mockAssessmentRepo.findOne.mockResolvedValue(mockAssessment);
+    const attempt = {
+      id: 'attempt-1', assessmentId, studentId: studentUser.id, status: 'in_progress',
+      responses: [
+        { questionId: 'q-mcq-1', selectedAnswer: -1, optionOrder: [1, 0, 2] },
+        { questionId: 'q-mcq-2', selectedAnswer: -1, optionOrder: [2, 0, 1] },
+      ],
+    };
+    mockAttemptRepo.findOne.mockResolvedValue(attempt);
+
+    await service.saveProgress(assessmentId, {
+      responses: [{ questionId: 'q-mcq-1', selectedAnswer: 0, optionOrder: [0, 1, 2] }],
+    } as never, studentUser);
+
+    expect(attempt.responses).toEqual(expect.arrayContaining([
+      expect.objectContaining({ questionId: 'q-mcq-1', selectedAnswer: 0, optionOrder: [1, 0, 2] }),
+      expect.objectContaining({ questionId: 'q-mcq-2', selectedAnswer: -1, optionOrder: [2, 0, 1] }),
+    ]));
   });
 });

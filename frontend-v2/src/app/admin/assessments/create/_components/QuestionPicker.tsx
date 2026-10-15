@@ -11,6 +11,16 @@ interface QuestionPickerProps {
   onClose: () => void;
 }
 
+interface PickerQuestion {
+  _id: string;
+  question: string;
+  questionType?: string;
+  difficulty?: string;
+  marks?: number;
+  negativeMarks?: number;
+  topic?: string;
+}
+
 export default function QuestionPicker({ sectionId, onClose }: QuestionPickerProps) {
   const store = useAssessmentStore();
   const [questions, setQuestions] = useState<Array<{
@@ -254,7 +264,7 @@ export default function QuestionPicker({ sectionId, onClose }: QuestionPickerPro
             <div className="space-y-1.5 p-3">
               {questions.map(q => {
                 const isExisting = existingIds.has(q._id);
-                const isSelected = selectedIds.has(q._id);
+                const isSelected = selectedQuestions.has(q._id);
                 const isDuplicateAcrossAssessment = allSelectedInAssessment.has(q._id) && !isExisting;
                 return (
                   <div
