@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   ShieldCheck,
+  Presentation,
   ArrowRight,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -77,11 +78,11 @@ export function Navbar() {
   }, [mobileMenuOpen]);
 
   const isAuthPage = pathname === "/login" || pathname === "/register";
-  const isAdminPage = pathname ? pathname.startsWith("/admin") : false;
+  const isPortalPage = pathname ? pathname.startsWith("/admin") || pathname.startsWith("/teacher") : false;
   const isWorkspacePage = pathname ? pathname.match(/^\/(problems|contest)\/[^/]+$/) : false;
   const isExamTakingPage = pathname ? (pathname.includes("/take") || pathname.endsWith("/attempt")) : false;
 
-  if (!mounted || isAuthPage || isAdminPage || isWorkspacePage || isExamTakingPage) {
+  if (!mounted || isAuthPage || isPortalPage || isWorkspacePage || isExamTakingPage) {
     return null;
   }
 
@@ -89,6 +90,8 @@ export function Navbar() {
     logout();
     router.push("/login");
   };
+
+  const isTeacher = Boolean(user && (user.isTeacher || ["teacher", "faculty", "instructor"].includes(String(user.role || "").toLowerCase())));
 
   const navLinks = [
     { name: "Problems", href: "/problems", icon: Code2 },
@@ -204,6 +207,15 @@ export function Navbar() {
                   >
                     <ShieldCheck className="w-3.5 h-3.5 xl:w-4 xl:h-4 shrink-0" />
                     <span className="whitespace-nowrap">Admin</span>
+                  </Link>
+                )}
+                {isTeacher && (
+                  <Link
+                    href="/teacher/dashboard"
+                    className="inline-flex items-center gap-1.5 h-8.5 xl:h-9 px-2.5 xl:px-3 rounded-lg text-xs font-semibold bg-neutral-100 text-neutral-900 border border-neutral-200 hover:bg-neutral-900 hover:text-white dark:bg-white/10 dark:text-white dark:border-white/15 dark:hover:bg-white dark:hover:text-black transition-all duration-150 whitespace-nowrap shrink-0"
+                  >
+                    <Presentation className="w-3.5 h-3.5 xl:w-4 xl:h-4 shrink-0" />
+                    <span className="whitespace-nowrap">Teacher Portal</span>
                   </Link>
                 )}
                 <Link
@@ -330,6 +342,16 @@ export function Navbar() {
                       >
                         <ShieldCheck className="w-4 h-4" />
                         <span>Admin Portal</span>
+                      </Link>
+                    )}
+                    {isTeacher && (
+                      <Link
+                        href="/teacher/dashboard"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex items-center justify-center gap-2 w-full h-9.5 rounded-xl bg-neutral-100 text-neutral-900 font-semibold border border-neutral-200 dark:bg-white/10 dark:text-white dark:border-white/15 text-xs transition-colors hover:bg-neutral-200 dark:hover:bg-white/15"
+                      >
+                        <Presentation className="w-4 h-4" />
+                        <span>Teacher Portal</span>
                       </Link>
                     )}
                     <Link

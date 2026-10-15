@@ -6,12 +6,11 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { KeyRound, AlertCircle, CheckCircle2 } from "lucide-react";
+import { KeyRound, AlertCircle, CheckCircle2, GraduationCap, Presentation, ShieldCheck } from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
 import { LoginForm, LoginFormValues } from "@/components/auth/LoginForm";
-import { Building2, ShieldCheck, Quote } from "lucide-react";
 import { AuthUI } from "@/components/ui/auth-ui";
 
 // Modal specific schemas
@@ -32,13 +31,27 @@ const forcePasswordSchema = z
   });
 
 type ForcePasswordFormValues = z.infer<typeof forcePasswordSchema>;
+type LoginRole = "student" | "teacher" | "admin";
+
+const loginRoles: Array<{
+  id: LoginRole;
+  label: string;
+  description: string;
+  icon: typeof GraduationCap;
+}> = [
+  { id: "student", label: "Student", description: "Take assessments and build your coding profile.", icon: GraduationCap },
+  { id: "teacher", label: "Teacher", description: "Create learning content and review student progress.", icon: Presentation },
+  { id: "admin", label: "Admin", description: "Manage the institution and platform settings.", icon: ShieldCheck },
+];
 
 export default function AppLoginPage() {
   const [loading, setLoading] = useState(false);
   const [showForcePasswordModal, setShowForcePasswordModal] = useState(false);
   const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false);
+  const [loginRole, setLoginRole] = useState<LoginRole>("student");
+  const [roleError, setRoleError] = useState<string | null>(null);
 
-  const { login, studentLogin, forceChangePassword } = useAuth();
+  const { login, logout, studentLogin, forceChangePassword } = useAuth();
   const router = useRouter();
 
   const forceForm = useForm<ForcePasswordFormValues>({
@@ -47,14 +60,32 @@ export default function AppLoginPage() {
   });
 
   const handleLogin = async (data: LoginFormValues) => {
+    if (loginRole === "admin") {
+      router.push("/admin/login");
+      return;
+    }
+
     setLoading(true);
+    setRoleError(null);
     try {
       const input = data.email.trim();
       const res = await login({ email: input, password: data.password });
 
+      const accountRole = String(res?.user?.role || "").toLowerCase();
+      const isTeacher = Boolean(res?.user?.isTeacher) || ["teacher", "faculty", "instructor"].includes(accountRole);
+
+      if (loginRole === "teacher" && !isTeacher) {
+        const message = "This account is not enrolled as a teacher. Choose Student or contact your administrator.";
+        logout();
+        setRoleError(message);
+        return;
+      }
+
       if (res?.user?.forcePasswordChange) {
         forceForm.setValue("currentPassword", data.password);
         setShowForcePasswordModal(true);
+      } else if (isTeacher) {
+        window.location.href = "/teacher/dashboard";
       } else if (res?.user?.isAdmin) {
         window.location.href = "/admin/dashboard";
       } else if (res?.user?.isAssessmentStudent) {
@@ -76,7 +107,7 @@ export default function AppLoginPage() {
       });
       setPasswordChangeSuccess(true);
       setTimeout(() => {
-        router.push("/dashboard");
+        router.push(loginRole === "teacher" ? "/teacher/dashboard" : "/dashboard");
       }, 1500);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Failed to update password. Please try again.";
@@ -120,7 +151,55 @@ export default function AppLoginPage() {
             </p>
           </div>
 
-          <LoginForm onSubmit={handleLogin} loading={loading} />
+          <div className="rounded-2xl border border-border/80 bg-card/50 p-1.5 shadow-sm" aria-label="Choose a portal">
+            <div className="grid grid-cols-3 gap-1">
+              {loginRoles.map((option) => {
+                const Icon = option.icon;
+                const isSelected = loginRole === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => {
+                      setLoginRole(option.id);
+                      setRoleError(null);
+                    }}
+                    className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-center transition-all ${isSelected ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                    aria-pressed={isSelected}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="text-xs font-semibold">{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-primary/15 bg-primary/[0.04] px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
+            <span className="font-semibold text-foreground">{loginRoles.find((option) => option.id === loginRole)?.label} portal:</span>{" "}
+            {loginRoles.find((option) => option.id === loginRole)?.description}
+          </div>
+
+          {roleError && (
+            <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 px-3.5 py-3 text-sm text-destructive">
+              {roleError}
+            </div>
+          )}
+
+          {loginRole === "admin" ? (
+            <div className="space-y-3 rounded-2xl border border-border bg-card/60 p-5 text-center">
+              <ShieldCheck className="mx-auto h-8 w-8 text-primary" />
+              <div>
+                <h3 className="font-semibold text-foreground">Administrator sign in</h3>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Continue to the protected administrator sign-in with OTP verification.</p>
+              </div>
+              <button type="button" onClick={() => router.push("/admin/login")} className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 transition hover:bg-primary/90">
+                Continue to Admin Login
+              </button>
+            </div>
+          ) : (
+            <LoginForm onSubmit={handleLogin} loading={loading} />
+          )}
 
           <p className="text-center text-xs text-muted-foreground">
             By signing in, you agree to our{" "}
