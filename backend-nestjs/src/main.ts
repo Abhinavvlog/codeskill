@@ -10,17 +10,44 @@ import { RedisIoAdapter } from './gateway/redis-io.adapter';
 import { WinstonModule } from 'nest-winston';
 import * as winston from 'winston';
 import { json } from 'express';
+import * as path from 'path';
+import * as fs from 'fs';
 
 async function bootstrap() {
+  const logDir = path.join(process.cwd(), 'logs');
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+
+  const fileFormat = winston.format.combine(
+    winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    winston.format.errors({ stack: true }),
+    winston.format.json(),
+  );
+
   const logger = WinstonModule.createLogger({
     transports: [
       new winston.transports.Console({
         format: winston.format.combine(
-          winston.format.timestamp(),
-          winston.format.ms(),
-          winston.format.errors({ stack: true }),
-          winston.format.json(),
+          winston.format.colorize(),
+          winston.format.timestamp({ format: 'HH:mm:ss' }),
+          winston.format.printf(({ timestamp, level, message, context, stack }) => {
+            return `[${timestamp}] [${level}] ${context ? `[${context}] ` : ''}${message}${stack ? `\n${stack}` : ''}`;
+          }),
         ),
+      }),
+      new winston.transports.File({
+        filename: path.join(logDir, 'error.log'),
+        level: 'error',
+        format: fileFormat,
+        maxsize: 10 * 1024 * 1024, // 10MB
+        maxFiles: 5,
+      }),
+      new winston.transports.File({
+        filename: path.join(logDir, 'combined.log'),
+        format: fileFormat,
+        maxsize: 20 * 1024 * 1024, // 20MB
+        maxFiles: 5,
       }),
     ],
   });
@@ -44,6 +71,25 @@ async function bootstrap() {
   // payload while keeping a bounded request size.
   app.use(json({ limit: '4mb' }));
   app.enableShutdownHooks();
+
+  // HTTP access logging middleware to file & console
+  app.use((req: any, res: any, next: any) => {
+    const start = Date.now();
+    const { method, originalUrl, ip } = req;
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      const statusCode = res.statusCode;
+      const logMsg = `${method} ${originalUrl} ${statusCode} in ${duration}ms [${ip}]`;
+      if (statusCode >= 500) {
+        logger.error(logMsg, { context: 'HTTP', method, url: originalUrl, statusCode, duration, ip });
+      } else if (statusCode >= 400) {
+        logger.warn(logMsg, { context: 'HTTP', method, url: originalUrl, statusCode, duration, ip });
+      } else if (!originalUrl.startsWith('/api/health')) {
+        logger.log(logMsg, { context: 'HTTP', method, url: originalUrl, statusCode, duration, ip });
+      }
+    });
+    next();
+  });
 
   // Global prefix
   app.setGlobalPrefix('api');
@@ -93,3 +139,4 @@ async function bootstrap() {
   console.log(`📖 Swagger docs: http://localhost:${port}/api/docs\n`);
 }
 bootstrap();
+

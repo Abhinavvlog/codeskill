@@ -347,4 +347,32 @@ describe('QuestionsService - True/False Questions Handling', () => {
     });
   });
 
+  describe('bulkUpdate', () => {
+    it('should bulk update marks, difficulty, and negativeMarks across multiple questions', async () => {
+      const q1 = { id: 'q1', marks: 1, negativeMarks: 0, difficulty: 'easy', metadata: {} };
+      const q2 = { id: 'q2', marks: 1, negativeMarks: 0, difficulty: 'easy', metadata: {} };
+      mockQuestionRepo.findBy = jest.fn().mockResolvedValue([q1, q2]);
+      mockQuestionRepo.save = jest.fn().mockResolvedValue([q1, q2]);
+
+      const res = await service.bulkUpdate(
+        ['q1', 'q2'],
+        { marks: 5, negativeMarks: 1, difficulty: 'hard' },
+        mockAdminUser,
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.updatedCount).toBe(2);
+      expect(q1.marks).toBe(5);
+      expect(q1.negativeMarks).toBe(1);
+      expect(q1.difficulty).toBe('hard');
+      expect(mockQuestionRepo.save).toHaveBeenCalledWith([q1, q2]);
+      expect(mockAuditLogRepo.save).toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException if question IDs are empty', async () => {
+      await expect(service.bulkUpdate([], {}, mockAdminUser)).rejects.toThrow(BadRequestException);
+    });
+  });
+
 });
+

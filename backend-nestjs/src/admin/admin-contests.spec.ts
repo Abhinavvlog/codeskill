@@ -113,13 +113,16 @@ describe('Admin contest editing', () => {
     expect(repo.save).not.toHaveBeenCalled();
   });
 
-  it('rejects invalid dates and missing problems without saving', async () => {
+  it('rejects invalid dates, missing problems, and duplicate problems without saving', async () => {
     await expect(
       service.updateContest(id, { ...payload, endTime: payload.startTime }),
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
       service.updateContest(id, { ...payload, problems: [] }),
     ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.updateContest(id, { ...payload, problems: ['p1', 'p1'] }),
+    ).rejects.toThrow('Contest contains duplicate problems');
     expect(repo.save).not.toHaveBeenCalled();
   });
 
