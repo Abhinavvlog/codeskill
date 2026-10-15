@@ -38,6 +38,7 @@ jobs:
           npm install --legacy-peer-deps
           npm test
           npm run build
+          npm run test:startup
 
       - name: Install, Test, and Build Frontend
         working-directory: ./frontend-v2
