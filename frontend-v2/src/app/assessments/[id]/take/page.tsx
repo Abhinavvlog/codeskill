@@ -56,6 +56,7 @@ interface Question {
   _id: string;
   questionIndex: number;
   question: string;
+  description?: string;
   questionType: string;
   topic: string;
   subtopic?: string;
