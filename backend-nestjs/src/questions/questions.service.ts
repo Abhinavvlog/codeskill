@@ -904,14 +904,30 @@ export class QuestionsService {
 
     for (let i = 0; i < rawRows.length; i++) {
       const row = rawRows[i];
-      const question = findField(row, [
+      // Coding imports commonly provide a short title plus a separate `question`
+      // column containing the full prompt (see the downloadable CSV template).
+      // Keep those fields separate so the assessment can render the prompt.
+      const explicitTitle = findField(row, [
+        'title',
+        'question_title',
+        'name',
+      ]);
+      const questionText = findField(row, [
         'question',
         'question_text',
         'question_statement',
         'problem_statement',
         'problem',
-        'title',
       ]);
+      const question = explicitTitle || questionText;
+      const problemStatement =
+        findField(row, [
+          'problem_statement',
+          'problem_description',
+          'question_description',
+          'statement',
+          'description',
+        ]) || (explicitTitle ? questionText : '');
       const rawQuestionType =
         findField(row, ['question_type', 'type', 'qtype']) || 'single_choice';
       const topic =
@@ -1107,6 +1123,7 @@ export class QuestionsService {
       parsedRows.push({
         rowNumber: i + 2,
         question,
+        problemStatement,
         questionType,
         unknownType,
         rawQuestionType,
@@ -1354,6 +1371,7 @@ export class QuestionsService {
       validRows.push({
         rowNumber: row.rowNumber,
         question: row.question,
+        problemStatement: row.problemStatement,
         questionType: row.questionType,
         topic: row.topic,
         subtopic: row.subtopic || undefined,
@@ -1471,7 +1489,7 @@ export class QuestionsService {
         matchStatus: r.matchStatus || 'new',
         ...(isCodingRow
           ? {
-              problemStatement: r.question,
+              problemStatement: r.problemStatement || r.question,
               constraints: constraintList,
               timeLimit: r.timeLimit || 2000,
               memoryLimit: r.memoryLimit || 256,

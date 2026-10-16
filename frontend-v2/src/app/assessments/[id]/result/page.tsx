@@ -212,14 +212,14 @@ export default function AssessmentResultPage({
 
         {/* Scorecard Hero Banner */}
         <div
-          className={`relative overflow-hidden rounded-lg p-6 sm:p-8 border bg-white shadow-xs ${
+          className={`relative overflow-hidden rounded-lg p-6 sm:p-8 border bg-card text-card-foreground shadow-xs ${
             attempt.passed
-              ? "border-emerald-200"
-              : "border-slate-200"
+              ? "border-emerald-200 dark:border-emerald-900/70"
+              : "border-border"
           }`}
         >
           {/* Institutional Branding Header */}
-          <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-200 gap-4">
+          <div className="flex items-center justify-between pb-4 mb-4 border-b border-border gap-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-md overflow-hidden bg-white shrink-0 border border-slate-200 p-0.5 flex items-center justify-center">
                 <img
@@ -232,7 +232,7 @@ export default function AssessmentResultPage({
                 />
               </div>
               <div>
-                <p className="text-xs font-bold text-slate-900 leading-tight">Chandigarh University</p>
+                <p className="text-xs font-bold text-foreground leading-tight">Chandigarh University</p>
                 <p className="text-[10px] text-primary font-semibold uppercase tracking-wider">Official Examination Scorecard</p>
               </div>
             </div>
@@ -273,7 +273,7 @@ export default function AssessmentResultPage({
                 </span>
               </div>
 
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
+              <h1 className="text-xl sm:text-2xl font-bold text-foreground">
                 {assessment?.title}
               </h1>
               <p className="text-xs text-muted-foreground mt-1">
