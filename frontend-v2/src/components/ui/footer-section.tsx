@@ -185,7 +185,9 @@ export function FooterSectionView({
                       ) : (
                         <Link
                           href={link.href}
-                          className="hover:text-foreground inline-flex items-center transition-all duration-300"
+                          className={`hover:text-foreground inline-flex items-center transition-all duration-300 ${
+                            link.href === '/skill-development' ? 'font-semibold text-primary' : ''
+                          }`}
                         >
                           {link.icon && <link.icon className="me-1.5 size-3.5" />}
                           {link.title}

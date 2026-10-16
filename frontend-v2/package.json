@@ -4,12 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "rm -rf .next && next build --webpack",
+    "build": "rm -rf .next && next build --webpack && npm run verify:skill-development",
     "start": "next start",
     "lint": "eslint",
     "test": "jest",
     "typecheck": "tsc --noEmit --incremental false",
-    "prod:start": "next start -p 3000"
+    "prod:start": "next start -p 3000",
+    "verify:skill-development": "node scripts/verify-skill-development-build.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
