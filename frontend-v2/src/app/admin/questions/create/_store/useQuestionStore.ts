@@ -203,6 +203,28 @@ export interface QuestionState {
   ) => void;
 }
 
+/**
+ * Accepts a per-language code map ({ python: "..." }), an array of
+ * { language, code } / { language, sourceCode } entries (how the question bank
+ * stores it), or undefined, and always returns a plain string map.
+ */
+function toCodeMap(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object") return {};
+  if (Array.isArray(value)) {
+    return value.reduce<Record<string, string>>((map, entry) => {
+      const language = String(entry?.language ?? "").trim();
+      const code = entry?.code ?? entry?.sourceCode;
+      if (language && typeof code === "string") map[language] = code;
+      return map;
+    }, {});
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key, code]) => key && typeof code === "string")
+      .map(([key, code]) => [key, code as string]),
+  );
+}
+
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
 /** Older questions stored examples separately from test cases; unify them as public test cases. */
@@ -211,13 +233,13 @@ function migrateExamplesIntoTestCases(
   examples: Array<{ input?: string; output?: string; explanation?: string }>,
 ): TestCase[] {
   const publicInputs = new Set(
-    testCases.filter((tc) => !tc.isHidden).map((tc) => tc.input.trim()),
+    testCases.filter((tc) => !tc.isHidden).map((tc) => String(tc.input ?? "").trim()),
   );
   const migrated = (examples || [])
-    .filter((ex) => ex?.input?.trim() && !publicInputs.has(ex.input.trim()))
+    .filter((ex) => String(ex?.input ?? "").trim() && !publicInputs.has(String(ex?.input ?? "").trim()))
     .map((ex) => ({
       id: generateId(),
-      input: ex.input!.trim(),
+      input: String(ex.input ?? "").trim(),
       output: ex.output || "",
       explanation: ex.explanation || "",
       isHidden: false,
@@ -499,11 +521,11 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
 
     // Starter Code
     total += 1;
-    if (Object.values(s.starterCode).some((c) => c.trim())) filled++;
+    if (Object.values(s.starterCode).some((c) => String(c).trim())) filled++;
 
     // Reference Solution
     total += 1;
-    if (Object.values(s.referenceSolution).some((c) => c.trim())) filled++;
+    if (Object.values(s.referenceSolution).some((c) => String(c).trim())) filled++;
 
     // Test Cases
     total += 1;
@@ -554,8 +576,8 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
           : state.statement.constraints,
       },
       mcqOptions: nextMcqOptions,
-      starterCode: { ...state.starterCode, ...data.starterCode },
-      referenceSolution: { ...state.referenceSolution, ...data.referenceSolution },
+      starterCode: { ...state.starterCode, ...toCodeMap(data.starterCode) },
+      referenceSolution: { ...state.referenceSolution, ...toCodeMap(data.referenceSolution) },
       testCases: migrateExamplesIntoTestCases(
         data.testCases || state.testCases,
         data.examples || data.sampleExamples || [],
