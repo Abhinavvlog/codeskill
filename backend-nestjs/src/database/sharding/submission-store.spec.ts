@@ -152,3 +152,48 @@ it('does not fabricate comparisons without peer measurements', async () => {
   const { store } = setup(false);
   expect(await store.performanceComparison({} as never, ['python'])).toEqual({ runtime: null, memory: null });
 });
+
+it('sums problem statistics across every shard and excludes non-judged statuses', async () => {
+  const { store, a, b, primary } = setup();
+  a.query.mockResolvedValue([{ totalSubmissions: '3', acceptedSubmissions: '1', solvers: '2', acceptedSolvers: '1' }]);
+  b.query.mockResolvedValue([{ totalSubmissions: '2', acceptedSubmissions: '2', solvers: '1', acceptedSolvers: '1' }]);
+  expect(await store.problemStats('problem-1')).toEqual({
+    totalSubmissions: 5,
+    acceptedSubmissions: 3,
+    solvers: 3,
+    acceptedSolvers: 2,
+  });
+  expect(primary.query).not.toHaveBeenCalled();
+  expect(a.query.mock.calls[0][1]).toEqual(['problem-1']);
+  expect(a.query.mock.calls[0][0]).toContain('count(DISTINCT "userId")');
+  expect(a.query.mock.calls[0][0]).toContain(`'cancelled'`);
+});
+
+it('queries only the primary repository when sharding is disabled', async () => {
+  const { store, primary, a } = setup(false);
+  primary.query.mockResolvedValue([{ totalSubmissions: '1', acceptedSubmissions: '0', solvers: '1', acceptedSolvers: '0' }]);
+  expect(await store.problemStats('problem-1')).toEqual({
+    totalSubmissions: 1,
+    acceptedSubmissions: 0,
+    solvers: 1,
+    acceptedSolvers: 0,
+  });
+  expect(a.query).not.toHaveBeenCalled();
+});
+
+it('combines runtime distribution buckets across shards', async () => {
+  const { store, a, b } = setup();
+  a.query.mockResolvedValue([{ bucket: '2', count: '3' }, { bucket: '5', count: '1' }]);
+  b.query.mockResolvedValue([{ bucket: '2', count: '2' }]);
+  const result = await store.runtimeDistribution(
+    { problemId: 'p', problemSource: 'metadata', userId: 'student-a', totalTestCases: 5 } as never,
+    ['python', 'py', 'python3'],
+  );
+  expect(result.sampleSize).toBe(6);
+  expect(result.buckets).toHaveLength(9);
+  expect(result.buckets[1]).toEqual({ min: 10, max: 20, count: 5 });
+  expect(result.buckets[4]).toEqual({ min: 80, max: 160, count: 1 });
+  expect(result.buckets[8]).toEqual({ min: 1280, max: null, count: 0 });
+  expect(a.query.mock.calls[0][1]).toEqual(['p', 'metadata', ['python', 'py', 'python3'], 'student-a', 5]);
+  expect(a.query.mock.calls[0][0]).toContain('width_bucket');
+});

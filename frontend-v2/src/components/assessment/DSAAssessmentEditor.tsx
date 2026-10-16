@@ -25,7 +25,8 @@ import {
   Send,
   HelpCircle,
 } from "lucide-react";
-import { azureRunAPI, studentAssessmentsAPI } from "@/config/api";
+import { runAPI, studentAssessmentsAPI } from "@/config/api";
+import { awaitExecution } from "@/lib/await-execution";
 import ExecutionFeedback from '@/components/Result/ExecutionFeedback';
 import { Spinner } from "@/components/ui/spinner";
 
@@ -321,37 +322,58 @@ export default function DSAAssessmentEditor({
 
     try {
       if (bottomTab === "custom_input") {
-        // Run with custom stdin
-        const res = await azureRunAPI.run({
-          code,
-          language,
-          stdin: customInput,
-          timeoutMs: (question.timeLimit || 2000) * 2,
-        });
+        // Run with custom stdin against the judge; a clean run is reported
+        // as accepted because no expected output is configured.
+        const res = await awaitExecution(
+          () => runAPI.run({
+            code,
+            language,
+            testCases: [{ id: "run", input: customInput || "", expected: "" }],
+            config: {
+              customInput: true,
+              timeLimit: (question.timeLimit || 2000) * 2,
+              memoryLimit: question.memoryLimit || 256,
+            },
+          }),
+          (jobId) => runAPI.getJob(jobId),
+        );
         setRunResult(res.data);
       } else if (sampleCases.length > 0) {
-        // Run against all sample test cases
+        // Run against all sample test cases through the judge
         const payloadTestCases = sampleCases.map((tc, idx) => ({
           id: tc.id || String(idx + 1),
           input: tc.input || "",
           expected: tc.expected || tc.output || "",
         }));
 
-        const res = await azureRunAPI.run({
-          code,
-          language,
-          testCases: payloadTestCases,
-          timeoutMs: 12000,
-        });
+        const res = await awaitExecution(
+          () => runAPI.run({
+            code,
+            language,
+            testCases: payloadTestCases,
+            config: {
+              timeLimit: question.timeLimit || 12000,
+              memoryLimit: question.memoryLimit || 256,
+            },
+          }),
+          (jobId) => runAPI.getJob(jobId),
+        );
         setRunResult(res.data);
       } else {
         // Run without testcases
-        const res = await azureRunAPI.run({
-          code,
-          language,
-          stdin: customInput || "",
-          timeoutMs: 8000,
-        });
+        const res = await awaitExecution(
+          () => runAPI.run({
+            code,
+            language,
+            testCases: [{ id: "run", input: customInput || "", expected: "" }],
+            config: {
+              customInput: true,
+              timeLimit: question.timeLimit || 8000,
+              memoryLimit: question.memoryLimit || 256,
+            },
+          }),
+          (jobId) => runAPI.getJob(jobId),
+        );
         setRunResult(res.data);
       }
     } catch (err: any) {

@@ -6,7 +6,7 @@ import { Logger, ForbiddenException } from '@nestjs/common';
 import { SubmissionsService } from './submissions.service';
 
 describe('Submission feedback response', () => {
-  const store = { performanceComparison: jest.fn() };
+  const store = { performanceComparison: jest.fn(), runtimeDistribution: jest.fn() };
   let service: SubmissionsService;
   beforeEach(() => {
     jest.clearAllMocks();
@@ -38,6 +38,10 @@ describe('Submission feedback response', () => {
       runtime: { percentile: 75, sampleSize: 4 },
       memory: null,
     });
+    store.runtimeDistribution.mockResolvedValue({
+      buckets: [{ min: 0, max: 10, count: 2 }, { min: 10, max: 20, count: 1 }],
+      sampleSize: 3,
+    });
     const result = await service.getSubmissionResult('student', 'submission');
     expect(result).toMatchObject({
       runtime: 12,
@@ -45,8 +49,16 @@ describe('Submission feedback response', () => {
       testCasesPassed: 5,
       totalTestCases: 5,
       comparison: { runtime: { percentile: 75, sampleSize: 4 } },
+      distribution: {
+        buckets: [{ min: 0, max: 10, count: 2 }, { min: 10, max: 20, count: 1 }],
+        sampleSize: 3,
+      },
     });
     expect(store.performanceComparison).toHaveBeenCalledWith(
+      expect.anything(),
+      ['python', 'python3', 'py'],
+    );
+    expect(store.runtimeDistribution).toHaveBeenCalledWith(
       expect.anything(),
       ['python', 'python3', 'py'],
     );

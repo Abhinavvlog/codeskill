@@ -10,11 +10,12 @@ import {
   List, MessageSquare, Lightbulb, Sparkles, StickyNote, Tag, BarChart3,
   Trophy, Flame, Copy, RotateCcw, History, Eye, EyeOff, Plus, Trash2,
   ThumbsUp, ThumbsDown, ArrowLeft, Hash, Zap, Target, Award, TrendingUp,
-  Code2, FileText, User, Check, ArrowRight
+  Code2, FileText, User, Check, ArrowRight, Users
 } from "lucide-react";
 import PracticePet from "@/components/pet/PracticePet";
 import ExecutionFeedback from "@/components/Result/ExecutionFeedback";
 import PracticeConfetti from "@/components/Result/PracticeConfetti";
+import SubmissionDetails from "@/components/Result/SubmissionDetails";
 import { ExecutionFeedbackResult, normalizeVerdict } from "@/lib/submission-feedback";
 import { editorLanguages } from '@/lib/editor-languages';
 import { ProgrammingLanguageIcon } from "@/components/ui/ProgrammingLanguageIcon";
@@ -22,7 +23,7 @@ import Link from "next/link";
 import { useState, useEffect, useCallback, use, useRef } from "react";
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
 import Editor from "@monaco-editor/react";
-import { submissionAPI, runAPI, problemsAPI, discussionsAPI } from "@/config/api";
+import { submissionAPI, runAPI, problemsAPI, discussionsAPI, type ProblemStats } from "@/config/api";
 import { useTheme } from "@/context/ThemeContext";
 import { Spinner } from "@/components/ui/spinner";
 import gsap from "gsap";
@@ -171,7 +172,14 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
   const [replyContent, setReplyContent] = useState("");
   const [replySubmitting, setReplySubmitting] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  
+
+  // Live problem-wide submission statistics (acceptance, solvers)
+  const [problemStats, setProblemStats] = useState<ProblemStats | null>(null);
+  const statsRequestRef = useRef(0);
+
+  // Submission history expansion (verdict, metrics, peer comparison, complexity)
+  const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
+
   useEffect(() => {
     setLoading(true);
     problemsAPI.getBySlug(problemId)
@@ -184,6 +192,32 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
       .catch(() => setProblem(null))
       .finally(() => setLoading(false));
   }, [problemId]);
+
+  const refreshProblemStats = useCallback((id: string) => {
+    if (typeof window === "undefined" || !localStorage.getItem("codeskill_token")) return;
+    const request = ++statsRequestRef.current;
+    submissionAPI.getProblemStats(id)
+      .then(res => { if (request === statsRequestRef.current) setProblemStats(res.data ?? null); })
+      .catch(() => { if (request === statsRequestRef.current) setProblemStats(null); });
+  }, []);
+
+  const refreshSubmissions = useCallback(async (problemId: string) => {
+    try {
+      const res = await submissionAPI.getSubmissions(problemId as never);
+      const rows = res.data?.data || [];
+      setSubmissions(rows);
+      return rows;
+    } catch {
+      setSubmissions([]);
+      return [];
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!problem?._id) return;
+    setProblemStats(null);
+    refreshProblemStats(problem._id);
+  }, [problem?._id, refreshProblemStats]);
 
   // Draft Restoration
   useEffect(() => {
@@ -518,6 +552,13 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
     try {
       const result = await submissionAPI.submitAndWait({ problemId: problem._id, language, code }, setExecutionPhase);
       setRunResult({ ...result, logs: [] });
+      refreshProblemStats(problem._id);
+      // Surface the judged submission in the history table and expand it.
+      setActiveSidebarTab("submissions");
+      setSubmissionsLoading(true);
+      refreshSubmissions(problem._id)
+        .then(rows => setExpandedSubmissionId(rows[0]?.id ?? rows[0]?._id ?? null))
+        .finally(() => setSubmissionsLoading(false));
       if (normalizeVerdict(result.status) === 'accepted') {
         setCelebrationCount(count => count + 1);
       }
@@ -548,7 +589,7 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
       setIsSubmitting(false);
       setExecutionPhase(null);
     }
-  }, [code, language, problem, isRunning, isSubmitting, languageEnabled]);
+  }, [code, language, problem, isRunning, isSubmitting, languageEnabled, refreshProblemStats, refreshSubmissions]);
 
   const handleSaveNote = () => {
     if (!problem) return;
@@ -618,9 +659,11 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
     : editorThemeName;
   const testCases = getTestCases();
   const difficultyClass = DIFFICULTY_COLORS[problem.difficulty] || DIFFICULTY_COLORS.Easy;
-  const acceptanceRate = problem.stats?.totalSubmissions > 0
-    ? ((problem.stats.acceptedSubmissions / problem.stats.totalSubmissions) * 100).toFixed(1)
-    : "N/A";
+  const displayedStats = problemStats ?? problem.stats;
+  const totalProblemSubmissions = displayedStats?.totalSubmissions ?? 0;
+  const acceptanceRate = totalProblemSubmissions > 0
+    ? ((displayedStats.acceptedSubmissions / totalProblemSubmissions) * 100).toFixed(1)
+    : null;
 
   return (
     <div ref={containerRef} className="codeskill-problem-workspace flex flex-col h-dvh bg-background overflow-hidden font-sans text-foreground relative">
@@ -862,8 +905,15 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
                         {/* Problem Metadata Bar */}
                         <div className="flex flex-wrap gap-2 mb-5">
                           <MetaBadge icon={Target} label={problem.difficulty} className={difficultyClass} />
-                          <MetaBadge icon={BarChart3} label={`${acceptanceRate}% acceptance`} className="bg-secondary border-border text-foreground/80 text-[11px]" />
-                          <MetaBadge icon={Zap} label={`${problem.stats?.totalSubmissions || 0} submissions`} className="bg-secondary border-border text-foreground/80 text-[11px]" />
+                          {totalProblemSubmissions > 0 ? (
+                            <>
+                              <MetaBadge icon={BarChart3} label={`${acceptanceRate}% acceptance`} className="bg-secondary border-border text-foreground/80 text-[11px]" />
+                              <MetaBadge icon={Zap} label={`${totalProblemSubmissions} submissions`} className="bg-secondary border-border text-foreground/80 text-[11px]" />
+                              {problemStats && <MetaBadge icon={Users} label={`${problemStats.acceptedSolvers}/${problemStats.solvers} solved`} className="bg-secondary border-border text-foreground/80 text-[11px]" />}
+                            </>
+                          ) : (
+                            <MetaBadge icon={BarChart3} label="No submissions yet" className="bg-secondary border-border text-foreground/80 text-[11px]" />
+                          )}
                           {problem.config?.timeLimit && <MetaBadge icon={Clock} label={`${problem.config.timeLimit}ms`} className="bg-secondary border-border text-foreground/80 text-[11px]" />}
                           {problem.config?.memoryLimit && <MetaBadge icon={Code2} label={`${problem.config.memoryLimit}MB`} className="bg-secondary border-border text-foreground/80 text-[11px]" />}
                         </div>
@@ -979,27 +1029,44 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
                           </div>
                         ) : submissions.length > 0 ? (
                           <div className="space-y-2">
-                            {submissions.map((sub: any, i: number) => (
-                              <div key={i} className="p-3 rounded-xl border border-border bg-secondary hover:bg-accent transition-colors cursor-pointer group">
-                                <div className="flex items-center justify-between mb-1.5">
-                                  <span className={`text-xs font-bold ${
-                                    sub.status === "accepted" ? "text-emerald-400" :
-                                    sub.status === "wrong_answer" ? "text-rose-400" : "text-amber-400"
-                                  }`}>
-                                    {sub.status === "accepted" ? "✓ Accepted" :
-                                     sub.status === "wrong_answer" ? "✗ Wrong Answer" : "⚠ Error"}
-                                  </span>
-                                  <span className="text-[10px] text-muted-foreground">
-                                    {new Date(sub.createdAt).toLocaleDateString()}
-                                  </span>
+                            {submissions.map((sub: any, i: number) => {
+                              const rowId = sub.id ?? sub._id;
+                              const isOpen = expandedSubmissionId === rowId;
+                              return (
+                                <div key={rowId ?? i} className={`rounded-xl border transition-colors ${isOpen ? "border-primary/40 bg-secondary" : "border-border bg-secondary hover:bg-accent"}`}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedSubmissionId(isOpen ? null : rowId)}
+                                    className="w-full p-3 text-left flex items-center justify-between gap-2"
+                                    aria-expanded={isOpen}
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <span className={`text-xs font-bold ${
+                                        sub.status === "accepted" ? "text-emerald-400" :
+                                        sub.status === "wrong_answer" ? "text-rose-400" : "text-amber-400"
+                                      }`}>
+                                        {sub.status === "accepted" ? "✓ Accepted" :
+                                         sub.status === "wrong_answer" ? "✗ Wrong Answer" : "⚠ Error"}
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {new Date(sub.createdAt).toLocaleDateString()}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-[10px] text-foreground/80">
+                                      <span className="flex items-center gap-1"><Code2 className="w-3 h-3 text-primary" />{sub.language}</span>
+                                      {sub.runtime != null && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{sub.runtime}ms</span>}
+                                      <span className="flex items-center gap-1"><Target className="w-3 h-3" />{sub.testCasesPassed}/{sub.totalTestCases}</span>
+                                      <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                                    </div>
+                                  </button>
+                                  {isOpen && (
+                                    <div className="px-3 pb-3">
+                                      <SubmissionDetails submission={{ ...sub, id: rowId }} />
+                                    </div>
+                                  )}
                                 </div>
-                                <div className="flex items-center gap-3 text-[10px] text-foreground/80">
-                                  <span className="flex items-center gap-1"><Code2 className="w-3 h-3 text-primary" />{sub.language}</span>
-                                  {sub.runtime && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{sub.runtime}ms</span>}
-                                  <span className="flex items-center gap-1"><Target className="w-3 h-3" />{sub.testCasesPassed}/{sub.totalTestCases}</span>
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         ) : (
                           <EmptyState

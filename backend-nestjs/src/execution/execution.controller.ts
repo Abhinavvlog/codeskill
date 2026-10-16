@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody, ApiResponse } from '@nestjs/swagger';
 import { ExecutionService, Status } from './execution.service';
-import { AzureExecutionService } from './azure-execution.service';
+import { analyzeComplexity } from './complexity-analyzer';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -29,7 +29,6 @@ import { ExecutionAdmissionService } from './admission/execution-admission.servi
 export class ExecutionController {
   constructor(
     private readonly executionService: ExecutionService,
-    private readonly azureExecutionService: AzureExecutionService,
     @InjectQueue('submissions') private readonly submissionQueue: Queue,
     private readonly admission: ExecutionAdmissionService,
   ) {}
@@ -232,6 +231,23 @@ export class ExecutionController {
     };
   }
 
+  @Post('analyze-complexity')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Estimate time and space complexity of a solution' })
+  async analyzeCodeComplexity(@Body() body: { code: string; language: string }) {
+    if (
+      typeof body?.code !== 'string' ||
+      !body.code.trim() ||
+      Buffer.byteLength(body.code) > 1_000_000
+    )
+      throw new BadRequestException(
+        'Source code must be nonempty and at most 1MB',
+      );
+    if (typeof body?.language !== 'string' || !body.language.trim())
+      throw new BadRequestException('language is required');
+    return { success: true, ...analyzeComplexity(body.code, body.language) };
+  }
+
   @Get('jobs/:jobId')
   @ApiOperation({ summary: 'Get an asynchronous execution result' })
   async getJob(
@@ -283,49 +299,5 @@ export class ExecutionController {
         'Execution queue status is unavailable',
       );
     }
-  }
-
-  /**
-   * Compatibility alias. Every execution uses the same admission and judge queue.
-   */
-  @Post('azure-run')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Compatibility alias for queued code execution',
-  })
-  async azureRun(
-    @CurrentUser('id') userId: string,
-    @Body()
-    body: {
-      code: string;
-      language: string;
-      stdin?: string;
-      testCases?: Array<{ id: string; input: string; expected: string }>;
-      timeoutMs?: number;
-      memoryMB?: number;
-    },
-  ) {
-    if (
-      typeof body.code !== 'string' ||
-      typeof body.language !== 'string' ||
-      !body.code ||
-      !body.language
-    ) {
-      throw new BadRequestException('code and language are required');
-    }
-
-    const isSingleRun = !body.testCases?.length;
-    return this.runCode(userId, {
-      code: body.code,
-      language: body.language,
-      testCases: isSingleRun
-        ? [{ id: 'run', input: body.stdin || '', expected: '' }]
-        : body.testCases,
-      config: {
-        customInput: isSingleRun,
-        timeLimit: body.timeoutMs || 3000,
-        memoryLimit: body.memoryMB || 256,
-      },
-    });
   }
 }

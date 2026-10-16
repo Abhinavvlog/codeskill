@@ -38,7 +38,6 @@ describe('Admission lifecycle at API and worker boundaries', () => {
   const controller = () =>
     new ExecutionController(
       execution as never,
-      {} as never,
       queue as never,
       admission as never,
     );
