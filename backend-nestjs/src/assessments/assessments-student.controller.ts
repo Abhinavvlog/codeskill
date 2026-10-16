@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AssessmentsService } from './assessments.service';
 import { EvaluateAssessmentCodeDto } from './dto/evaluate-code.dto';
 import { SubmissionRateLimitGuard } from '../common/guards/submission-rate-limit.guard';
@@ -38,12 +39,22 @@ export class AssessmentsStudentController {
 
   @Post(':id/start')
   @ApiOperation({ summary: 'Begin or resume assessment attempt session' })
+  @Throttle({
+    short: { limit: 10, ttl: 1000 },
+    medium: { limit: 50, ttl: 10000 },
+    long: { limit: 120, ttl: 60000 },
+  })
   async startAttempt(@Param('id') id: string, @CurrentUser() studentUser: any) {
     return this.assessmentsService.startStudentAttempt(id, studentUser);
   }
 
   @Post(':id/retake')
   @ApiOperation({ summary: 'Redo / Retake assessment session for practice' })
+  @Throttle({
+    short: { limit: 10, ttl: 1000 },
+    medium: { limit: 50, ttl: 10000 },
+    long: { limit: 60, ttl: 60000 },
+  })
   async retakeAttempt(
     @Param('id') id: string,
     @CurrentUser() studentUser: any,
@@ -63,6 +74,11 @@ export class AssessmentsStudentController {
 
   @Post(':id/violations')
   @ApiOperation({ summary: 'Record timestamped proctoring violation and secure evidence' })
+  @Throttle({
+    short: { limit: 20, ttl: 1000 },
+    medium: { limit: 120, ttl: 10000 },
+    long: { limit: 300, ttl: 60000 },
+  })
   async recordViolation(
     @Param('id') id: string,
     @Body() dto: RecordViolationDto,
@@ -73,6 +89,11 @@ export class AssessmentsStudentController {
 
   @Post(':id/proctor-capture')
   @ApiOperation({ summary: 'Receive proctoring frame capture from @peepl/proctoring' })
+  @Throttle({
+    short: { limit: 20, ttl: 1000 },
+    medium: { limit: 120, ttl: 10000 },
+    long: { limit: 300, ttl: 60000 },
+  })
   async recordProctorCapture(
     @Param('id') id: string,
     @Body() dto: ProctorCaptureDto,
@@ -83,6 +104,11 @@ export class AssessmentsStudentController {
 
   @Post(':id/save-progress')
   @ApiOperation({ summary: 'Autosave candidate responses during test' })
+  @Throttle({
+    short: { limit: 20, ttl: 1000 },
+    medium: { limit: 120, ttl: 10000 },
+    long: { limit: 300, ttl: 60000 },
+  })
   async saveProgress(
     @Param('id') id: string,
     @Body() dto: SubmitAssessmentDto,
@@ -95,6 +121,11 @@ export class AssessmentsStudentController {
   @ApiOperation({
     summary: 'Submit completed assessment for server evaluation',
   })
+  @Throttle({
+    short: { limit: 10, ttl: 1000 },
+    medium: { limit: 50, ttl: 10000 },
+    long: { limit: 60, ttl: 60000 },
+  })
   async submitAttempt(
     @Param('id') id: string,
     @Body() dto: SubmitAssessmentDto,
@@ -105,6 +136,11 @@ export class AssessmentsStudentController {
 
   @Post(':id/evaluate-code')
   @UseGuards(SubmissionRateLimitGuard)
+  @Throttle({
+    short: { limit: 3, ttl: 1000 },
+    medium: { limit: 10, ttl: 10000 },
+    long: { limit: 20, ttl: 60000 },
+  })
   async evaluateCode(
     @Param('id') id: string,
     @Body() dto: EvaluateAssessmentCodeDto,

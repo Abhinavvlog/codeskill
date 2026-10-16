@@ -14,6 +14,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody, ApiResponse } from '@nestjs/swagger';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { ExecutionService, Status } from './execution.service';
 import { AzureExecutionService } from './azure-execution.service';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -35,6 +36,7 @@ export class ExecutionController {
   ) {}
 
   @Get('health')
+  @SkipThrottle()
   @UseGuards(AdminGuard)
   async executionHealth() {
     const runtimes = await this.runtimes();
@@ -57,6 +59,7 @@ export class ExecutionController {
   }
 
   @Get('runtimes')
+  @SkipThrottle()
   async runtimes() {
     try {
       return await this.executionService.availableLanguages();
@@ -69,6 +72,11 @@ export class ExecutionController {
 
   @Post('run')
   @HttpCode(HttpStatus.OK)
+  @Throttle({
+    short: { limit: 3, ttl: 1000 },
+    medium: { limit: 10, ttl: 10000 },
+    long: { limit: 20, ttl: 60000 },
+  })
   @ApiOperation({
     summary: 'Execute code against test cases without saving a submission',
   })
