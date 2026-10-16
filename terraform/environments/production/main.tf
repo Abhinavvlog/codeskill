@@ -287,7 +287,10 @@ module "rds" {
   max_allocated_storage   = 200
   multi_az                = true
   backup_retention_period = 7
-  storage_encrypted       = true
+  # The existing production instance is unencrypted. Enabling encryption
+  # requires an explicit snapshot/restore migration and must not be attempted
+  # by a routine Terraform apply.
+  storage_encrypted       = false
   deletion_protection     = true
 }
 
@@ -317,9 +320,11 @@ module "frontend_asg" {
 
   iam_instance_profile_name = module.iam.frontend_instance_profile_name
 
-  min_size         = 2
-  desired_capacity = 2
-  max_size         = 6
+  # Keep the baseline within the current account vCPU quota; raise capacities
+  # only after the EC2 quota increase is approved.
+  min_size         = 1
+  desired_capacity = 1
+  max_size         = 2
 
   cpu_target_utilization = 65.0
 
@@ -353,9 +358,9 @@ module "backend_asg" {
 
   iam_instance_profile_name = module.iam.backend_instance_profile_name
 
-  min_size         = 2
-  desired_capacity = 3
-  max_size         = 6
+  min_size         = 1
+  desired_capacity = 1
+  max_size         = 2
 
   cpu_target_utilization = 60.0
 
@@ -400,9 +405,9 @@ module "piston_asg" {
 
   iam_instance_profile_name = module.iam.piston_instance_profile_name
 
-  min_size         = 2
-  desired_capacity = 3
-  max_size         = 8
+  min_size         = 1
+  desired_capacity = 1
+  max_size         = 2
 
   cpu_target_utilization = 60.0
 
@@ -436,8 +441,8 @@ module "judge0_asg" {
   iam_instance_profile_name = module.iam.judge0_instance_profile_name
 
   min_size         = 1
-  desired_capacity = 2
-  max_size         = 4
+  desired_capacity = 1
+  max_size         = 2
 
   cpu_target_utilization = 65.0
 
