@@ -196,6 +196,41 @@ export class SubmissionStore {
     return totals.reduce((sum, total) => sum + total, 0);
   }
 
+  /** One best measurement per other student; aggregate counts across shards. */
+  async performanceComparison(submission: Submission, languages: string[]) {
+    const runtime = submission.runtime ?? submission.executionTime;
+    const memory = submission.memory ?? submission.memoryUsed;
+    const rows = await Promise.all(this.repositories().map(repo => repo.query<Array<{
+      runtimeCount: string; runtimeBetter: string; memoryCount: string; memoryBetter: string;
+    }>>(`SELECT
+      count(runtime) AS "runtimeCount", count(*) FILTER (WHERE runtime > $6) AS "runtimeBetter",
+      count(memory) AS "memoryCount", count(*) FILTER (WHERE memory > $7) AS "memoryBetter"
+      FROM (SELECT "userId", min(coalesce(runtime, "executionTime")) AS runtime,
+        min(coalesce(memory, "memoryUsed")) AS memory
+        FROM submissions WHERE "problemId" = $1 AND "problemSource" = $2
+          AND lower(language) = ANY($3::text[]) AND lower(status) = 'accepted'
+          AND "userId" <> $4 AND coalesce("totalTestCases", "totalTests") = $5
+        GROUP BY "userId") peers`, [submission.problemId, submission.problemSource,
+      languages, submission.userId, submission.totalTestCases ?? submission.totalTests,
+      Number.isFinite(runtime) ? runtime : null, Number.isFinite(memory) ? memory : null])));
+    const totals = rows.flat().reduce((sum, row) => ({
+      runtimeCount: sum.runtimeCount + Number(row.runtimeCount),
+      runtimeBetter: sum.runtimeBetter + Number(row.runtimeBetter),
+      memoryCount: sum.memoryCount + Number(row.memoryCount),
+      memoryBetter: sum.memoryBetter + Number(row.memoryBetter),
+    }), { runtimeCount: 0, runtimeBetter: 0, memoryCount: 0, memoryBetter: 0 });
+    return {
+      runtime: Number.isFinite(runtime) && totals.runtimeCount ? {
+        percentile: Math.round(totals.runtimeBetter / totals.runtimeCount * 1000) / 10,
+        sampleSize: totals.runtimeCount,
+      } : null,
+      memory: Number.isFinite(memory) && totals.memoryCount ? {
+        percentile: Math.round(totals.memoryBetter / totals.memoryCount * 1000) / 10,
+        sampleSize: totals.memoryCount,
+      } : null,
+    };
+  }
+
   async findAndCount(
     options: FindManyOptions<Submission>,
   ): Promise<[Submission[], number]> {

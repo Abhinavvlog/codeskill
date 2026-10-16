@@ -13,6 +13,10 @@ import {
   Code2, FileText, User, Check, ArrowRight
 } from "lucide-react";
 import PracticePet from "@/components/pet/PracticePet";
+import ExecutionFeedback from "@/components/Result/ExecutionFeedback";
+import PracticeConfetti from "@/components/Result/PracticeConfetti";
+import { ExecutionFeedbackResult, normalizeVerdict } from "@/lib/submission-feedback";
+import { editorLanguages } from '@/lib/editor-languages';
 import { ProgrammingLanguageIcon } from "@/components/ui/ProgrammingLanguageIcon";
 import Link from "next/link";
 import { useState, useEffect, useCallback, use, useRef } from "react";
@@ -38,26 +42,7 @@ const DIFFICULTY_COLORS: Record<string, string> = {
   Hard: "text-[#EF4444] bg-[rgba(239,68,68,0.10)] border-[rgba(239,68,68,0.25)]",
 };
 
-interface TestResult {
-  id: number;
-  passed: boolean;
-  status: string;
-  output: string;
-  expected: string;
-  error?: string;
-  executionTime?: number;
-}
-
-type SubmissionStatus = "accepted" | "wrong_answer" | "compile_error" | "runtime_error" | "time_limit" | "memory_limit" | "system_error" | "error";
-
-interface RunResult {
-  status: SubmissionStatus;
-  results: TestResult[];
-  runtime: number;
-  logs: string[];
-  passedCount: number;
-  totalCount: number;
-}
+interface RunResult extends ExecutionFeedbackResult { logs: string[] }
 
 // ─── SIDEBAR TAB DEFINITIONS ─────────────────────────────────────────────────
 const SIDEBAR_TABS = [
@@ -105,6 +90,8 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
   // Editor State
   const executionRuntimes = useExecutionRuntimes();
   const [language, setLanguage] = useState<string>("javascript");
+  const languageOptions = editorLanguages(LANGUAGES, problem?.config?.supportedLanguages, executionRuntimes);
+  const languageEnabled = languageOptions.some(option => option.id === language);
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [showEditorSettings, setShowEditorSettings] = useState(false);
   const [code, setCode] = useState<string>("");
@@ -154,10 +141,12 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
   // Execution State
   const [activeBottomTab, setActiveBottomTab] = useState("testcases");
   const [activeTestCase, setActiveTestCase] = useState(0);
-  const [activeResultCase, setActiveResultCase] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const [resultMode, setResultMode] = useState<'run' | 'submission'>('run');
+  const [executionPhase, setExecutionPhase] = useState<string | null>(null);
+  const [celebrationCount, setCelebrationCount] = useState(0);
 
   // Notes State
   const [noteContent, setNoteContent] = useState("");
@@ -186,7 +175,12 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
   useEffect(() => {
     setLoading(true);
     problemsAPI.getBySlug(problemId)
-      .then(res => setProblem(res.data.data))
+      .then(res => {
+        const next = res.data.data;
+        const allowed = editorLanguages(LANGUAGES, next.config?.supportedLanguages);
+        setProblem(next);
+        setLanguage(current => allowed.some(option => option.id === current) ? current : allowed[0]?.id || current);
+      })
       .catch(() => setProblem(null))
       .finally(() => setLoading(false));
   }, [problemId]);
@@ -337,7 +331,7 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [code, language, problem]);
+  }, [code, language, problem, isRunning, isSubmitting, languageEnabled]);
 
   const handleEditorMount = (editor: any, monaco: any) => {
     setEditorInst(editor);
@@ -425,6 +419,7 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
         await new Promise((resolve) => window.setTimeout(resolve, 400));
         const jobResponse = await runAPI.getJob(data.jobId);
         data = jobResponse.data;
+        setExecutionPhase(data.status === "active" ? "running" : "queued");
         if (!["waiting", "active", "delayed", "prioritized", "queued"].includes(data.status)) {
           break;
         }
@@ -437,9 +432,10 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
     let resultState: RunResult;
     if (!data.success) {
       resultState = {
-        status: (data.status as SubmissionStatus) || "error",
-        results: data.results || [],
-        runtime: data.runtime || 0,
+        status: normalizeVerdict(data.status || "error"),
+        results: (data.results || []).map((result: any, index: number) => ({ ...result, input: apiTestCases[index]?.input })),
+        runtime: data.runtime,
+        memory: data.memory,
         logs: data.message ? [data.message] : [],
         passedCount: data.passedCount || 0,
         totalCount: data.totalCount || 0,
@@ -452,9 +448,10 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
         }
       }
       resultState = {
-        status: data.status as SubmissionStatus,
-        results: data.results || [],
-        runtime: data.runtime || 0,
+        status: normalizeVerdict(data.status),
+        results: (data.results || []).map((result: any, index: number) => ({ ...result, input: apiTestCases[index]?.input })),
+        runtime: data.runtime,
+        memory: data.memory,
         logs: allLogs,
         passedCount: data.passedCount || 0,
         totalCount: data.totalCount || 0,
@@ -465,23 +462,26 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
   };
 
   const handleRun = useCallback(async () => {
+    if (!languageEnabled) return;
     if (typeof window !== "undefined" && !localStorage.getItem("codeskill_token")) {
       setShowLoginModal(true);
       return;
     }
+    if (isRunning || isSubmitting) return;
     setIsRunning(true);
+    setResultMode('run');
+    setExecutionPhase('queued');
+    setActiveBottomTab('console');
     setRunResult(null);
     try {
       const { resultState } = await executeCode();
       setRunResult(resultState);
-      setActiveResultCase(0);
       setActiveBottomTab("console");
     } catch (err: any) {
       if (err.response?.status === 401 || err.response?.status === 403) {
         setRunResult({
           status: "error",
           results: [],
-          runtime: 0,
           logs: ["Authentication required.\nYour session is no longer authorized to execute code.\nPlease sign in again."],
           passedCount: 0,
           totalCount: 0,
@@ -491,7 +491,6 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
         setRunResult({
           status: "error",
           results: [],
-          runtime: 0,
           logs: [err.response?.data?.message || err.message || "Failed to connect to the backend."],
           passedCount: 0,
           totalCount: 0,
@@ -500,48 +499,33 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
       setActiveBottomTab("console");
     } finally {
       setIsRunning(false);
+      setExecutionPhase(null);
     }
-  }, [code, language, problem]);
+  }, [code, language, problem, isRunning, isSubmitting, languageEnabled]);
 
   const handleSubmit = useCallback(async () => {
+    if (!languageEnabled) return;
     if (typeof window !== "undefined" && !localStorage.getItem("codeskill_token")) {
       setShowLoginModal(true);
       return;
     }
+    if (isRunning || isSubmitting) return;
     setIsSubmitting(true);
+    setResultMode('submission');
+    setExecutionPhase('queued');
+    setActiveBottomTab('console');
     setRunResult(null);
     try {
-      const { data, resultState } = await executeCode();
-      setRunResult(resultState);
-      setActiveResultCase(0);
-      setActiveBottomTab("console");
-
-      if (data.success && typeof window !== "undefined" && localStorage.getItem("codeskill_token")) {
-        try {
-          await submissionAPI.submit({
-            problemId: problem._id,
-            language,
-            code,
-            status: data.status,
-            runtime: data.runtime || 0,
-            memory: 0,
-            testCasesPassed: data.passedCount,
-            totalTestCases: data.totalCount,
-            category: problem.categories?.[0] || "General",
-            difficulty: problem.difficulty
-          });
-        } catch (err) {
-          console.error("Failed to save submission to database", err);
-        }
-      } else if (!localStorage.getItem("codeskill_token")) {
-        setShowLoginModal(true);
+      const result = await submissionAPI.submitAndWait({ problemId: problem._id, language, code }, setExecutionPhase);
+      setRunResult({ ...result, logs: [] });
+      if (normalizeVerdict(result.status) === 'accepted') {
+        setCelebrationCount(count => count + 1);
       }
     } catch (err: any) {
       if (err.response?.status === 401 || err.response?.status === 403) {
         setRunResult({
           status: "error",
           results: [],
-          runtime: 0,
           logs: ["Authentication required.\nYour session is no longer authorized to execute code.\nPlease sign in again."],
           passedCount: 0,
           totalCount: 0,
@@ -551,7 +535,6 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
         setRunResult({
           status: "error",
           results: [],
-          runtime: 0,
           logs: [err.response?.data?.message || err.message || "Failed to connect to the backend."],
           passedCount: 0,
           totalCount: 0,
@@ -560,8 +543,9 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
       setActiveBottomTab("console");
     } finally {
       setIsSubmitting(false);
+      setExecutionPhase(null);
     }
-  }, [code, language, problem]);
+  }, [code, language, problem, isRunning, isSubmitting, languageEnabled]);
 
   const handleSaveNote = () => {
     if (!problem) return;
@@ -742,13 +726,15 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
                     className="absolute top-full right-0 mt-1.5 w-[140px] rounded-[10px] border border-[#3F3F46] bg-[#18181B] py-1.5 shadow-xl origin-top-right z-50"
                     role="listbox"
                   >
-                  {LANGUAGES.filter(lang => !executionRuntimes.length || executionRuntimes.some(runtime => runtime.language === lang.id && runtime.enabled)).map(lang => (
+                  {languageOptions.map(lang => (
                     <button
                       key={lang.id}
                       role="option"
                       aria-selected={language === lang.id}
                       onClick={() => {
+                        localStorage.setItem(`codeskill_draft_${problem.slug}_${language}`, code);
                         setLanguage(lang.id);
+                        setRunResult(null);
                         setShowLanguageDropdown(false);
                       }}
                       className="flex w-full items-center justify-between px-3 py-2 text-sm text-[#E5E7EB] hover:bg-[#27272A] transition-colors text-left"
@@ -757,6 +743,7 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
                       {language === lang.id && <Check className="h-3.5 w-3.5 text-[#F5B800]" />}
                     </button>
                   ))}
+                  {!languageOptions.length && <p className="px-3 py-2 text-xs text-zinc-400">No runtime is available for this problem.</p>}
                   </motion.div>
                 </>
               )}
@@ -1429,117 +1416,9 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
                         </div>
                       </>
                     ) : (
-                      <div className="font-mono text-xs">
-                        {!runResult && !isRunning && !isSubmitting && (
-                          <div className="text-muted-foreground text-xs flex flex-col h-full items-center justify-center py-8 gap-2">
-                            <Terminal className="w-6 h-6 text-muted-foreground/40" />
-                            <span>Click <kbd className="font-sans text-[10px] bg-secondary text-foreground/80 px-1.5 py-0.5 rounded border border-border">Run</kbd> or <kbd className="font-sans text-[10px] bg-secondary text-foreground/80 px-1.5 py-0.5 rounded border border-border">Submit</kbd> to execute your code.</span>
-                          </div>
-                        )}
-                        
-                        {(isRunning || isSubmitting) && (
-                           <div className="text-foreground/80 text-xs flex h-full items-center justify-center py-8 gap-2">
-                             <Spinner className="w-4 h-4 animate-spin text-primary" /> 
-                             <span>{isSubmitting ? "Submitting solution..." : "Running code tests..."}</span>
-                           </div>
-                        )}
-
-                        {runResult && !isRunning && !isSubmitting && (
-                          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-                            {/* Status Header */}
-                            <div className={`flex items-center gap-2 font-semibold mb-3 text-sm font-sans ${
-                              runResult.status === "accepted" ? "text-emerald-400" :
-                              runResult.status === "wrong_answer" ? "text-rose-400" :
-                              runResult.status === "compile_error" ? "text-orange-400" :
-                              runResult.status === "time_limit" ? "text-yellow-400" :
-                              runResult.status === "runtime_error" ? "text-amber-400" : "text-rose-400"
-                            }`}>
-                              {runResult.status === "accepted" ? (
-                                <><CheckCircle2 className="w-5 h-5" /> Accepted</>
-                              ) : runResult.status === "wrong_answer" ? (
-                                <><XCircle className="w-5 h-5" /> Wrong Answer</>
-                              ) : runResult.status === "compile_error" ? (
-                                <><AlertTriangle className="w-5 h-5" /> Compilation Error</>
-                              ) : runResult.status === "time_limit" ? (
-                                <><Clock className="w-5 h-5" /> Time Limit Exceeded</>
-                              ) : runResult.status === "runtime_error" ? (
-                                <><AlertTriangle className="w-5 h-5" /> Runtime Error</>
-                              ) : runResult.status === "system_error" ? (
-                                <><AlertTriangle className="w-5 h-5" /> System Error</>
-                              ) : (
-                                <><AlertTriangle className="w-5 h-5" /> Error</>
-                              )}
-                              <span className="text-foreground/80 ml-auto text-[10px] font-sans font-medium bg-secondary px-2.5 py-0.5 rounded-full border border-border">
-                                {runResult.passedCount}/{runResult.totalCount} passed
-                              </span>
-                            </div>
-
-                            {/* Test Case Tabs */}
-                            {runResult.results.length > 0 && (
-                              <>
-                                <div className="flex gap-1.5 mb-3">
-                                  {runResult.results.map((r, i) => (
-                                    <button
-                                      key={r.id}
-                                      onClick={() => setActiveResultCase(i)}
-                                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1.5 ${
-                                        activeResultCase === i
-                                          ? "bg-secondary text-foreground border border-white/[0.12] shadow-xs"
-                                          : "text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-transparent"
-                                      }`}
-                                    >
-                                      <span className={`w-1.5 h-1.5 rounded-full ${r.passed ? "bg-emerald-500" : "bg-rose-500"}`} />
-                                      Case {r.id}
-                                    </button>
-                                  ))}
-                                </div>
-
-                                {runResult.results[activeResultCase] && (
-                                  <div className="space-y-2.5">
-                                    <div>
-                                      <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider font-sans font-semibold">Your Output</div>
-                                      <div className={`border rounded-lg p-2.5 whitespace-pre-wrap ${runResult.results[activeResultCase].passed ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" : "bg-rose-500/10 border-rose-500/25 text-rose-400"}`}>
-                                        {runResult.results[activeResultCase].output || "No output"}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider font-sans font-semibold">Expected</div>
-                                      <div className="bg-card border border-border rounded-lg p-2.5 text-foreground/80 whitespace-pre-wrap">
-                                        {runResult.results[activeResultCase].expected}
-                                      </div>
-                                    </div>
-                                    {runResult.results[activeResultCase].error && (
-                                      <div>
-                                        <div className="text-[10px] text-rose-400 mb-1 uppercase tracking-wider font-sans font-semibold">Error</div>
-                                        <div className="bg-rose-500/10 border border-rose-500/25 rounded-lg p-2.5 text-rose-400 whitespace-pre-wrap">
-                                          {runResult.results[activeResultCase].error}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </>
-                            )}
-
-                            {/* Logs */}
-                            {runResult.logs.length > 0 && (
-                              <div className="mt-4 pt-3 border-t border-white/[0.07]">
-                                <div className="text-[10px] text-muted-foreground mb-1.5 uppercase tracking-wider font-sans font-semibold">Stdout</div>
-                                <div className="bg-card border border-border rounded-lg p-2.5 space-y-0.5 font-mono text-[11px] text-foreground/80 max-h-32 overflow-auto">
-                                  {runResult.logs.map((log, i) => (
-                                    <div key={i}>{log}</div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Runtime Stats */}
-                            <div className="mt-4 pt-3 border-t border-white/[0.07] flex gap-4 text-muted-foreground font-sans text-[11px]">
-                              <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Runtime: <span className="text-foreground font-semibold">{runResult.runtime} ms</span></span>
-                            </div>
-                          </motion.div>
-                        )}
-                      </div>
+                      <ExecutionFeedback context="practice" mode={resultMode} language={language}
+                        phase={isRunning || isSubmitting ? executionPhase || 'running' : null}
+                        result={runResult ? { ...runResult, message: runResult.logs.length ? runResult.logs.join('\n') : undefined } : null} />
                     )}
                   </div>
                 </Panel>
@@ -1565,11 +1444,11 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
             </Link>
           </div>
           <div className="flex items-center gap-3">
-            <Button onClick={handleRun} disabled={isRunning || isSubmitting} className="h-[38px] px-4 text-[13px] font-medium gap-2 bg-white hover:bg-[#F8FAFC] text-[#334155] border border-[#CBD5E1] rounded-[5px] btn-interactive disabled:opacity-45 disabled:cursor-not-allowed">
+            <Button onClick={handleRun} disabled={isRunning || isSubmitting || !languageEnabled} className="h-[38px] px-4 text-[13px] font-medium gap-2 bg-white hover:bg-[#F8FAFC] text-[#334155] border border-[#CBD5E1] rounded-[5px] btn-interactive disabled:opacity-45 disabled:cursor-not-allowed">
               {isRunning ? <Spinner className="w-4 h-4 text-[#F5B800] animate-spin" /> : <Play className="w-4 h-4 text-[#F5B800]" />}
               <span>Run</span>
             </Button>
-            <Button onClick={handleSubmit} disabled={isRunning || isSubmitting} className="bg-[#0E8A43] hover:bg-[#087638] text-white h-[38px] px-5 text-[13px] font-semibold gap-2 shadow-none border-0 rounded-[5px] btn-interactive disabled:opacity-45 disabled:cursor-not-allowed">
+            <Button onClick={handleSubmit} disabled={isRunning || isSubmitting || !languageEnabled} className="bg-[#0E8A43] hover:bg-[#087638] text-white h-[38px] px-5 text-[13px] font-semibold gap-2 shadow-none border-0 rounded-[5px] btn-interactive disabled:opacity-45 disabled:cursor-not-allowed">
               {isSubmitting ? <Spinner className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
               <span>Submit</span>
             </Button>
@@ -1582,6 +1461,10 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
           </div>
       </footer>
 
+
+      {celebrationCount > 0 && resultMode === 'submission' && runResult && normalizeVerdict(runResult.status) === 'accepted' && (
+        <PracticeConfetti key={celebrationCount} />
+      )}
 
       <PracticePet
         key={problem.slug}

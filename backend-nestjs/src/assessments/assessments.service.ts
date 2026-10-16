@@ -7,6 +7,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Not } from 'typeorm';
@@ -21,6 +22,17 @@ import { ExecutionService } from '../execution/execution.service';
 import { ExecutionAdmissionService } from '../execution/admission/execution-admission.service';
 import { randomUUID } from 'node:crypto';
 import { S3Service } from '../s3/s3.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { EvaluateAssessmentCodeDto } from './dto/evaluate-code.dto';
+
+function codingTestCases(question: Question): Array<{ id: string | number; input: string; expected: string; isHidden: boolean }> {
+  const cases = question.testCases?.length ? question.testCases : (question.metadata as any)?.testCases || [];
+  return cases.map((tc: any, index: number) => ({
+    id: tc.id || index + 1, input: tc.input || '',
+    expected: tc.expectedOutput ?? tc.output ?? tc.expected ?? '', isHidden: tc.isHidden === true,
+  }));
+}
 
 @Injectable()
 export class AssessmentsService {
@@ -39,6 +51,7 @@ export class AssessmentsService {
     @Optional() private readonly admission?: ExecutionAdmissionService,
     @Optional()
     private readonly s3Service?: S3Service,
+    @Optional() @InjectQueue('submissions') private readonly codeQueue?: Queue,
   ) {}
 
   private shuffleList<T>(items: T[]): T[] {
@@ -1263,14 +1276,13 @@ export class AssessmentsService {
               : (q.metadata as any)?.constraints || [],
           timeLimit: q.timeLimit || (q.metadata as any)?.timeLimit || 2000,
           memoryLimit: q.memoryLimit || (q.metadata as any)?.memoryLimit || 256,
-          testCases: (((q.metadata as any)?.testCases || []) as any[])
+          testCases: codingTestCases(q)
             .filter((tc: any) => !tc.isHidden)
             .map((tc: any, tcIdx: number) => ({
               id: tc.id || String(tcIdx + 1),
               input: tc.input || '',
-              expected: tc.output || tc.expected || '',
-              output: tc.output || tc.expected || '',
-              explanation: tc.explanation || '',
+              expected: tc.expected,
+              output: tc.expected,
             })),
         };
       })
@@ -1322,6 +1334,68 @@ export class AssessmentsService {
     });
 
     return this.startStudentAttempt(id, studentUser);
+  }
+
+  async evaluateCode(id: string, dto: EvaluateAssessmentCodeDto, studentUser: any) {
+    const studentId = String(studentUser.id || studentUser._id);
+    const assessment = await this.assessmentRepo.findOne({ where: [{ id }, { mongoId: id }] });
+    if (!assessment) throw new NotFoundException('Assessment not found');
+    if (!['published', 'ongoing'].includes(assessment.status)) throw new ForbiddenException('Assessment is not open for code evaluation');
+    if (!this.isStudentTargeted(assessment, studentUser)) throw new ForbiddenException('Assessment is not assigned to you');
+    const attempt = await this.attemptRepo.findOne({ where: {
+      assessmentId: assessment.id, studentId, status: 'in_progress',
+    } });
+    if (!attempt || attempt.studentId !== studentId) throw new ForbiddenException('No active assessment attempt');
+    const now = Date.now();
+    const attemptDeadline = new Date(attempt.startedAt).getTime() + assessment.durationMinutes * 60_000;
+    if ((assessment.endTime && now > new Date(assessment.endTime).getTime()) || now > attemptDeadline)
+      throw new BadRequestException('The assessment execution deadline has expired');
+    if (!(assessment.questions || []).includes(dto.questionId)) throw new ForbiddenException('Question is not part of this assessment');
+    const question = await this.questionRepo.findOne({ where: { id: dto.questionId } });
+    if (!question || !['coding', 'dsa', 'algorithmic'].includes(question.questionType.toLowerCase()))
+      throw new BadRequestException('Coding question not found');
+    const language = canonicalLanguage(dto.language);
+    if (!language || (question.supportedLanguages?.length && !question.supportedLanguages.some(value => canonicalLanguage(value) === language)))
+      throw new BadRequestException('This language is not enabled for the assessment question');
+    const testCases = codingTestCases(question);
+    if (!testCases.length) throw new BadRequestException('No test cases configured for this question');
+    if (!this.executionService || !this.admission || !this.codeQueue) throw new ServiceUnavailableException('Code execution is unavailable');
+    this.executionService.validateRequest(dto.code, testCases);
+    const counts = await this.codeQueue.getJobCounts('waiting');
+    if ((counts.waiting || 0) >= (Number(process.env.MAX_QUEUE_WAITING) || 500))
+      throw new ServiceUnavailableException('Execution queue is at capacity; retry shortly');
+
+    // Anonymous pass-count histogram from each other candidate's latest graded attempt.
+    // No peer source code, identity, answers, or hidden case content enters the job.
+    let peerScores: Array<{ passed: number; count: number }> = [];
+    try {
+      peerScores = await this.attemptRepo.query(`SELECT (response->>'testCasesPassed')::int AS passed, count(*)::int AS count
+        FROM (SELECT DISTINCT ON (student_id) responses FROM assessment_attempts
+          WHERE assessment_id = $1 AND student_id <> $2 AND status IN ('submitted', 'auto_submitted')
+          ORDER BY student_id, "submittedAt" DESC NULLS LAST) attempts
+        CROSS JOIN LATERAL jsonb_array_elements(attempts.responses) response
+        WHERE response->>'questionId' = $3 AND (response->>'totalTestCases')::int = $4
+        GROUP BY (response->>'testCasesPassed')::int`, [assessment.id, studentId, question.id, testCases.length]);
+    } catch {
+      this.logger.warn('Assessment comparison is temporarily unavailable');
+    }
+    const admissionId = await this.admission.reserve(studentId, {
+      kind: 'run', assessmentId: assessment.id, questionId: question.id, code: dto.code, language,
+    });
+    try {
+      const job = await this.codeQueue.add('run-code', {
+        code: dto.code, language, testCases, userId: studentId, admissionId,
+        resultContext: 'assessment', peerScores,
+        config: { timeLimit: question.timeLimit, memoryLimit: question.memoryLimit },
+      }, {
+        jobId: admissionId, attempts: 2, backoff: { type: 'exponential', delay: 2000 },
+        priority: 1, removeOnComplete: { age: 900, count: 2000 }, removeOnFail: { age: 3600, count: 2000 },
+      });
+      return { success: true, status: 'queued', jobId: job.id };
+    } catch {
+      await this.admission.release(studentId, admissionId);
+      throw new ServiceUnavailableException('Unable to queue assessment code; retry shortly');
+    }
   }
 
   async saveProgress(id: string, dto: SubmitAssessmentDto, studentUser: any) {
@@ -1572,7 +1646,7 @@ export class AssessmentsService {
             );
           }
           // Server-side code execution against verified test cases (AUD-002)
-          const testCases = Array.isArray(q.testCases) ? q.testCases : [];
+          const testCases = codingTestCases(q);
           totalTestCases = testCases.length;
 
           if (this.executionService && totalTestCases > 0) {
@@ -1580,7 +1654,7 @@ export class AssessmentsService {
               const tcInputs = testCases.map((tc, idx) => ({
                 id: tc.id || idx + 1,
                 input: tc.input || '',
-                expected: tc.expectedOutput || '',
+                expected: tc.expected,
               }));
               const results = await this.executionService.runCode(
                 r.code!,

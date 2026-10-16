@@ -257,6 +257,38 @@ describe('Practice judging', () => {
     expect(completion.results).toHaveLength(2);
   });
 
+  it('reveals failed hidden practice cases through persisted results and both completion events', async () => {
+    execution.executeCode.mockResolvedValueOnce([successfulResults[0], {
+      ...successfulResults[1], passed: false, status: Status.WRONG_ANSWER, output: 'wrong',
+    }]);
+    await processor.process(job as never);
+    expect(submission.testResults).toEqual(expect.arrayContaining([expect.objectContaining({
+      testId: '2', input: 'SECRET-INPUT', expected: 'SECRET-EXPECTED', output: 'wrong', isHidden: true,
+    })]));
+    for (const event of ['submission_completed', 'execution_complete']) {
+      const result = gateway.emitToUser.mock.calls.find(([, name]) => name === event)?.[2] as any;
+      expect(result.passedCount).toBe(1);
+      expect(result.results[1]).toMatchObject({ input: 'SECRET-INPUT', output: 'wrong' });
+      expect(result.results[0].output).toBeUndefined();
+    }
+  });
+
+  it('redacts failed assessment hidden stdout, expected output, and errors in jobs and sockets', async () => {
+    execution.executeCode.mockResolvedValueOnce([successfulResults[0], {
+      ...successfulResults[1], passed: false, status: Status.RUNTIME_ERROR,
+    }]);
+    const result = await processor.process({ name: 'run-code', id: 'assessment-job', data: {
+      code: 'assessment-code', language: 'python', userId, resultContext: 'assessment',
+      peerScores: [{ passed: 0, count: 3 }, { passed: 1, count: 1 }],
+      testCases: executionProblem.testCases.map((tc, index) => ({ ...tc, id: index + 1, expected: tc.output })),
+    } } as never);
+    expect(result).toMatchObject({ passedCount: 1, totalCount: 2, comparison: { score: { percentile: 75, sampleSize: 4 } } });
+    expect(JSON.stringify(result)).not.toContain('SECRET');
+    const event = gateway.emitToUser.mock.calls.find(([, name]) => name === 'run_complete')?.[2];
+    expect(JSON.stringify(event)).not.toContain('SECRET');
+    expect(result.results[1]).toEqual(expect.objectContaining({ id: 2, isHidden: true, passed: false }));
+  });
+
   it('does not execute a deleted or unpublished problem and reports a system error', async () => {
     const error = new NotFoundException('Problem not found');
     problems.getExecutionProblem.mockRejectedValue(error);
@@ -268,6 +300,15 @@ describe('Practice judging', () => {
       'execution_error',
       expect.objectContaining({ status: 'system_error' }),
     );
+  });
+
+  it('never reports accepted when an assessment execution returns incomplete results', async () => {
+    execution.executeCode.mockResolvedValueOnce([]);
+    const result = await processor.process({ name: 'run-code', id: 'incomplete', data: {
+      code: 'code', language: 'python', userId, resultContext: 'assessment',
+      testCases: [{ id: 1, input: 'secret', expected: 'secret', isHidden: true }],
+    } } as never);
+    expect(result).toMatchObject({ status: Status.SYSTEM_ERROR, passedCount: 0, totalCount: 1 });
   });
 
   it('rejects a missing persisted submission instead of judging queue-supplied data', async () => {

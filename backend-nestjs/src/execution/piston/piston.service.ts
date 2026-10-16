@@ -103,7 +103,12 @@ export class PistonService implements OnModuleDestroy {
     };
     this.registries.set(url, state);
     state.pending = (async () => {
-      const { data } = await this.clients.get(url)!.get<unknown>('/runtimes');
+      const { data } = await this.clients.get(url)!.get<unknown>('/runtimes', {
+        timeout: Math.min(
+          this.config.discoveryTimeout,
+          this.config.requestTimeout,
+        ),
+      });
       if (
         !Array.isArray(data) ||
         data.some(

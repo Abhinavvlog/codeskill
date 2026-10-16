@@ -61,6 +61,7 @@ export function pistonConfig() {
     baseURL: baseURL.replace(/\/$/, ''),
     urls,
     apiKey: process.env.PISTON_API_KEY,
+    discoveryTimeout: integer('JUDGE_DISCOVERY_TIMEOUT_MS', 2000, 100, 10000),
     runTimeout,
     timeMultiplier: integer('JUDGE_TIME_LIMIT_MULTIPLIER', 1, 1, 20),
     compileTimeout,

@@ -19,6 +19,7 @@ import { AppGateway } from '../gateway/app.gateway';
 import { RedisService } from '../redis/redis.service';
 import { Status } from './execution.types';
 import * as os from 'os';
+import { presentTestResults, executionMetrics, scoreComparison } from './result-presentation';
 
 export enum SubmissionStatus {
   QUEUED = 'queued',
@@ -212,17 +213,18 @@ export class JudgeProcessor extends WorkerHost {
         config,
       );
       const passedCount = results.filter((result) => result.passed).length;
-      const status = this.overallStatus(results);
+      const status = results.length === testCases.length ? this.overallStatus(results) : Status.SYSTEM_ERROR;
 
       const payload = {
         success: true,
         status,
-        results,
-        runtime: results.every((result) => result.executionTime !== undefined)
-          ? results.reduce((total, result) => total + result.executionTime!, 0)
-          : undefined,
+        results: job.data.resultContext === 'assessment'
+          ? presentTestResults(results, testCases, 'assessment') : results,
+        ...executionMetrics(results),
+        comparison: job.data.resultContext === 'assessment'
+          ? { score: scoreComparison(passedCount, job.data.peerScores || []) } : undefined,
         passedCount,
-        totalCount: results.length,
+        totalCount: testCases.length,
       };
 
       if (userId) {
@@ -399,22 +401,8 @@ export class JudgeProcessor extends WorkerHost {
           submission.totalTests = testCases.length;
           submission.compileOutput = compileOutput || undefined;
           submission.completedAt = new Date();
-          submission.testResults = results.map((result, index) =>
-            testCases[index]?.isHidden
-              ? {
-                  testId: String(result.id),
-                  passed: result.passed,
-                  executionTime: result.executionTime,
-                  memoryUsed: result.memoryUsed,
-                }
-              : {
-                  testId: String(result.id),
-                  passed: result.passed,
-                  executionTime: result.executionTime,
-                  memoryUsed: result.memoryUsed,
-                  error: result.error,
-                },
-          );
+          submission.testResults = presentTestResults(results, testCases, 'practice')
+            .map(({ id, ...result }) => ({ ...result, testId: String(id) }));
           // Commit verdict and counters under a row lock. Concurrent/stalled replays
           // may execute twice, but only one verdict changes scoring/counters.
           const committed = await this.submissionRepo.transaction(
@@ -459,19 +447,10 @@ export class JudgeProcessor extends WorkerHost {
           submissionId,
           status,
           runtime,
+          memory: submission.memory,
           passedCount,
           totalCount: testCases.length,
-          results: results.map((result, index) =>
-            testCases[index]?.isHidden
-              ? {
-                  id: result.id,
-                  passed: result.passed,
-                  status: result.status,
-                  executionTime: result.executionTime,
-                  memoryUsed: result.memoryUsed,
-                }
-              : result,
-          ),
+          results: presentTestResults(results, testCases, 'practice'),
         };
 
         this.appGateway.emitToUser(

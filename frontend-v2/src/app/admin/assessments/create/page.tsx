@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { adminAssessmentsAPI, adminQuestionsAPI, adminUsersAPI } from "@/config/api";
-import { useAssessmentStore } from "./_store/useAssessmentStore";
+import { useAssessmentStore, type ProctoringSettings } from "./_store/useAssessmentStore";
 import QuestionPicker from "./_components/QuestionPicker";
 import {
   ArrowLeft, CheckCircle2, Clock, Plus, Trash2, ShieldAlert,

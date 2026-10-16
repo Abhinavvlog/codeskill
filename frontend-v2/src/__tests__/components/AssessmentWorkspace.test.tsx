@@ -12,7 +12,7 @@ jest.mock("next/dynamic", () => () => function MockEditor({ value, onChange, opt
 });
 jest.mock("@/hooks/useExecutionRuntimes", () => ({ useExecutionRuntimes: () => [] }));
 jest.mock("@/config/api", () => ({
-  studentAssessmentsAPI: { getOverview: jest.fn().mockResolvedValue({ data: { assessment: { proctoring: {} } } }), startAttempt: jest.fn(), submitAttempt: jest.fn(), saveProgress: jest.fn().mockResolvedValue({}) },
+  studentAssessmentsAPI: { getOverview: jest.fn().mockResolvedValue({ data: { assessment: { proctoring: {} } } }), startAttempt: jest.fn(), submitAttempt: jest.fn(), saveProgress: jest.fn().mockResolvedValue({}), evaluateCode: jest.fn() },
   azureRunAPI: { run: jest.fn() },
 }));
 jest.mock("@/hooks/useAssessmentMedia", () => ({ useAssessmentMedia: () => ({
@@ -38,6 +38,7 @@ beforeEach(() => {
   setAssessmentFaceReference("workspace", { embedding: [0.1, 0.2], capturedAt: Date.now() });
   jest.mocked(studentAssessmentsAPI.startAttempt).mockResolvedValue({ data: { title: "Workspace check", durationMinutes: 60, startedAt: new Date().toISOString(), questions, savedResponses: [{ questionId: "coding", code: "", language: "python", selectedAnswer: -1, status: "unvisited" }] } });
   jest.mocked(studentAssessmentsAPI.submitAttempt).mockResolvedValue({} as any);
+  jest.mocked(studentAssessmentsAPI.evaluateCode).mockResolvedValue({ data: { status: 'accepted', passedCount: 2, totalCount: 2, results: [{ id: 1, passed: true, output: 'hello', status: 'accepted' }, { id: 2, passed: true, isHidden: true, status: 'accepted' }] } } as any);
   jest.mocked(azureRunAPI.run).mockResolvedValue({ data: { passedCount: 1, totalCount: 1, results: [{ passed: true, stdout: "hello", status: "accepted" }] } } as any);
 });
 afterEach(() => clearAssessmentFaceReference("workspace"));
@@ -71,10 +72,11 @@ it("runs custom input, saves a coding solution, and submits the latest code with
   fireEvent.change(screen.getByPlaceholderText("Enter custom input lines here..."), { target: { value: "hello" } });
   fireEvent.click(screen.getByRole("button", { name: "Run Code" }));
   await waitFor(() => expect(azureRunAPI.run).toHaveBeenCalledWith(expect.objectContaining({ stdin: "hello", code: 'print(input().upper())', language: "python" })));
-  await screen.findByText("ACCEPTED");
+  await screen.findByText("Run successful");
   fireEvent.click(screen.getByRole("button", { name: "Submit Solution" }));
   await screen.findByRole("button", { name: "Question 2, current, answered" });
-  expect(azureRunAPI.run).toHaveBeenLastCalledWith(expect.objectContaining({ testCases: [{ id: "1", input: "hello", expected: "hello" }] }));
+  expect(studentAssessmentsAPI.evaluateCode).toHaveBeenCalledWith('workspace', { questionId: 'coding', code: 'print(input().upper())', language: 'python' });
+  expect(azureRunAPI.run).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole("button", { name: "Submit Test" }));
   fireEvent.click(screen.getByRole("button", { name: "Yes, Submit Now" }));
   await waitFor(() => expect(studentAssessmentsAPI.submitAttempt).toHaveBeenCalledWith("workspace", expect.objectContaining({ responses: expect.arrayContaining([
@@ -86,12 +88,26 @@ it("preserves code when execution fails and reports that verification failed", a
   await start();
   fireEvent.click(screen.getByRole("button", { name: "Question 2" }));
   await screen.findByRole("textbox", { name: "Assessment code editor" });
-  jest.mocked(azureRunAPI.run).mockRejectedValueOnce(new Error("Runner offline"));
+  jest.mocked(studentAssessmentsAPI.evaluateCode).mockRejectedValueOnce(new Error("Runner offline"));
   const spy = jest.spyOn(console, "error").mockImplementation(() => {});
   fireEvent.click(screen.getByRole("button", { name: "Submit Solution" }));
   await screen.findByText("Code saved. Execution could not be verified; try running it again.");
   expect(screen.getByText("Runner offline")).toBeInTheDocument();
   spy.mockRestore();
+});
+
+it('shows full assessment pass counts while hidden failure details remain private', async () => {
+  jest.mocked(studentAssessmentsAPI.evaluateCode).mockResolvedValueOnce({ data: {
+    status: 'wrong_answer', passedCount: 1, totalCount: 3, runtime: 6,
+    results: [{ id: 'hidden-2', isHidden: true, passed: false, input: 'PRIVATE-INPUT', expected: 'PRIVATE-EXPECTED', output: 'PRIVATE-OUTPUT', error: 'PRIVATE-ERROR' }],
+  } } as any);
+  await start();
+  fireEvent.click(screen.getByRole('button', { name: 'Question 2' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Submit Solution' }));
+  await screen.findByRole('region', { name: 'Submission result' });
+  expect(screen.getByText('1 / 3')).toBeInTheDocument();
+  expect(screen.getByText(/Details are private/)).toBeInTheDocument();
+  for (const value of ['PRIVATE-INPUT', 'PRIVATE-EXPECTED', 'PRIVATE-OUTPUT', 'PRIVATE-ERROR']) expect(screen.queryByText(value)).not.toBeInTheDocument();
 });
 
 it("keeps the code and reports a failed server save truthfully", async () => {

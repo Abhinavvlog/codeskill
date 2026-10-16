@@ -98,7 +98,12 @@ export class Judge0Service implements OnModuleDestroy {
     };
     this.languages.set(url, state);
     state.pending = (async () => {
-      const { data } = await this.clients.get(url)!.get<unknown>('/languages');
+      const { data } = await this.clients.get(url)!.get<unknown>('/languages', {
+        timeout: Math.min(
+          this.config.discoveryTimeout,
+          this.config.requestTimeout,
+        ),
+      });
       if (
         !Array.isArray(data) ||
         data.some(
