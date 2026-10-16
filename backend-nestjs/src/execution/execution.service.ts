@@ -669,7 +669,7 @@ export class ExecutionService {
   ): Promise<TestCaseResult[]> {
     const results: TestCaseResult[] = new Array(testCases.length);
     let index = 0;
-    let failure: unknown;
+    let failure: Error | null = null;
     const workerCount = Math.min(concurrencyLimit, testCases.length);
     const workers = Array.from({ length: workerCount }, async () => {
       while (index < testCases.length && !failure) {
@@ -677,7 +677,7 @@ export class ExecutionService {
         try {
           results[currentIndex] = await runFn(testCases[currentIndex]);
         } catch (error) {
-          failure = error;
+          failure = error instanceof Error ? error : new Error(String(error));
           return;
         }
       }

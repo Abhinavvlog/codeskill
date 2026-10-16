@@ -2,9 +2,6 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   serverExternalPackages: ["@react-pdf/renderer"],
   webpack: (config) => {
     // MediaPipe's prebuilt bundle contains an unused computed import.

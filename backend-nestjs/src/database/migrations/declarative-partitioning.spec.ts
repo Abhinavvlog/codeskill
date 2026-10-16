@@ -41,6 +41,8 @@ describe('applyDeclarativePartitioningMigration', () => {
       .mockResolvedValueOnce([]) // CREATE INDEXES
       .mockResolvedValueOnce([{ column_name: 'id' }, { column_name: 'createdAt' }]) // commonCols
       .mockResolvedValueOnce([]) // INSERT
+      .mockResolvedValueOnce([{ count: '10' }]) // countLegacy
+      .mockResolvedValueOnce([{ count: '10' }]) // countNew
       .mockResolvedValueOnce([]); // DROP legacy
 
     await partitionTableIfRegular(
@@ -58,7 +60,39 @@ describe('applyDeclarativePartitioningMigration', () => {
       'INSERT INTO "submissions" ("id", "createdAt") SELECT "id", "createdAt" FROM "submissions_legacy"',
     );
     expect(mockQueryRunner.query).toHaveBeenCalledWith(
+      'DROP TABLE "submissions_legacy"',
+    );
+    expect(mockQueryRunner.query).not.toHaveBeenCalledWith(
       'DROP TABLE "submissions_legacy" CASCADE',
+    );
+  });
+
+  it('AUD-011: aborts and preserves legacy table if migrated row count is less than legacy table', async () => {
+    mockQueryRunner.query
+      .mockResolvedValueOnce([{ relkind: 'r' }]) // check relkind
+      .mockResolvedValueOnce([]) // DROP legacy
+      .mockResolvedValueOnce([]) // RENAME
+      .mockResolvedValueOnce([]) // CREATE PARTITIONED
+      .mockResolvedValueOnce([]) // CREATE PARTITIONS
+      .mockResolvedValueOnce([]) // CREATE INDEXES
+      .mockResolvedValueOnce([{ column_name: 'id' }, { column_name: 'createdAt' }]) // commonCols
+      .mockResolvedValueOnce([]) // INSERT
+      .mockResolvedValueOnce([{ count: '100' }]) // countLegacy = 100
+      .mockResolvedValueOnce([{ count: '90' }]); // countNew = 90 (data loss!)
+
+    await expect(
+      partitionTableIfRegular(
+        mockQueryRunner,
+        'submissions',
+        'CREATE TABLE submissions (...)',
+        'CREATE TABLE submissions_part (...)',
+        'CREATE INDEX ...',
+      ),
+    ).rejects.toThrow('Declarative partitioning data integrity verification failed');
+
+    // Verify that legacy table was NOT dropped
+    expect(mockQueryRunner.query).not.toHaveBeenCalledWith(
+      'DROP TABLE "submissions_legacy"',
     );
   });
 

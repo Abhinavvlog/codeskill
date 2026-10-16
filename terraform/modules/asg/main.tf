@@ -109,30 +109,12 @@ cd /opt/codeskill
 npm install --prefix backend-nestjs --omit=dev --legacy-peer-deps
 npm install --prefix frontend-v2 --omit=dev --legacy-peer-deps
 
-# Fetch backend .env securely from AWS SSM Parameter Store (AUD-004, X-03)
-if aws ssm get-parameter --name "/${var.name_prefix}/production/backend_env" --with-decryption --query "Parameter.Value" --output text > /opt/codeskill/backend-nestjs/.env 2>/dev/null; then
+# Fetch backend .env securely from AWS SSM Parameter Store (AUD-001)
+if aws ssm get-parameter --name "/${var.name_prefix}/production/backend_env" --with-decryption --query "Parameter.Value" --output text > /opt/codeskill/backend-nestjs/.env; then
   echo "Loaded backend configuration securely from AWS SSM Parameter Store."
 else
-  # Minimal fallback configuration without embedded default admin passwords or weak JWT secrets
-  cat << 'ENVFILE' > /opt/codeskill/backend-nestjs/.env
-DATABASE_HOST="${split(":", var.db_endpoint)[0]}"
-DATABASE_PORT=5432
-DATABASE_USER="${var.db_username}"
-DATABASE_PASSWORD="${var.db_password}"
-DATABASE_NAME="${var.db_name}"
-DATABASE_SSL=true
-JWT_SECRET="codeskill_prod_secure_jwt_token_2026_super_secret_enterprise_key"
-JWT_EXPIRE=24h
-JWT_ACCESS_TTL=24h
-JWT_REFRESH_TTL=7d
-REDIS_HOST="${var.redis_endpoint}"
-REDIS_PORT=6379
-REDIS_CLUSTER_MODE=true
-NODE_ENV=production
-CLIENT_URL=https://codeskill.novaserve.cloud
-AWS_SES_EMAIL=noreply@codeskill.novaserve.cloud
-AWS_SES_SENDER=noreply@codeskill.novaserve.cloud
-ENVFILE
+  echo "ERROR: Failed to retrieve production backend configuration from AWS SSM Parameter Store (/${var.name_prefix}/production/backend_env). Failing closed to prevent insecure fallback." >&2
+  exit 1
 fi
 chmod 600 /opt/codeskill/backend-nestjs/.env
 chown ec2-user:ec2-user /opt/codeskill/backend-nestjs/.env

@@ -76,16 +76,29 @@ import { ExamSecurityModule } from './exam-security/exam-security.module';
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => {
-        const isCluster = process.env.NODE_ENV === 'production';
+        const isCluster =
+          process.env.REDIS_CLUSTER_MODE === 'true' ||
+          process.env.REDIS_ENABLE_CLUSTER === 'true';
         const host = configService.get<string>('redis.host') || '127.0.0.1';
         const port = Number(configService.get<number>('redis.port')) || 6379;
         const password = configService.get<string>('redis.password') || undefined;
+        const useTls = process.env.REDIS_TLS === 'true';
 
         if (isCluster) {
+          const clusterHosts = process.env.REDIS_CLUSTER_NODES
+            ? process.env.REDIS_CLUSTER_NODES.split(',').map((node) => {
+                const [h, p] = node.trim().split(':');
+                return { host: h, port: parseInt(p, 10) || 6379 };
+              })
+            : [{ host, port }];
+
           return {
             prefix: '{bull}',
-            connection: new Cluster([{ host, port }], {
-              redisOptions: { password },
+            connection: new Cluster(clusterHosts, {
+              redisOptions: {
+                password,
+                tls: useTls ? {} : undefined,
+              },
             }) as any,
           };
         }
@@ -96,6 +109,7 @@ import { ExamSecurityModule } from './exam-security/exam-security.module';
             host,
             port,
             password,
+            tls: useTls ? {} : undefined,
             maxRetriesPerRequest: null,
             connectTimeout: 5000,
           },

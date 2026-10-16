@@ -480,4 +480,37 @@ describe('Assessment Integrity & Server-Side Scoring (AUD-002, NEW-001, NEW-002,
       expect.objectContaining({ questionId: 'q-mcq-2', selectedAnswer: -1, optionOrder: [2, 0, 1] }),
     ]));
   });
+
+  it('rejects duplicate question responses in submission with BadRequestException (AUD-002)', async () => {
+    mockAssessmentRepo.findOne.mockResolvedValue(mockAssessment);
+    mockAttemptRepo.findOne.mockResolvedValue({
+      id: 'attempt-1',
+      assessmentId,
+      studentId: studentUser.id,
+      status: 'in_progress',
+      startedAt: new Date(),
+    });
+    mockQuestionRepo.find.mockResolvedValue([
+      {
+        id: 'q-mcq-1',
+        questionType: 'single_choice',
+        marks: 5,
+        correctAnswer: 0,
+      },
+    ]);
+
+    await expect(
+      service.submitAttempt(
+        assessmentId,
+        {
+          responses: [
+            { questionId: 'q-mcq-1', selectedAnswer: 0 },
+            { questionId: 'q-mcq-1', selectedAnswer: 0 },
+          ],
+        } as never,
+        studentUser,
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
 });
+

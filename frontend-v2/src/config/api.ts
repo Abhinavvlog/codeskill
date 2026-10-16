@@ -67,7 +67,19 @@ function normalizeIds(obj: any): any {
   return obj;
 }
 
-// Handle responses and 401 errors globally without breaking login pages or public routes
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+function onRefreshed(token: string) {
+  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers = [];
+}
+
+function onRefreshFailed() {
+  refreshSubscribers = [];
+}
+
+// Handle responses and 401 errors globally with transparent token rotation (AUD-016)
 api.interceptors.response.use(
   (res) => {
     if (res.data) {
@@ -76,13 +88,14 @@ api.interceptors.response.use(
     notifyMutationSuccess(res.config.url || "", res.config.method || "");
     return res;
   },
-  (error) => {
+  async (error) => {
     const requestId =
       error.response?.headers?.["x-request-id"] ||
       error.config?.headers?.["x-request-id"] ||
       "unknown";
     const status = error.response?.status;
     const reqUrl = error.config?.url || "";
+    const originalRequest = error.config;
 
     notifyMutationFailure(reqUrl, error.config?.method || "", error);
 
@@ -99,7 +112,12 @@ api.interceptors.response.use(
       );
     }
 
-    if (error.response?.status === 401 && typeof window !== "undefined") {
+    if (
+      error.response?.status === 401 &&
+      typeof window !== "undefined" &&
+      originalRequest &&
+      !originalRequest._retry
+    ) {
       const pathname = window.location.pathname;
       const isAuthPage =
         pathname === "/login" ||
@@ -113,13 +131,73 @@ api.interceptors.response.use(
         reqUrl.includes("auth/login") ||
         reqUrl.includes("auth/admin-login") ||
         reqUrl.includes("auth/student-login") ||
-        reqUrl.includes("auth/register");
+        reqUrl.includes("auth/register") ||
+        reqUrl.includes("auth/refresh");
 
-      // Only clear token and redirect if NOT on an auth page, NOT during an auth request, and NOT on public pages
+      const refreshToken = localStorage.getItem("codeskill_refresh_token");
+
+      if (!isAuthPage && !isAuthRequest && refreshToken) {
+        if (isRefreshing) {
+          return new Promise((resolve) => {
+            refreshSubscribers.push((newToken: string) => {
+              if (originalRequest.headers) {
+                originalRequest.headers.Authorization = `Bearer ${newToken}`;
+              }
+              resolve(api.request(originalRequest));
+            });
+          });
+        }
+
+        originalRequest._retry = true;
+        isRefreshing = true;
+
+        const refreshBase = getDynamicBaseURL().replace(/\/+$/, "");
+        return axios
+          .post(`${refreshBase}/auth/refresh`, { refreshToken })
+          .then((refreshRes) => {
+            const newToken = refreshRes.data?.token;
+            const newRefreshToken = refreshRes.data?.refreshToken;
+            if (newToken) {
+              localStorage.setItem("codeskill_token", newToken);
+              if (newRefreshToken) {
+                localStorage.setItem("codeskill_refresh_token", newRefreshToken);
+              }
+              onRefreshed(newToken);
+              if (originalRequest.headers) {
+                originalRequest.headers.Authorization = `Bearer ${newToken}`;
+              }
+              return api.request(originalRequest);
+            }
+            throw new Error("Invalid token refresh payload");
+          })
+          .catch((refreshErr) => {
+            onRefreshFailed();
+            localStorage.removeItem("codeskill_token");
+            localStorage.removeItem("codeskill_refresh_token");
+            window.dispatchEvent(new Event("codeskill:session-expired"));
+            const isPublicPage =
+              pathname === "/" ||
+              pathname === "/problems" ||
+              pathname.startsWith("/problems/");
+            if (!isPublicPage) {
+              window.location.href = "/login";
+            }
+            return Promise.reject(refreshErr);
+          })
+          .finally(() => {
+            isRefreshing = false;
+          });
+      }
+
+      // If no refresh token or on auth page/request:
       if (!isAuthPage && !isAuthRequest) {
         localStorage.removeItem("codeskill_token");
+        localStorage.removeItem("codeskill_refresh_token");
         window.dispatchEvent(new Event("codeskill:session-expired"));
-        const isPublicPage = pathname === "/" || pathname === "/problems" || pathname.startsWith("/problems/");
+        const isPublicPage =
+          pathname === "/" ||
+          pathname === "/problems" ||
+          pathname.startsWith("/problems/");
         if (!isPublicPage) {
           window.location.href = "/login";
         }
@@ -131,6 +209,8 @@ api.interceptors.response.use(
 
 // ── Auth ──
 export const authAPI = {
+  refresh: (data: { refreshToken: string }) => api.post("/auth/refresh", data),
+  logout: (data?: { refreshToken?: string }) => api.post("/auth/logout", data || {}),
   registerSendOTP: (data: { email: string }) => api.post("/auth/register/send-otp", data),
   register: (data: any) => api.post("/auth/register", data),
   login: (data: any) => api.post("/auth/login", data),
@@ -184,7 +264,35 @@ export const petAPI = {
 export const submissionAPI = {
   submit: (data: any) => 
     api.post("/submissions", data),
-  getSubmissions: (problemId: number) => api.get(`/submissions/problem/${problemId}`),
+  getSubmissions: (problemId: number | string) => api.get(`/submissions/problem/${problemId}`),
+  getById: (id: string) => api.get(`/submissions/${id}`),
+  getResult: (id: string) => api.get(`/submissions/${id}/result`),
+  awaitResult: async (submissionId: string, options: { timeoutMs?: number; intervalMs?: number } = {}) => {
+    const deadline = Date.now() + (options.timeoutMs ?? 60000);
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, options.intervalMs ?? 1000));
+      const res = await api.get(`/submissions/${submissionId}/result`);
+      const data = res.data;
+      if (
+        data &&
+        (data.completedAt ||
+          [
+            'completed',
+            'accepted',
+            'wrong_answer',
+            'compile_error',
+            'runtime_error',
+            'time_limit',
+            'memory_limit',
+            'failed',
+            'cancelled',
+          ].includes(data.status))
+      ) {
+        return res;
+      }
+    }
+    throw new Error('Submission evaluation timed out in queue.');
+  },
 };
 
 export const runAPI = {

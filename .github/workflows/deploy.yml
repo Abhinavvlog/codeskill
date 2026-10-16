@@ -116,7 +116,7 @@ jobs:
           file: ./backend-nestjs/Dockerfile
           push: true
           tags: |
-            ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.determine-tag.outputs.tag }}
+            ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ steps.determine-tag.outputs.tag }}
             ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -62,7 +62,6 @@ mkdir -p /opt/codeskill
 cat << EOF > /opt/codeskill/backend.env
 NODE_ENV=production
 PORT=5001
-NODE_TLS_REJECT_UNAUTHORIZED=0
 DATABASE_HOST=$DB_HOST
 DATABASE_PORT=$DB_PORT
 DATABASE_USER=$DB_USER
@@ -76,6 +75,9 @@ REDIS_CLUSTER_MODE=${redis_cluster_mode}
 REDIS_TLS=${redis_tls}
 JWT_SECRET=${jwt_secret}
 CLIENT_URL=https://${domain_name}
+FRONTEND_URL=https://${domain_name}
+CORS_ORIGIN=https://${domain_name}
+CODE_EXECUTION_PROVIDER=piston
 PISTON_BASE_URL=${piston_base_url}
 PISTON_RUNTIME_VERSIONS={"c":"10.2.0","cpp":"10.2.0","java":"15.0.2","python":"3.10.0","javascript":"18.15.0","typescript":"5.0.3"}
 JUDGE0_BASE_URL=${judge0_base_url}

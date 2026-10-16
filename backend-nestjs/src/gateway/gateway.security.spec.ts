@@ -170,4 +170,39 @@ describe('WebSocket Gateway Security (AUD-010, AUD-012, AUD-024)', () => {
       expect(socket.join).not.toHaveBeenCalled();
     });
   });
+
+  describe('Headless worker event bridging via Redis (AUD-008)', () => {
+    it('publishes event to Redis when server is undefined in headless worker process', () => {
+      const mockRedisService = {
+        publish: jest.fn().mockResolvedValue(1),
+        createSubscriberClient: jest.fn().mockReturnValue({
+          subscribe: jest.fn().mockResolvedValue(undefined),
+          on: jest.fn(),
+          quit: jest.fn(),
+        }),
+      };
+
+      const workerGateway = new AppGateway(
+        mockTokenService as never,
+        mockContestRepo as never,
+        mockRedisService as never,
+      );
+      // server is undefined in headless worker context
+      workerGateway.server = undefined as never;
+
+      workerGateway.emitToUser('candidate-1', 'submission_status', {
+        submissionId: 'sub-1',
+        status: 'running',
+      });
+
+      expect(mockRedisService.publish).toHaveBeenCalledWith(
+        'codeskill:ws:events',
+        expect.stringContaining('"target":"user"'),
+      );
+      expect(mockRedisService.publish).toHaveBeenCalledWith(
+        'codeskill:ws:events',
+        expect.stringContaining('"targetId":"candidate-1"'),
+      );
+    });
+  });
 });

@@ -3,11 +3,14 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { University } from '../database/entities/university.entity';
 import { UniversityUser } from '../database/entities/university-user.entity';
+import { Batch } from '../database/entities/batch.entity';
+import { StudentEnrollment } from '../database/entities/student-enrollment.entity';
 
 @Injectable()
 export class CampusService {
@@ -16,6 +19,12 @@ export class CampusService {
     private readonly universityRepo: Repository<University>,
     @InjectRepository(UniversityUser)
     private readonly universityUserRepo: Repository<UniversityUser>,
+    @Optional()
+    @InjectRepository(Batch)
+    private readonly batchRepo?: Repository<Batch>,
+    @Optional()
+    @InjectRepository(StudentEnrollment)
+    private readonly enrollmentRepo?: Repository<StudentEnrollment>,
   ) {}
 
   async getUniversities() {
@@ -80,13 +89,38 @@ export class CampusService {
     };
   }
 
-  async getUniversityById(universityId: string) {
+  async getUniversityById(
+    universityId: string,
+    actor?: { id?: string; role?: string; isAdmin?: boolean },
+  ) {
     const university = await this.universityRepo.findOne({
       where: [{ id: universityId }, { mongoId: universityId }],
     });
     if (!university) {
       throw new NotFoundException('University not found');
     }
+
+    if (actor) {
+      const isPlatformAdmin =
+        actor.isAdmin ||
+        ['admin', 'super_admin'].includes(actor.role || '');
+
+      if (!isPlatformAdmin) {
+        const membership = await this.universityUserRepo.findOne({
+          where: {
+            university: { id: university.id },
+            user: { id: actor.id },
+            isActive: true,
+          },
+        });
+        if (!membership) {
+          throw new ForbiddenException(
+            'You do not have permission to access this university',
+          );
+        }
+      }
+    }
+
     return { success: true, university: { ...university, _id: university.id } };
   }
 
@@ -141,5 +175,151 @@ export class CampusService {
     Object.assign(university, updates);
     await this.universityRepo.save(university);
     return { success: true, university: { ...university, _id: university.id } };
+  }
+
+  private async assertUniversityMembership(
+    universityId: string,
+    actor: { id?: string; role?: string; isAdmin?: boolean },
+    requiredRoles?: string[],
+  ): Promise<University> {
+    const university = await this.universityRepo.findOne({
+      where: [{ id: universityId }, { mongoId: universityId }],
+    });
+    if (!university) throw new NotFoundException('University not found');
+
+    const isPlatformAdmin =
+      actor?.isAdmin ||
+      ['admin', 'super_admin'].includes(actor?.role || '');
+
+    if (!isPlatformAdmin) {
+      const membership = await this.universityUserRepo.findOne({
+        where: {
+          university: { id: university.id },
+          user: { id: actor?.id },
+          isActive: true,
+        },
+      });
+      if (!membership) {
+        throw new ForbiddenException(
+          'You do not have permission to access this university',
+        );
+      }
+      if (requiredRoles && !requiredRoles.includes(membership.role)) {
+        throw new ForbiddenException(
+          'Insufficient permissions for this university action',
+        );
+      }
+    }
+
+    return university;
+  }
+
+  async getBatches(universityId: string, actor: any) {
+    const university = await this.assertUniversityMembership(universityId, actor);
+    let batches: Batch[] = [];
+    if (this.batchRepo) {
+      batches = await this.batchRepo.find({
+        where: { university_id: university.id },
+        order: { createdAt: 'DESC' },
+      });
+    }
+    return {
+      success: true,
+      batches: batches.map((b) => ({ ...b, _id: b.id })),
+    };
+  }
+
+  async createBatch(universityId: string, data: any, actor: any) {
+    const university = await this.assertUniversityMembership(
+      universityId,
+      actor,
+      ['Admin', 'Owner'],
+    );
+    if (!this.batchRepo) {
+      throw new BadRequestException('Batch repository unavailable');
+    }
+
+    const batch = this.batchRepo.create({
+      ...data,
+      university_id: university.id,
+      university: { id: university.id } as any,
+      created_by_id: actor?.id,
+      createdBy: { id: actor?.id } as any,
+    }) as unknown as Batch;
+    const saved = await this.batchRepo.save(batch);
+    return { success: true, batch: { ...saved, _id: saved.id } };
+  }
+
+  async getBatchStudents(universityId: string, batchId: string, actor: any) {
+    const university = await this.assertUniversityMembership(universityId, actor);
+    let enrollments: StudentEnrollment[] = [];
+    if (this.enrollmentRepo) {
+      enrollments = await this.enrollmentRepo.find({
+        where: [
+          { batch_id: batchId, university_id: university.id },
+          { batch: { mongoId: batchId }, university_id: university.id },
+        ],
+        relations: { student: true },
+        order: { createdAt: 'DESC' },
+      });
+    }
+    return {
+      success: true,
+      students: enrollments.map((e) => ({
+        ...e.student,
+        _id: e.student?.id,
+        rollNumber: e.rollNumber,
+        enrollmentId: e.id,
+      })),
+    };
+  }
+
+  async deleteBatch(universityId: string, batchId: string, actor: any) {
+    const university = await this.assertUniversityMembership(
+      universityId,
+      actor,
+      ['Admin', 'Owner'],
+    );
+    if (this.batchRepo) {
+      const batch = await this.batchRepo.findOne({
+        where: [
+          { id: batchId, university_id: university.id },
+          { mongoId: batchId, university_id: university.id },
+        ],
+      });
+      if (!batch) throw new NotFoundException('Batch not found');
+      await this.batchRepo.remove(batch);
+    }
+    return { success: true };
+  }
+
+  async getStudents(universityId: string, actor: any) {
+    const university = await this.assertUniversityMembership(universityId, actor);
+    let enrollments: StudentEnrollment[] = [];
+    if (this.enrollmentRepo) {
+      enrollments = await this.enrollmentRepo.find({
+        where: { university_id: university.id },
+        relations: { student: true, batch: true },
+        order: { createdAt: 'DESC' },
+      });
+    }
+    return {
+      success: true,
+      students: enrollments.map((e) => ({
+        ...e.student,
+        _id: e.student?.id,
+        rollNumber: e.rollNumber,
+        batch: e.batch ? { ...e.batch, _id: e.batch.id } : null,
+      })),
+    };
+  }
+
+  async generateMockStudents(universityId: string, actor: any) {
+    await this.assertUniversityMembership(
+      universityId,
+      actor,
+      ['Admin', 'Owner'],
+    );
+    return { success: true, message: 'Mock students generated' };
   }
 }

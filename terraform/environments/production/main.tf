@@ -281,9 +281,12 @@ module "rds" {
   db_name               = var.db_name
   db_username           = var.db_username
   db_password           = var.db_password
-  instance_class        = "db.t3.micro"
-  allocated_storage     = 20
-  multi_az              = false
+  instance_class        = "db.t4g.medium"
+  allocated_storage     = 50
+  max_allocated_storage = 200
+  multi_az              = true
+  storage_encrypted     = true
+  deletion_protection   = true
 }
 
 module "redis" {

@@ -129,6 +129,22 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
+  async publish(channel: string, message: string): Promise<number> {
+    try {
+      return await this.client.publish(channel, message);
+    } catch (err: any) {
+      this.logger.warn(`Failed to publish to channel ${channel}: ${err?.message || err}`);
+      return 0;
+    }
+  }
+
+  createSubscriberClient(): Redis | Cluster {
+    if (typeof (this.client as any).duplicate === 'function') {
+      return (this.client as any).duplicate();
+    }
+    return this.client;
+  }
+
   async onModuleDestroy() {
     try {
       this.logger.log('Closing Redis connection...');

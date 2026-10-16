@@ -5,11 +5,12 @@ import { CompaniesService } from './companies.service';
 import { Company } from '../database/entities/company.entity';
 import { Job } from '../database/entities/job.entity';
 import { CompanyUser } from '../database/entities/company-user.entity';
+import { Application } from '../database/entities/application.entity';
 import { CompanyController } from './company.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Company, Job, CompanyUser]),
+    TypeOrmModule.forFeature([Company, Job, CompanyUser, Application]),
   ],
   controllers: [CompaniesController, CompanyController],
   providers: [CompaniesService],

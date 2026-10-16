@@ -34,8 +34,8 @@ export async function partitionTableIfRegular(
   // Relkind 'r' means regular table: migrate to partitioned table safely
   const legacyTable = `${tableName}_legacy`;
 
-  // Drop any existing legacy leftover if present
-  await queryRunner.query(`DROP TABLE IF EXISTS "${legacyTable}" CASCADE`);
+  // Drop any existing legacy leftover if present without CASCADE
+  await queryRunner.query(`DROP TABLE IF EXISTS "${legacyTable}"`);
 
   // Rename current regular table
   await queryRunner.query(
@@ -67,10 +67,26 @@ export async function partitionTableIfRegular(
     await queryRunner.query(
       `INSERT INTO "${tableName}" (${colList}) SELECT ${colList} FROM "${legacyTable}"`,
     );
+
+    // Verify row count before dropping legacy table (AUD-011)
+    const countLegacyRes: { count: string }[] = await queryRunner.query(
+      `SELECT count(*)::text AS count FROM "${legacyTable}"`,
+    );
+    const countNewRes: { count: string }[] = await queryRunner.query(
+      `SELECT count(*)::text AS count FROM "${tableName}"`,
+    );
+    const legacyCount = BigInt(countLegacyRes[0]?.count || '0');
+    const newCount = BigInt(countNewRes[0]?.count || '0');
+
+    if (newCount < legacyCount) {
+      throw new Error(
+        `Declarative partitioning data integrity verification failed for "${tableName}": migrated count (${newCount}) < legacy count (${legacyCount}). Aborting without dropping legacy table.`,
+      );
+    }
   }
 
-  // Clean up legacy table
-  await queryRunner.query(`DROP TABLE "${legacyTable}" CASCADE`);
+  // Clean up legacy table without CASCADE to prevent unintended dependent object drops
+  await queryRunner.query(`DROP TABLE "${legacyTable}"`);
 }
 
 export async function applyDeclarativePartitioningMigration(

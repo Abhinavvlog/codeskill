@@ -58,9 +58,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const clearSession = () => setUser(null);
+    const clearSession = () => {
+      setUser(null);
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("codeskill_token");
+        localStorage.removeItem("codeskill_refresh_token");
+      }
+    };
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === "codeskill_token" && !event.newValue) clearSession();
+      if (
+        (event.key === "codeskill_token" || event.key === "codeskill_refresh_token") &&
+        !event.newValue
+      ) {
+        clearSession();
+      }
     };
     window.addEventListener("codeskill:session-expired", clearSession);
     window.addEventListener("storage", handleStorage);
@@ -88,6 +99,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await authAPI.register(data);
       if (typeof window !== "undefined") {
         localStorage.setItem("codeskill_token", res.data.token);
+        if (res.data.refreshToken) {
+          localStorage.setItem("codeskill_refresh_token", res.data.refreshToken);
+        }
       }
       setUser(res.data.user);
       return res.data;
@@ -104,6 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await authAPI.login(data);
       if (typeof window !== "undefined") {
         localStorage.setItem("codeskill_token", res.data.token);
+        if (res.data.refreshToken) {
+          localStorage.setItem("codeskill_refresh_token", res.data.refreshToken);
+        }
       }
       setUser(res.data.user);
       return res.data;
@@ -120,6 +137,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await authAPI.studentLogin(data);
       if (typeof window !== "undefined") {
         localStorage.setItem("codeskill_token", res.data.token);
+        if (res.data.refreshToken) {
+          localStorage.setItem("codeskill_refresh_token", res.data.refreshToken);
+        }
       }
       setUser(res.data.user);
       return res.data;
@@ -153,6 +173,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (res.data?.token) {
         if (typeof window !== "undefined") {
           localStorage.setItem("codeskill_token", res.data.token);
+          if (res.data.refreshToken) {
+            localStorage.setItem("codeskill_refresh_token", res.data.refreshToken);
+          }
         }
         setUser(res.data.user);
       }
@@ -170,6 +193,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await authAPI.adminLoginVerify(data);
       if (typeof window !== "undefined") {
         localStorage.setItem("codeskill_token", res.data.token);
+        if (res.data.refreshToken) {
+          localStorage.setItem("codeskill_refresh_token", res.data.refreshToken);
+        }
       }
       setUser(res.data.user);
       return res.data;
@@ -186,6 +212,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await authAPI.googleLogin(token);
       if (typeof window !== "undefined") {
         localStorage.setItem("codeskill_token", res.data.token);
+        if (res.data.refreshToken) {
+          localStorage.setItem("codeskill_refresh_token", res.data.refreshToken);
+        }
       }
       setUser(res.data.user);
       return res.data;
@@ -222,7 +251,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logoutUser = useCallback(() => {
     if (typeof window !== "undefined") {
+      const refreshToken = localStorage.getItem("codeskill_refresh_token");
+      if (refreshToken) {
+        authAPI.logout({ refreshToken }).catch(() => {});
+      }
       localStorage.removeItem("codeskill_token");
+      localStorage.removeItem("codeskill_refresh_token");
     }
     setUser(null);
   }, []);

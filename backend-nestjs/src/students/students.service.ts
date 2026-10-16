@@ -149,7 +149,7 @@ export class StudentsService {
       );
     }
 
-    const rawPassword = dto.password || '12345678';
+    const rawPassword = dto.password || this.generateSecurePassword(12);
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(rawPassword, salt);
 
@@ -736,7 +736,7 @@ export class StudentsService {
       const rawPassword =
         row.password && String(row.password).trim()
           ? String(row.password).trim()
-          : '12345678';
+          : this.generateSecurePassword(12);
       const hashedPassword = await bcrypt.hash(rawPassword, salt);
 
       const cleanMobile = row.mobile
@@ -904,7 +904,7 @@ export class StudentsService {
     }
 
     if (!emailJob || !emailJob.temporaryPassword) {
-      const tempPass = '12345678';
+      const tempPass = this.generateSecurePassword(12);
       const salt = await bcrypt.genSalt(10);
       student.password = await bcrypt.hash(tempPass, salt);
       student.forcePasswordChange = true;
