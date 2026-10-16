@@ -39,8 +39,8 @@ jest.mock("react-resizable-panels", () => ({
 }));
 jest.mock("@/config/api", () => ({
   problemsAPI: { getBySlug: jest.fn() },
-  runAPI: { run: jest.fn(), getJob: jest.fn() },
-  submissionAPI: { submitAndWait: jest.fn(), getSubmissions: jest.fn() },
+  runAPI: { run: jest.fn(), getJob: jest.fn(), analyzeComplexity: jest.fn() },
+  submissionAPI: { submitAndWait: jest.fn(), getSubmissions: jest.fn(), getResult: jest.fn(), getProblemStats: jest.fn() },
   discussionsAPI: {},
 }));
 beforeEach(() => {
@@ -48,6 +48,22 @@ beforeEach(() => {
   jest.mocked(useExecutionRuntimes).mockReturnValue([]);
   localStorage.clear();
   localStorage.setItem("codeskill_token", "local-test-token");
+  jest.mocked(submissionAPI.getProblemStats).mockResolvedValue({
+    data: { problemId: "problem-1", totalSubmissions: 0, acceptedSubmissions: 0, acceptanceRate: 0, solvers: 0, acceptedSolvers: 0 },
+  } as any);
+  jest.mocked(submissionAPI.getSubmissions).mockResolvedValue({
+    data: { data: [] },
+  } as any);
+  jest.mocked(submissionAPI.getResult).mockResolvedValue({ data: null } as any);
+  jest.mocked(runAPI.analyzeComplexity).mockResolvedValue({
+    data: {
+      success: true,
+      timeComplexity: "O(n)",
+      spaceComplexity: "O(1)",
+      explanation: "Estimated from the code structure: a single linear loop.",
+      confidence: "high",
+    },
+  } as any);
   jest.mocked(problemsAPI.getBySlug).mockResolvedValue({
     data: {
       data: {
@@ -223,4 +239,185 @@ it("practice Run checks samples and displays a run result without creating a sub
     ),
   );
   expect(submissionAPI.submitAndWait).not.toHaveBeenCalled();
+});
+
+it("shows live problem statistics and refetches them after a judged submission", async () => {
+  jest.mocked(submissionAPI.getProblemStats).mockResolvedValue({
+    data: {
+      problemId: "problem-1",
+      totalSubmissions: 12,
+      acceptedSubmissions: 5,
+      acceptanceRate: 41.7,
+      solvers: 7,
+      acceptedSolvers: 3,
+    },
+  } as any);
+  jest.mocked(submissionAPI.submitAndWait).mockResolvedValue({
+    status: "wrong_answer",
+    passedCount: 0,
+    totalCount: 1,
+    results: [],
+  });
+  render(<Page params={Promise.resolve({ id: "feedback" })} />);
+  expect(await screen.findByText("41.7% acceptance")).toBeInTheDocument();
+  expect(screen.getByText("12 submissions")).toBeInTheDocument();
+  expect(screen.getByText("3/7 solved")).toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Submit", exact: true }),
+  );
+  await waitFor(() =>
+    expect(submissionAPI.getProblemStats).toHaveBeenCalledTimes(2),
+  );
+});
+
+it("shows a no-submissions badge instead of N/A acceptance when stats are unavailable", async () => {
+  jest
+    .mocked(submissionAPI.getProblemStats)
+    .mockRejectedValue(new Error("network offline"));
+  render(<Page params={Promise.resolve({ id: "feedback" })} />);
+  expect(await screen.findByText("No submissions yet")).toBeInTheDocument();
+  expect(screen.queryByText(/N\/A/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/acceptance/)).not.toBeInTheDocument();
+});
+
+it("records submissions in the history table with expandable verdict, metrics, graph and code", async () => {
+  jest.mocked(submissionAPI.getProblemStats).mockResolvedValue({
+    data: {
+      problemId: "problem-1",
+      totalSubmissions: 6,
+      acceptedSubmissions: 4,
+      acceptanceRate: 66.7,
+      solvers: 4,
+      acceptedSolvers: 4,
+    },
+  } as any);
+  jest.mocked(submissionAPI.submitAndWait).mockResolvedValue({
+    status: "accepted",
+    passedCount: 1,
+    totalCount: 1,
+    runtime: 21,
+    memory: 3.2,
+    comparison: {
+      runtime: { percentile: 75, sampleSize: 4 },
+      memory: { percentile: 60, sampleSize: 4 },
+    },
+    distribution: {
+      buckets: [
+        { min: 0, max: 10, count: 2 },
+        { min: 10, max: 20, count: 5 },
+        { min: 20, max: 40, count: 1 },
+      ],
+      sampleSize: 8,
+    },
+    results: [{ id: 1, passed: true, output: "PUBLIC", expected: "PUBLIC" }],
+  });
+  jest.mocked(submissionAPI.getSubmissions).mockResolvedValue({
+    data: {
+      data: [
+        {
+          id: "sub-1",
+          status: "accepted",
+          language: "javascript",
+          code: 'console.log("solve")',
+          runtime: 21,
+          memory: 3.2,
+          testCasesPassed: 1,
+          totalTestCases: 1,
+          createdAt: "2026-10-16T00:00:00.000Z",
+        },
+      ],
+    },
+  } as any);
+  jest.mocked(submissionAPI.getResult).mockResolvedValue({
+    data: {
+      status: "accepted",
+      runtime: 21,
+      memory: 3.2,
+      testCasesPassed: 1,
+      totalTestCases: 1,
+      comparison: {
+        runtime: { percentile: 75, sampleSize: 4 },
+        memory: { percentile: 60, sampleSize: 4 },
+      },
+      distribution: {
+        buckets: [
+          { min: 0, max: 10, count: 2 },
+          { min: 10, max: 20, count: 5 },
+          { min: 20, max: 40, count: 1 },
+        ],
+        sampleSize: 8,
+      },
+      testResults: [{ id: 1, passed: true, output: "PUBLIC", expected: "PUBLIC" }],
+    },
+  } as any);
+  render(<Page params={Promise.resolve({ id: "feedback" })} />);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Submit", exact: true }),
+  );
+  // No result modal — the submission lands in the history table, expanded.
+  expect(await screen.findByText("✓ Accepted")).toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Submission result" })).not.toBeInTheDocument();
+  expect(await screen.findByText("Runtime Distribution")).toBeInTheDocument();
+  expect(screen.getByText(/You · 21 ms/)).toBeInTheDocument();
+  expect(screen.getByText(/faster than 75% of 4 students/)).toBeInTheDocument();
+  expect(screen.getByText(/lighter than 60% of 4 students/)).toBeInTheDocument();
+  expect(screen.getByText("O(n)")).toBeInTheDocument();
+  expect(screen.getByText("O(1)")).toBeInTheDocument();
+  expect(screen.getByText(/single linear loop/)).toBeInTheDocument();
+  expect(screen.getByText('console.log("solve")')).toBeInTheDocument();
+  expect(screen.getByTestId("practice-confetti")).toBeInTheDocument();
+  expect(runAPI.analyzeComplexity).toHaveBeenCalledWith({
+    code: 'console.log("solve")',
+    language: "javascript",
+  });
+});
+
+it("expanded submission always shows the runtime distribution graph, even without peer data", async () => {
+  jest.mocked(submissionAPI.submitAndWait).mockResolvedValue({
+    status: "accepted",
+    passedCount: 1,
+    totalCount: 1,
+    runtime: 21,
+    memory: 3.2,
+    comparison: null,
+    results: [{ id: 1, passed: true, output: "PUBLIC", expected: "PUBLIC" }],
+  });
+  jest.mocked(submissionAPI.getSubmissions).mockResolvedValue({
+    data: {
+      data: [
+        {
+          id: "sub-1",
+          status: "accepted",
+          language: "javascript",
+          code: "console.log(0)",
+          runtime: 21,
+          memory: 3.2,
+          testCasesPassed: 1,
+          totalTestCases: 1,
+          createdAt: "2026-10-16T00:00:00.000Z",
+        },
+      ],
+    },
+  } as any);
+  jest.mocked(submissionAPI.getResult).mockResolvedValue({
+    data: {
+      status: "accepted",
+      runtime: 21,
+      memory: 3.2,
+      testCasesPassed: 1,
+      totalTestCases: 1,
+      comparison: null,
+      distribution: null,
+      testResults: [],
+    },
+  } as any);
+  render(<Page params={Promise.resolve({ id: "feedback" })} />);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Submit", exact: true }),
+  );
+  expect(await screen.findByText("Runtime Distribution")).toBeInTheDocument();
+  expect(screen.getByText("no peer solutions yet")).toBeInTheDocument();
+  expect(screen.getByText(/You · 21 ms/)).toBeInTheDocument();
+  expect(screen.getByTitle("20–40 ms: 1 solution")).toBeInTheDocument();
+  expect(screen.getByText(/the chart fills in as other candidates submit/)).toBeInTheDocument();
 });

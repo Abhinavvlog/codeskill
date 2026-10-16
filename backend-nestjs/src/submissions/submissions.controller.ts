@@ -134,4 +134,9 @@ export class SubmissionsController {
     const isAdmin = role === 'admin';
     return this.submissionsService.cancelSubmission(userId, id, isAdmin);
   }
+  @Get('problem/:problemId/stats')
+  @ApiOperation({ summary: 'Get live submission statistics for a problem' })
+  async getProblemStats(@Param('problemId') problemId: string) {
+    return this.submissionsService.getProblemStats(problemId);
+  }
 }
