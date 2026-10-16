@@ -7,9 +7,99 @@ import {
   IsIn,
   IsBoolean,
   ValidateIf,
+  ValidateNested,
+  Allow,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+/**
+ * Nested shapes must be real classes with @ValidateNested + @Type, otherwise the
+ * global ValidationPipe's `whitelist: true` strips every property and silently
+ * persists empty records.
+ */
+export class QuestionExampleDto {
+  @Allow()
+  @IsOptional()
+  @IsString()
+  id?: string;
+
+  @Allow()
+  @IsOptional()
+  @IsString()
+  input?: string;
+
+  @Allow()
+  @IsOptional()
+  @IsString()
+  output?: string;
+
+  @Allow()
+  @IsOptional()
+  @IsString()
+  explanation?: string;
+}
+
+export class QuestionTestCaseDto {
+  @Allow()
+  @IsOptional()
+  @IsString()
+  id?: string;
+
+  @Allow()
+  @IsOptional()
+  @IsString()
+  input?: string;
+
+  @Allow()
+  @IsOptional()
+  @IsString()
+  expectedOutput?: string;
+
+  @Allow()
+  @IsOptional()
+  @IsString()
+  output?: string;
+
+  @Allow()
+  @IsOptional()
+  @IsString()
+  explanation?: string;
+
+  @Allow()
+  @IsOptional()
+  @IsBoolean()
+  isHidden?: boolean;
+
+  @Allow()
+  @IsOptional()
+  @IsNumber()
+  weight?: number;
+}
+
+export class StarterCodeDto {
+  @Allow()
+  @IsOptional()
+  @IsString()
+  language?: string;
+
+  @Allow()
+  @IsOptional()
+  @IsString()
+  code?: string;
+}
+
+export class ReferenceSolutionDto {
+  @Allow()
+  @IsOptional()
+  @IsString()
+  language?: string;
+
+  @Allow()
+  @IsOptional()
+  @IsString()
+  sourceCode?: string;
+}
 
 export class CreateQuestionDto {
   @ApiPropertyOptional()
@@ -210,7 +300,9 @@ export class CreateQuestionDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
-  examples?: Array<{ input: string; output: string; explanation?: string }>;
+  @ValidateNested({ each: true })
+  @Type(() => QuestionExampleDto)
+  examples?: QuestionExampleDto[];
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -225,7 +317,9 @@ export class CreateQuestionDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
-  starterCode?: Array<{ language: string; code: string }>;
+  @ValidateNested({ each: true })
+  @Type(() => StarterCodeDto)
+  starterCode?: StarterCodeDto[];
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -251,18 +345,16 @@ export class CreateQuestionDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
-  testCases?: Array<{
-    id: string;
-    input: string;
-    expectedOutput: string;
-    isHidden: boolean;
-    weight: number;
-  }>;
+  @ValidateNested({ each: true })
+  @Type(() => QuestionTestCaseDto)
+  testCases?: QuestionTestCaseDto[];
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
-  referenceSolutions?: Array<{ language: string; sourceCode: string }>;
+  @ValidateNested({ each: true })
+  @Type(() => ReferenceSolutionDto)
+  referenceSolutions?: ReferenceSolutionDto[];
 
   @ApiPropertyOptional()
   @IsOptional()

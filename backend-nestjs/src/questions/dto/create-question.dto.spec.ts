@@ -1,3 +1,4 @@
+import { ValidationPipe } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { CreateQuestionDto } from './create-question.dto';
@@ -180,4 +181,62 @@ describe('Question DTOs Constraints Validation & Transformation', () => {
     expect(errors.some(error => error.property === 'categories')).toBe(true);
   });
 
+});
+
+// The global pipe runs with `whitelist: true`. Nested shapes declared as inline
+// object types lose every property, so test cases were persisted as empty
+// records. These tests pin the @ValidateNested wiring that prevents that.
+describe('CreateQuestionDto nested payloads survive the whitelist pipe', () => {
+  const pipe = new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: false,
+    transform: true,
+    transformOptions: { enableImplicitConversion: true },
+  });
+  const base = { topic: 'Arrays', difficulty: 'medium', marks: 5, questionType: 'DSA' };
+  const transform = (body: Record<string, unknown>) =>
+    pipe.transform({ ...base, ...body }, { type: 'body', metatype: CreateQuestionDto });
+
+  it('keeps test case fields', async () => {
+    const dto = await transform({
+      question: 'Sum two numbers',
+      questionType: 'DSA',
+      testCases: [
+        { input: '2 3\n', expectedOutput: '5', isHidden: false, explanation: '2 + 3 = 5' },
+        { input: '9 1\n', expectedOutput: '10', isHidden: true },
+      ],
+    });
+    expect(dto.testCases).toEqual([
+      { input: '2 3\n', expectedOutput: '5', isHidden: false, explanation: '2 + 3 = 5' },
+      { input: '9 1\n', expectedOutput: '10', isHidden: true },
+    ]);
+  });
+
+  it('keeps per-language starter code and examples', async () => {
+    const dto = await transform({
+      question: 'Echo',
+      questionType: 'DSA',
+      starterCode: [
+        { language: 'python', code: 'print(1)' },
+        { language: 'javascript', code: 'console.log(1)' },
+      ],
+      examples: [{ input: '1', output: '1', explanation: 'identity' }],
+    });
+    expect(dto.starterCode).toEqual([
+      { language: 'python', code: 'print(1)' },
+      { language: 'javascript', code: 'console.log(1)' },
+    ]);
+    expect(dto.examples).toEqual([{ input: '1', output: '1', explanation: 'identity' }]);
+  });
+
+  it('keeps reference solutions', async () => {
+    const dto = await transform({
+      question: 'Echo',
+      questionType: 'DSA',
+      referenceSolutions: [{ language: 'python', sourceCode: 'print(input())' }],
+    });
+    expect(dto.referenceSolutions).toEqual([
+      { language: 'python', sourceCode: 'print(input())' },
+    ]);
+  });
 });
