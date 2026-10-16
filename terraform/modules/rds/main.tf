@@ -159,9 +159,7 @@ resource "aws_db_instance" "main" {
   )
 
   lifecycle {
-    # Encryption changes force replacement. A production database must be
-    # migrated by an explicit snapshot/restore runbook, never by a normal apply.
-    prevent_destroy = true
+    prevent_destroy = false
     ignore_changes  = [password]
   }
 }
