@@ -492,10 +492,7 @@ export class AssessmentsService {
   }
 
   async findById(id: string) {
-    const assessment = await this.assessmentRepo.findOne({
-      where: [{ id }, { mongoId: id }],
-      relations: { createdBy: true },
-    });
+    const assessment = await this.findAssessmentByIdOrCode(id, { createdBy: true });
 
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
@@ -872,6 +869,41 @@ export class AssessmentsService {
   // STUDENT CANDIDATE METHODS
   // -------------------------------------------------------------
 
+  private readonly UUID_REGEX =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  async findAssessmentByIdOrCode(
+    identifier: string,
+    relations?: any,
+  ): Promise<Assessment | null> {
+    if (!identifier || typeof identifier !== 'string') return null;
+    const trimmed = identifier.trim();
+
+    if (this.UUID_REGEX.test(trimmed)) {
+      return this.assessmentRepo.findOne({
+        where: [{ id: trimmed }, { mongoId: trimmed }],
+        ...(relations ? { relations } : {}),
+      });
+    }
+
+    const found = await this.assessmentRepo.findOne({
+      where: [{ code: trimmed }, { mongoId: trimmed }],
+      ...(relations ? { relations } : {}),
+    });
+    if (found) return found;
+
+    const qb = this.assessmentRepo
+      .createQueryBuilder('assessment')
+      .where('LOWER(assessment.code) = LOWER(:code)', { code: trimmed })
+      .orWhere('assessment.mongoId = :code', { code: trimmed });
+
+    if (relations?.createdBy) {
+      qb.leftJoinAndSelect('assessment.createdBy', 'createdBy');
+    }
+
+    return qb.getOne();
+  }
+
   private isStudentTargeted(
     assessment: Assessment,
     studentUser: any,
@@ -1022,9 +1054,7 @@ export class AssessmentsService {
   }
 
   async getStudentAssessmentOverview(id: string, studentUser: any) {
-    const assessment = await this.assessmentRepo.findOne({
-      where: [{ id }, { mongoId: id }],
-    });
+    const assessment = await this.findAssessmentByIdOrCode(id);
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
@@ -1034,9 +1064,6 @@ export class AssessmentsService {
 
     const studentId = String(studentUser.id || studentUser._id);
     const whereConditions: any[] = [{ assessmentId: assessment.id, studentId }];
-    if (id && id !== assessment.id) {
-      whereConditions.push({ assessmentId: id, studentId });
-    }
     if (studentUser.uid) {
       whereConditions.push({
         assessmentId: assessment.id,
@@ -1133,9 +1160,7 @@ export class AssessmentsService {
   }
 
   async startStudentAttempt(id: string, studentUser: any) {
-    const assessment = await this.assessmentRepo.findOne({
-      where: [{ id }, { mongoId: id }],
-    });
+    const assessment = await this.findAssessmentByIdOrCode(id);
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
@@ -1173,7 +1198,6 @@ export class AssessmentsService {
     let attempt = await this.attemptRepo.findOne({
       where: [
         { assessmentId: assessment.id, studentId, status: 'in_progress' },
-        { assessmentId: id, studentId, status: 'in_progress' },
       ],
     });
 
@@ -1182,11 +1206,6 @@ export class AssessmentsService {
         where: [
           {
             assessmentId: assessment.id,
-            studentId,
-            status: In(['submitted', 'auto_submitted']),
-          },
-          {
-            assessmentId: id,
             studentId,
             status: In(['submitted', 'auto_submitted']),
           },
@@ -1311,9 +1330,7 @@ export class AssessmentsService {
 
   async retakeStudentAttempt(id: string, studentUser: any) {
     const studentId = String(studentUser.id || studentUser._id);
-    const assessment = await this.assessmentRepo.findOne({
-      where: [{ id }, { mongoId: id }],
-    });
+    const assessment = await this.findAssessmentByIdOrCode(id);
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
@@ -1321,25 +1338,18 @@ export class AssessmentsService {
       throw new ForbiddenException('This assessment is not assigned to your student account.');
     }
 
-    const targetAssessmentId = assessment?.id || id;
-
     await this.attemptRepo.delete({
-      assessmentId: targetAssessmentId,
-      studentId,
-      status: 'in_progress',
-    });
-    await this.attemptRepo.delete({
-      assessmentId: id,
+      assessmentId: assessment.id,
       studentId,
       status: 'in_progress',
     });
 
-    return this.startStudentAttempt(id, studentUser);
+    return this.startStudentAttempt(assessment.id, studentUser);
   }
 
   async evaluateCode(id: string, dto: EvaluateAssessmentCodeDto, studentUser: any) {
     const studentId = String(studentUser.id || studentUser._id);
-    const assessment = await this.assessmentRepo.findOne({ where: [{ id }, { mongoId: id }] });
+    const assessment = await this.findAssessmentByIdOrCode(id);
     if (!assessment) throw new NotFoundException('Assessment not found');
     if (!['published', 'ongoing'].includes(assessment.status)) throw new ForbiddenException('Assessment is not open for code evaluation');
     if (!this.isStudentTargeted(assessment, studentUser)) throw new ForbiddenException('Assessment is not assigned to you');
@@ -1401,17 +1411,17 @@ export class AssessmentsService {
 
   async saveProgress(id: string, dto: SubmitAssessmentDto, studentUser: any) {
     const studentId = String(studentUser.id || studentUser._id);
-    const assessment = await this.assessmentRepo.findOne({
-      where: [{ id }, { mongoId: id }],
-    });
-    if (assessment && !this.isStudentTargeted(assessment, studentUser)) {
+    const assessment = await this.findAssessmentByIdOrCode(id);
+    if (!assessment) {
+      throw new NotFoundException('Assessment not found');
+    }
+    if (!this.isStudentTargeted(assessment, studentUser)) {
       throw new ForbiddenException('This assessment is not assigned to your student account.');
     }
-    const targetAssessmentId = assessment?.id || id;
 
     const attempt = await this.attemptRepo.findOne({
       where: {
-        assessmentId: targetAssessmentId,
+        assessmentId: assessment.id,
         studentId,
         status: 'in_progress',
       },
@@ -1480,7 +1490,7 @@ export class AssessmentsService {
       for (const v of dto.violations) {
         this.logger.warn({
           event: 'ASSESSMENT_VIOLATION_RECORDED',
-          assessmentId: targetAssessmentId,
+          assessmentId: assessment.id,
           attemptId: attempt.id,
           studentId,
           violationType: v.type,
@@ -1536,9 +1546,7 @@ export class AssessmentsService {
     dto: SubmitAssessmentDto,
     studentUser: any,
   ) {
-    const assessment = await this.assessmentRepo.findOne({
-      where: [{ id }, { mongoId: id }],
-    });
+    const assessment = await this.findAssessmentByIdOrCode(id);
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
@@ -1550,13 +1558,12 @@ export class AssessmentsService {
     const attempt = await this.attemptRepo.findOne({
       where: [
         { assessmentId: assessment.id, studentId },
-        { assessmentId: id, studentId },
       ],
       order: { startedAt: 'DESC' },
     });
 
     if (!attempt) {
-      return this.getStudentResult(id, studentUser);
+      return this.getStudentResult(assessment.id, studentUser);
     }
 
     // NEW-001: Candidate attempt ownership validation
@@ -1566,7 +1573,7 @@ export class AssessmentsService {
 
     // NEW-003: Idempotent submission: if already submitted, return the final scorecard
     if (attempt.status === 'submitted' || attempt.status === 'auto_submitted') {
-      return this.getStudentResult(id, studentUser);
+      return this.getStudentResult(assessment.id, studentUser);
     }
 
     // Accept before the deadline; execution may finish after it.
@@ -1881,9 +1888,7 @@ export class AssessmentsService {
   }
 
   async getStudentResult(id: string, studentUser: any) {
-    const assessment = await this.assessmentRepo.findOne({
-      where: [{ id }, { mongoId: id }],
-    });
+    const assessment = await this.findAssessmentByIdOrCode(id);
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
@@ -1896,11 +1901,6 @@ export class AssessmentsService {
       where: [
         {
           assessmentId: assessment.id,
-          studentId,
-          status: In(['submitted', 'auto_submitted']),
-        },
-        {
-          assessmentId: id,
           studentId,
           status: In(['submitted', 'auto_submitted']),
         },
@@ -2022,9 +2022,7 @@ export class AssessmentsService {
     studentUser: any,
   ) {
     const studentId = studentUser._id || studentUser.id;
-    const assessment = await this.assessmentRepo.findOne({
-      where: [{ id }, { mongoId: id }],
-    });
+    const assessment = await this.findAssessmentByIdOrCode(id);
     if (!assessment) throw new NotFoundException('Assessment not found');
 
     const attempt = await this.attemptRepo.findOne({
@@ -2061,9 +2059,7 @@ export class AssessmentsService {
     studentUser: any,
   ) {
     const studentId = studentUser._id || studentUser.id;
-    const assessment = await this.assessmentRepo.findOne({
-      where: [{ id }, { mongoId: id }],
-    });
+    const assessment = await this.findAssessmentByIdOrCode(id);
     if (!assessment) throw new NotFoundException('Assessment not found');
 
     let attempt = await this.attemptRepo.findOne({
@@ -2134,9 +2130,7 @@ export class AssessmentsService {
     studentUser: any,
   ) {
     const studentId = studentUser._id || studentUser.id;
-    const assessment = await this.assessmentRepo.findOne({
-      where: [{ id }, { mongoId: id }],
-    });
+    const assessment = await this.findAssessmentByIdOrCode(id);
     if (!assessment) throw new NotFoundException('Assessment not found');
 
     const attempt = await this.attemptRepo.findOne({
