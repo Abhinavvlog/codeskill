@@ -121,6 +121,12 @@ export class SubmissionsController {
     return { count: submissions.length, data: submissions };
   }
 
+  @Get('problem/:problemId/stats')
+  @ApiOperation({ summary: 'Get live submission statistics for a problem' })
+  async getProblemStats(@Param('problemId') problemId: string) {
+    return this.submissionsService.getProblemStats(problemId);
+  }
+
   @Get('recent')
   @ApiOperation({ summary: 'Get recent submissions' })
   async getRecentSubmissions(@CurrentUser('id') userId: string) {

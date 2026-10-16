@@ -8,7 +8,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
 import { ExecutionController } from './execution.controller';
 import { ExecutionService } from './execution.service';
-import { AzureExecutionService } from './azure-execution.service';
 import { JudgeProcessor } from './judge.processor';
 import { Submission } from '../database/entities/submission.entity';
 import { User } from '../database/entities/user.entity';
@@ -43,10 +42,9 @@ const judgeProviders = shouldRegisterJudge ? [JudgeProcessor] : [];
     ExecutionService,
     PistonService,
     Judge0Service,
-    AzureExecutionService,
     SubmissionRateLimitGuard,
     ...judgeProviders,
   ],
-  exports: [ExecutionService, AzureExecutionService],
+  exports: [ExecutionService],
 })
 export class ExecutionModule {}

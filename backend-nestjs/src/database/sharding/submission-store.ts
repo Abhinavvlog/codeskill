@@ -231,6 +231,91 @@ export class SubmissionStore {
     };
   }
 
+  /** Runtime histogram of other students' best accepted submissions, bucketed per shard and summed. */
+  async runtimeDistribution(
+    submission: Submission,
+    languages: string[],
+  ): Promise<{ buckets: Array<{ min: number; max: number | null; count: number }>; sampleSize: number }> {
+    const rows = await Promise.all(
+      this.repositories().map((repo) =>
+        repo.query<Array<{ bucket: string; count: string }>>(
+          `SELECT width_bucket(runtime, ARRAY[10,20,40,80,160,320,640,1280]) AS bucket, count(*)::int AS count
+          FROM (SELECT "userId", min(coalesce(runtime, "executionTime")) AS runtime
+            FROM submissions WHERE "problemId" = $1 AND "problemSource" = $2
+              AND lower(language) = ANY($3::text[]) AND lower(status) = 'accepted'
+              AND "userId" <> $4 AND coalesce("totalTestCases", "totalTests") = $5
+            GROUP BY "userId") peers
+          WHERE runtime IS NOT NULL
+          GROUP BY bucket ORDER BY bucket`,
+          [
+            submission.problemId,
+            submission.problemSource,
+            languages,
+            submission.userId,
+            submission.totalTestCases ?? submission.totalTests,
+          ],
+        ),
+      ),
+    );
+    const boundaries = [0, 10, 20, 40, 80, 160, 320, 640, 1280];
+    const counts = new Array<number>(boundaries.length).fill(0);
+    for (const row of rows.flat()) {
+      const bucket = Number(row.bucket);
+      if (bucket >= 1 && bucket <= boundaries.length) {
+        counts[bucket - 1] += Number(row.count);
+      }
+    }
+    return {
+      buckets: boundaries.map((min, index) => ({
+        min,
+        max: index < boundaries.length - 1 ? boundaries[index + 1] : null,
+        count: counts[index],
+      })),
+      sampleSize: counts.reduce((sum, count) => sum + count, 0),
+    };
+  }
+
+  /** Problem-wide live aggregates; one query per shard, summed. Judged submissions only. */
+  async problemStats(problemId: string): Promise<{
+    totalSubmissions: number;
+    acceptedSubmissions: number;
+    solvers: number;
+    acceptedSolvers: number;
+  }> {
+    const rows = await Promise.all(
+      this.repositories().map((repo) =>
+        repo.query<
+          Array<{
+            totalSubmissions: string;
+            acceptedSubmissions: string;
+            solvers: string;
+            acceptedSolvers: string;
+          }>
+        >(
+          `SELECT
+    count(*) AS "totalSubmissions",
+    count(*) FILTER (WHERE lower(status) = 'accepted') AS "acceptedSubmissions",
+    count(DISTINCT "userId") AS "solvers",
+    count(DISTINCT "userId") FILTER (WHERE lower(status) = 'accepted') AS "acceptedSolvers"
+    FROM submissions
+    WHERE "problemId" = $1
+      AND lower(status) NOT IN ('queued', 'pending', 'running', 'testing', 'cancelled')`,
+          [problemId],
+        ),
+      ),
+    );
+    return rows.flat().reduce(
+      (sum, row) => ({
+        totalSubmissions: sum.totalSubmissions + Number(row.totalSubmissions),
+        acceptedSubmissions:
+          sum.acceptedSubmissions + Number(row.acceptedSubmissions),
+        solvers: sum.solvers + Number(row.solvers),
+        acceptedSolvers: sum.acceptedSolvers + Number(row.acceptedSolvers),
+      }),
+      { totalSubmissions: 0, acceptedSubmissions: 0, solvers: 0, acceptedSolvers: 0 },
+    );
+  }
+
   async findAndCount(
     options: FindManyOptions<Submission>,
   ): Promise<[Submission[], number]> {

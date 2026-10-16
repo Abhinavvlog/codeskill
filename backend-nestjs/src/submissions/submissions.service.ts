@@ -243,11 +243,15 @@ export class SubmissionsService {
     );
 
     let comparison: Awaited<ReturnType<SubmissionStore['performanceComparison']>> | null = null;
+    let distribution: Awaited<ReturnType<SubmissionStore['runtimeDistribution']>> | null = null;
     if (submission.status === SubmissionStatus.ACCEPTED) {
       try {
         const language = canonicalLanguage(submission.language);
-        comparison = await this.submissionRepo.performanceComparison(submission,
-          SUPPORTED_LANGUAGES.filter(alias => canonicalLanguage(alias) === language));
+        const aliases = SUPPORTED_LANGUAGES.filter(
+          (alias) => canonicalLanguage(alias) === language,
+        );
+        comparison = await this.submissionRepo.performanceComparison(submission, aliases);
+        distribution = await this.submissionRepo.runtimeDistribution(submission, aliases);
       } catch {
         // Comparison availability must never hide the authoritative verdict.
         this.logger.warn('Submission comparison is temporarily unavailable');
@@ -268,6 +272,7 @@ export class SubmissionsService {
       startedAt: submission.startedAt,
       completedAt: submission.completedAt,
       comparison,
+      distribution,
     };
   }
 
@@ -349,6 +354,21 @@ export class SubmissionsService {
       take: 20,
     });
     return list.map((s) => ({ ...s, _id: s.id }));
+  }
+
+  async getProblemStats(problemId: string) {
+    const totals = await this.submissionRepo.problemStats(problemId);
+    return {
+      problemId,
+      totalSubmissions: totals.totalSubmissions,
+      acceptedSubmissions: totals.acceptedSubmissions,
+      acceptanceRate:
+        totals.totalSubmissions > 0
+          ? Math.round((totals.acceptedSubmissions / totals.totalSubmissions) * 1000) / 10
+          : 0,
+      solvers: totals.solvers,
+      acceptedSolvers: totals.acceptedSolvers,
+    };
   }
 
   async getRecentSubmissions(userId: string) {
