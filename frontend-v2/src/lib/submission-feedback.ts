@@ -15,6 +15,10 @@ export interface ExecutionFeedbackResult {
     memory?: PeerMetric | null;
     score?: PeerMetric | null;
   } | null;
+  distribution?: {
+    buckets: Array<{ min: number; max: number | null; count: number }>;
+    sampleSize: number;
+  } | null;
   results: Array<{
     id?: number | string;
     testId?: string;
@@ -83,6 +87,7 @@ export async function awaitSubmission(
       memory: data.memory,
       compileOutput: data.compileOutput,
       comparison: data.comparison,
+      distribution: data.distribution,
     };
   }
   throw new Error(

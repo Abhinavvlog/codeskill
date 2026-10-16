@@ -2,7 +2,7 @@ import React from "react";
 import "@testing-library/jest-dom";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import Page from "@/app/assessments/[id]/take/page";
-import { studentAssessmentsAPI, azureRunAPI } from "@/config/api";
+import { studentAssessmentsAPI, runAPI } from "@/config/api";
 import { clearAssessmentFaceReference, setAssessmentFaceReference } from "@/lib/assessment-face-verification";
 
 jest.mock("react", () => ({ ...jest.requireActual("react"), use: () => ({ id: "workspace" }) }));
@@ -13,7 +13,7 @@ jest.mock("next/dynamic", () => () => function MockEditor({ value, onChange, opt
 jest.mock("@/hooks/useExecutionRuntimes", () => ({ useExecutionRuntimes: () => [] }));
 jest.mock("@/config/api", () => ({
   studentAssessmentsAPI: { getOverview: jest.fn().mockResolvedValue({ data: { assessment: { proctoring: {} } } }), startAttempt: jest.fn(), submitAttempt: jest.fn(), saveProgress: jest.fn().mockResolvedValue({}), evaluateCode: jest.fn() },
-  azureRunAPI: { run: jest.fn() },
+  runAPI: { run: jest.fn(), getJob: jest.fn() },
 }));
 jest.mock("@/hooks/useAssessmentMedia", () => ({ useAssessmentMedia: () => ({
   videoRef: { current: null }, attachVideo: jest.fn(), cameraActive: true, micActive: true, audioLevel: 0,
@@ -39,7 +39,8 @@ beforeEach(() => {
   jest.mocked(studentAssessmentsAPI.startAttempt).mockResolvedValue({ data: { title: "Workspace check", durationMinutes: 60, startedAt: new Date().toISOString(), questions, savedResponses: [{ questionId: "coding", code: "", language: "python", selectedAnswer: -1, status: "unvisited" }] } });
   jest.mocked(studentAssessmentsAPI.submitAttempt).mockResolvedValue({} as any);
   jest.mocked(studentAssessmentsAPI.evaluateCode).mockResolvedValue({ data: { status: 'accepted', passedCount: 2, totalCount: 2, results: [{ id: 1, passed: true, output: 'hello', status: 'accepted' }, { id: 2, passed: true, isHidden: true, status: 'accepted' }] } } as any);
-  jest.mocked(azureRunAPI.run).mockResolvedValue({ data: { passedCount: 1, totalCount: 1, results: [{ passed: true, stdout: "hello", status: "accepted" }] } } as any);
+  jest.mocked(runAPI.run).mockResolvedValue({ data: { success: true, status: "queued", jobId: "job-1" } } as any);
+  jest.mocked(runAPI.getJob).mockResolvedValue({ data: { success: true, status: "accepted", passedCount: 1, totalCount: 1, results: [{ id: "run", passed: true, stdout: "hello", output: "hello", status: "accepted" }] } } as any);
 });
 afterEach(() => clearAssessmentFaceReference("workspace"));
 
@@ -71,12 +72,12 @@ it("runs custom input, saves a coding solution, and submits the latest code with
   fireEvent.click(screen.getByRole("button", { name: "Custom Input" }));
   fireEvent.change(screen.getByPlaceholderText("Enter custom input lines here..."), { target: { value: "hello" } });
   fireEvent.click(screen.getByRole("button", { name: "Run Code" }));
-  await waitFor(() => expect(azureRunAPI.run).toHaveBeenCalledWith(expect.objectContaining({ stdin: "hello", code: 'print(input().upper())', language: "python" })));
+  await waitFor(() => expect(runAPI.run).toHaveBeenCalledWith(expect.objectContaining({ code: 'print(input().upper())', language: "python", testCases: [{ id: "run", input: "hello", expected: "" }] })));
   await screen.findByText("Run successful");
   fireEvent.click(screen.getByRole("button", { name: "Submit Solution" }));
   await screen.findByRole("button", { name: "Question 2, current, answered" });
   expect(studentAssessmentsAPI.evaluateCode).toHaveBeenCalledWith('workspace', { questionId: 'coding', code: 'print(input().upper())', language: 'python' });
-  expect(azureRunAPI.run).toHaveBeenCalledTimes(1);
+  expect(runAPI.run).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole("button", { name: "Submit Test" }));
   fireEvent.click(screen.getByRole("button", { name: "Yes, Submit Now" }));
   await waitFor(() => expect(studentAssessmentsAPI.submitAttempt).toHaveBeenCalledWith("workspace", expect.objectContaining({ responses: expect.arrayContaining([

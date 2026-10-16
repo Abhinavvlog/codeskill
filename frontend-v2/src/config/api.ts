@@ -182,34 +182,39 @@ export const petAPI = {
 };
 
 // ── Submissions ──
+export interface ProblemStats {
+  problemId: string;
+  totalSubmissions: number;
+  acceptedSubmissions: number;
+  acceptanceRate: number;
+  solvers: number;
+  acceptedSolvers: number;
+}
+
 export const submissionAPI = {
-  submit: (data: any) => 
+  submit: (data: any) =>
     api.post("/submissions", data),
   getSubmissions: (problemId: number) => api.get(`/submissions/problem/${problemId}`),
+  getResult: (id: string) => api.get(`/submissions/${id}/result`),
+  getProblemStats: (problemId: string) => api.get<ProblemStats>(`/submissions/problem/${problemId}/stats`),
   submitAndWait: (data: { problemId: string; code: string; language: string }, onStatus?: (status: string) => void) =>
     awaitSubmission(() => api.post('/submissions', data), id => api.get(`/submissions/${id}/result`), onStatus),
 };
+
+export interface ComplexityAnalysis {
+  timeComplexity: string;
+  spaceComplexity: string;
+  explanation: string;
+  confidence: "high" | "medium" | "low";
+}
 
 export const runAPI = {
   runtimes: () => api.get<Array<{ language: string; version?: string; enabled: boolean }>>("/execution/runtimes"),
   run: (data: { code: string; language: string; testCases: any[]; config?: any }) =>
     api.post("/execution/run", data, { timeout: 60000 }),
   getJob: (jobId: string) => api.get(`/execution/jobs/${jobId}`, { timeout: 60000 }),
-};
-
-// Compatibility endpoint: backend selects the configured provider and queue.
-export const azureRunAPI = {
-  run: (data: {
-    code: string;
-    language: string;
-    stdin?: string;
-    testCases?: Array<{ id: string; input: string; expected: string }>;
-    timeoutMs?: number;
-    memoryMB?: number;
-  }) => awaitExecution(
-    () => api.post("/execution/azure-run", data, { timeout: 90000 }),
-    jobId => runAPI.getJob(jobId),
-  ),
+  analyzeComplexity: (data: { code: string; language: string }) =>
+    api.post<ComplexityAnalysis & { success: boolean }>("/execution/analyze-complexity", data, { timeout: 30000 }),
 };
 
 // ── Discussions ──
