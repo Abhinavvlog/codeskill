@@ -1,9 +1,14 @@
 import api from '@/config/api';
+import { logger } from '@/lib/logger';
 
 describe('API Utils', () => {
   beforeEach(() => {
     // Clear localStorage before each test
     localStorage.clear();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('should attach Authorization header if token exists', async () => {
@@ -68,6 +73,7 @@ describe('API Utils', () => {
     });
 
     it('performs transparent token refresh on 401 and updates localStorage', async () => {
+      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {});
       const axios = (await import('axios')).default;
       const postSpy = jest.spyOn(axios, 'post').mockResolvedValueOnce({
         data: {
@@ -98,6 +104,11 @@ describe('API Utils', () => {
 
       await errorHandler(mockError);
 
+      expect(warnSpy).toHaveBeenCalledWith(
+        'API request failed: [401] /users/me',
+        { requestId: 'unknown', status: 401, url: '/users/me', response: undefined },
+        'APIClient',
+      );
       expect(localStorage.getItem('codeskill_token')).toBe('new-rotated-access-token');
       expect(localStorage.getItem('codeskill_refresh_token')).toBe('new-rotated-refresh-token');
 
