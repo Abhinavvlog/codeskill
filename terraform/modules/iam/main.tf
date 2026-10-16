@@ -122,7 +122,7 @@ resource "aws_iam_role_policy_attachment" "app_secrets" {
 }
 
 resource "aws_iam_policy" "app_s3" {
-  count       = var.s3_bucket_arn != "" ? 1 : 0
+  count       = var.enable_s3 ? 1 : 0
   name        = "${var.name_prefix}-app-s3"
   description = "Allows Application instances to access CodeSkill S3 storage"
 
@@ -147,7 +147,7 @@ resource "aws_iam_policy" "app_s3" {
 }
 
 resource "aws_iam_role_policy_attachment" "app_s3" {
-  count      = var.s3_bucket_arn != "" ? 1 : 0
+  count      = var.enable_s3 ? 1 : 0
   role       = aws_iam_role.app.name
   policy_arn = aws_iam_policy.app_s3[0].arn
 }
@@ -202,7 +202,7 @@ resource "aws_iam_role_policy_attachment" "backend_secrets" {
 }
 
 resource "aws_iam_role_policy_attachment" "backend_s3" {
-  count      = var.s3_bucket_arn != "" ? 1 : 0
+  count      = var.enable_s3 ? 1 : 0
   role       = aws_iam_role.backend.name
   policy_arn = aws_iam_policy.app_s3[0].arn
 }

@@ -266,6 +266,7 @@ module "s3" {
 module "iam" {
   source                = "../../modules/iam"
   name_prefix           = local.name_prefix
+  enable_s3             = true
   s3_bucket_arn         = module.s3.bucket_arn
   pm2_io_parameter_name = var.pm2_io_parameter_name
 }
@@ -282,12 +283,12 @@ module "rds" {
   db_name                 = var.db_name
   db_username             = var.db_username
   db_password             = var.db_password
-  instance_class          = var.db_instance_class
+  instance_class          = "db.t3.micro"
   allocated_storage       = 20
   max_allocated_storage   = 200
-  multi_az                = true
-  backup_retention_period = 7
-  storage_encrypted       = true
+  multi_az                = false
+  backup_retention_period = 0
+  storage_encrypted       = false
   deletion_protection     = true
 }
 
@@ -317,8 +318,8 @@ module "frontend_asg" {
 
   iam_instance_profile_name = module.iam.frontend_instance_profile_name
 
-  min_size         = 2
-  desired_capacity = 2
+  min_size         = 1
+  desired_capacity = 1
   max_size         = 6
 
   cpu_target_utilization = 65.0
@@ -353,8 +354,8 @@ module "backend_asg" {
 
   iam_instance_profile_name = module.iam.backend_instance_profile_name
 
-  min_size         = 2
-  desired_capacity = 3
+  min_size         = 1
+  desired_capacity = 1
   max_size         = 6
 
   cpu_target_utilization = 60.0
@@ -400,8 +401,8 @@ module "piston_asg" {
 
   iam_instance_profile_name = module.iam.piston_instance_profile_name
 
-  min_size         = 2
-  desired_capacity = 3
+  min_size         = 1
+  desired_capacity = 1
   max_size         = 8
 
   cpu_target_utilization = 60.0
@@ -436,7 +437,7 @@ module "judge0_asg" {
   iam_instance_profile_name = module.iam.judge0_instance_profile_name
 
   min_size         = 1
-  desired_capacity = 2
+  desired_capacity = 1
   max_size         = 4
 
   cpu_target_utilization = 65.0
