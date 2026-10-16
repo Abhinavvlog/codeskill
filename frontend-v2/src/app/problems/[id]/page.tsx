@@ -516,51 +516,12 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
     setActiveBottomTab('console');
     setRunResult(null);
     try {
-      const submitRes = await submissionAPI.submit({
-        problemId: problem._id || problem.id,
-        language,
-        code,
-        category: problem.categories?.[0] || "General",
-        difficulty: problem.difficulty,
-      });
-
-      const submissionId =
-        submitRes.data?.submissionId ||
-        submitRes.data?.submission?._id ||
-        submitRes.data?.submission?.id;
-
-      if (submissionId) {
-        const finalRes = await submissionAPI.awaitResult(submissionId, {
-          timeoutMs: 45000,
-          intervalMs: 1000,
-        });
-        const finalData = finalRes.data;
-        const results = Array.isArray(finalData.testResults)
-          ? finalData.testResults.map((r: any, idx: number) => ({
-              id: r.id ?? idx + 1,
-              passed: r.passed ?? r.status === "accepted",
-              status: r.status,
-              output: r.output ?? r.stdout ?? "",
-              expected: r.expected ?? "",
-              error: r.error ?? r.stderr ?? "",
-              executionTime: r.executionTime ?? r.runtime,
-              memory: r.memory,
-            }))
-          : [];
-
-        setRunResult({
-          status: (finalData.status || "completed") as SubmissionStatus,
-          results,
-          runtime: finalData.runtime || 0,
-          logs: finalData.compileOutput ? [finalData.compileOutput] : [],
-          passedCount: finalData.testCasesPassed || 0,
-          totalCount: finalData.totalTestCases || 0,
-        });
-      } else {
-        const { resultState } = await executeCode();
-        setRunResult(resultState);
+      const result = await submissionAPI.submitAndWait({ problemId: problem._id, language, code }, setExecutionPhase);
+      setRunResult({ ...result, logs: [] });
+      if (normalizeVerdict(result.status) === 'accepted') {
+        setCelebrationCount(count => count + 1);
       }
-      setActiveResultCase(0);
+      setActiveTestCase(0);
       setActiveBottomTab("console");
     } catch (err: any) {
       if (err.response?.status === 401 || err.response?.status === 403) {
@@ -587,7 +548,7 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
       setIsSubmitting(false);
       setExecutionPhase(null);
     }
-  }, [code, language, problem, executeCode]);
+  }, [code, language, problem, isRunning, isSubmitting, languageEnabled]);
 
   const handleSaveNote = () => {
     if (!problem) return;

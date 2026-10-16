@@ -268,6 +268,8 @@ export const submissionAPI = {
   getSubmissions: (problemId: number | string) => api.get(`/submissions/problem/${problemId}`),
   getById: (id: string) => api.get(`/submissions/${id}`),
   getResult: (id: string) => api.get(`/submissions/${id}/result`),
+  submitAndWait: (data: { problemId: string; code: string; language: string }, onStatus?: (status: string) => void) =>
+    awaitSubmission(() => api.post('/submissions', data), id => api.get(`/submissions/${id}/result`), onStatus),
   awaitResult: async (submissionId: string, options: { timeoutMs?: number; intervalMs?: number } = {}) => {
     const deadline = Date.now() + (options.timeoutMs ?? 60000);
     while (Date.now() < deadline) {
