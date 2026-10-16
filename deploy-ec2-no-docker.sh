@@ -10,7 +10,17 @@ echo "[1/8] Updating system..."
 sudo apt-get update && sudo apt-get upgrade -y
 sudo apt-get install -y curl wget git build-essential
 
-# 2. Install Sandbox Execution Dependencies
+# 2. Install the isolated judge runtime (required by the Docker sandbox)
+sudo apt-get install -y docker.io
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$(id -un)"
+# Apply the group change to the deployment session before starting PM2.
+if ! docker info >/dev/null 2>&1; then
+  echo "Docker is installed. Start a new login session and rerun deployment so the judge can access Docker." >&2
+  exit 1
+fi
+
+# Install Sandbox Execution Dependencies
 echo "[2/8] Installing sandbox dependencies (Java, Python, G++)..."
 sudo apt-get install -y openjdk-17-jdk python3 g++
 

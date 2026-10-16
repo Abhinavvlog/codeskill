@@ -36,7 +36,7 @@ module "alb" {
   public_subnet_ids          = module.networking.public_subnet_ids
   security_group_id          = module.security.alb_security_group_id
   certificate_arn            = var.certificate_arn
-  health_check_path          = var.health_check_path
+  frontend_health_check_path = var.health_check_path
   deregistration_delay       = 30
   idle_timeout               = 300
   enable_deletion_protection = var.environment == "production"
@@ -74,21 +74,21 @@ module "rds" {
 # 6. User Data Script Rendering
 locals {
   app_userdata = templatefile("${path.module}/userdata/app.sh.tftpl", {
-    aws_region      = var.aws_region
-    db_secret_arn   = module.rds.secret_arn
-    db_endpoint     = module.rds.endpoint
-    db_username     = module.rds.db_username
-    db_password     = ""
-    db_name         = module.rds.db_name
-    redis_host      = "127.0.0.1" # Local or cluster Redis
-    redis_port      = "6379"
-    jwt_secret      = var.jwt_secret
-    judge0_url      = "http://judge0.internal:2358"
-    monitoring_host = var.monitoring_host
-    s3_bucket_name  = "codeskill-prod-files-reports"
-    app_public_url  = "https://${var.domain_name}"
-    git_repo_url    = var.git_repo_url
-    git_branch      = var.git_branch
+    aws_region                 = var.aws_region
+    db_secret_arn              = module.rds.secret_arn
+    db_endpoint                = module.rds.endpoint
+    db_username                = module.rds.db_username
+    db_password                = ""
+    db_name                    = module.rds.db_name
+    redis_host                 = module.redis.endpoint
+    redis_port                 = "6379"
+    backend_env_parameter_name = var.backend_env_parameter_name
+    judge0_url                 = "http://judge0.internal:2358"
+    monitoring_host            = var.monitoring_host
+    s3_bucket_name             = "codeskill-prod-files-reports"
+    app_public_url             = "https://${var.domain_name}"
+    git_repo_url               = var.git_repo_url
+    git_branch                 = var.git_branch
   })
 
   judge0_userdata = templatefile("${path.module}/userdata/judge0.sh.tftpl", {
@@ -119,9 +119,9 @@ module "application_asg" {
   instance_type             = var.app_instance_type
   ami_id                    = var.app_ami_id
   subnet_ids                = local.app_subnet_ids
-  target_group_arns         = [module.alb.target_group_arn]
+  target_group_arns         = [module.alb.frontend_target_group_arn, module.alb.backend_target_group_arn]
   security_group_ids        = [module.security.app_security_group_id]
-  iam_instance_profile_name = module.iam.app_instance_profile_name
+  iam_instance_profile_name = module.iam.instance_profile_name
   min_size                  = local.app_min_size
   desired_capacity          = local.app_desired_capacity
   max_size                  = local.app_max_size
@@ -171,4 +171,23 @@ module "cost_controls" {
   monthly_budget_amount = var.monthly_budget_amount
   notification_emails   = var.alert_email != "" ? [var.alert_email] : []
   tags                  = local.common_tags
+}
+
+# A shared queue is required when API and worker processes span multiple hosts.
+module "redis" {
+  source                        = "./modules/redis"
+  name_prefix                   = local.name_prefix
+  vpc_id                        = module.networking.vpc_id
+  private_db_subnet_ids         = module.networking.private_db_subnet_ids
+  authorized_security_group_ids = [module.security.app_security_group_id]
+  tags                          = local.common_tags
+}
+
+resource "aws_security_group_rule" "app_to_redis" {
+  type                     = "egress"
+  security_group_id        = module.security.app_security_group_id
+  source_security_group_id = module.redis.security_group_id
+  from_port                = 6379
+  to_port                  = 6379
+  protocol                 = "tcp"
 }

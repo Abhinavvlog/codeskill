@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { isDocumentFullscreen } from "@/lib/fullscreen";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -9,7 +11,8 @@ interface AntiCheatWarningDialogProps {
   warnings: number;
   warningLimit: number;
   lastViolation: string | null;
-  requestFullscreen: () => void;
+  requestFullscreen: () => Promise<void>;
+  requireFullscreen?: boolean;
   isFullscreen: boolean;
 }
 
@@ -21,7 +24,10 @@ export function AntiCheatWarningDialog({
   lastViolation,
   requestFullscreen,
   isFullscreen,
+  requireFullscreen = true,
 }: AntiCheatWarningDialogProps) {
+  const [error, setError] = useState("");
+  const [restoring, setRestoring] = useState(false);
   if (!isOpen) return null;
 
   const warningsLeft = warningLimit - warnings;
@@ -52,15 +58,21 @@ export function AntiCheatWarningDialog({
     }
   };
 
-  const handleAcknowledge = () => {
-    if (!isFullscreen) {
-      requestFullscreen();
-    }
-    onClose();
+  const handleAcknowledge = async () => {
+    if (restoring) return;
+    setRestoring(true);
+    setError("");
+    try {
+      if (requireFullscreen && !isDocumentFullscreen()) await requestFullscreen();
+      if (requireFullscreen && !isDocumentFullscreen()) throw new Error("Return to fullscreen before continuing the contest.");
+      onClose();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Fullscreen could not be restored. Please try again.");
+    } finally { setRestoring(false); }
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
+    <div role="dialog" aria-modal="true" aria-label="Contest security warning" className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 max-w-md w-full shadow-2xl relative overflow-hidden">
         {isCritical && (
           <div className="absolute top-0 left-0 w-full h-1 bg-red-500 animate-pulse" />
@@ -90,11 +102,12 @@ export function AntiCheatWarningDialog({
             Your session will be automatically submitted if you exceed the warning limit.
           </p>
 
-          <Button 
+          {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+          <Button disabled={restoring}
             onClick={handleAcknowledge} 
             className={`w-full mt-4 ${isCritical ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-primary/90'}`}
           >
-            I Understand, Return to Contest
+            {restoring ? "Restoring fullscreen…" : "I Understand, Return to Contest"}
           </Button>
         </div>
       </div>

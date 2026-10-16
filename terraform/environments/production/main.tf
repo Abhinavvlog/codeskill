@@ -317,9 +317,11 @@ module "frontend_asg" {
 
   iam_instance_profile_name = module.iam.frontend_instance_profile_name
 
-  min_size         = 1
-  desired_capacity = 1
-  max_size         = 2
+  min_size         = 2
+  desired_capacity = 2
+  max_size         = 6
+
+  cpu_target_utilization = 65.0
 
   health_check_type         = "ELB"
   health_check_grace_period = 180
@@ -351,9 +353,11 @@ module "backend_asg" {
 
   iam_instance_profile_name = module.iam.backend_instance_profile_name
 
-  min_size         = 1
-  desired_capacity = 1
-  max_size         = 2
+  min_size         = 2
+  desired_capacity = 3
+  max_size         = 6
+
+  cpu_target_utilization = 60.0
 
   health_check_type         = "ELB"
   health_check_grace_period = 180
@@ -396,9 +400,11 @@ module "piston_asg" {
 
   iam_instance_profile_name = module.iam.piston_instance_profile_name
 
-  min_size         = 1
-  desired_capacity = 1
-  max_size         = 2
+  min_size         = 2
+  desired_capacity = 3
+  max_size         = 8
+
+  cpu_target_utilization = 60.0
 
   health_check_type         = "EC2"
   health_check_grace_period = 180
@@ -430,8 +436,10 @@ module "judge0_asg" {
   iam_instance_profile_name = module.iam.judge0_instance_profile_name
 
   min_size         = 1
-  desired_capacity = 1
-  max_size         = 2
+  desired_capacity = 2
+  max_size         = 4
+
+  cpu_target_utilization = 65.0
 
   health_check_type         = "EC2"
   health_check_grace_period = 180

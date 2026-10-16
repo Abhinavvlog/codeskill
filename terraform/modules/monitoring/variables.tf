@@ -19,7 +19,7 @@ variable "loki_retention_period" {
 variable "grafana_admin_password" {
   description = "Admin password for Grafana OSS portal"
   type        = string
-  default     = "CodeSkillGrafanaSecure2024!"
+  default     = null
   sensitive   = true
 }
 

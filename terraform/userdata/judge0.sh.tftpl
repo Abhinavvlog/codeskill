@@ -12,14 +12,14 @@ echo "=========================================================="
 echo "[1/6] Installing base packages and Docker..."
 if command -v dnf &>/dev/null; then
     dnf update -y
-    dnf install -y git curl wget jq docker iptables-services
+    dnf install -y aws-cli git curl wget jq docker iptables-services
     systemctl enable docker
     systemctl start docker
     systemctl enable amazon-ssm-agent || true
     systemctl start amazon-ssm-agent || true
 else
     apt-get update -y
-    apt-get install -y git curl wget jq docker.io docker-compose-plugin iptables-persistent
+    apt-get install -y awscli git curl wget jq docker.io docker-compose-plugin iptables-persistent
     systemctl enable docker
     systemctl start docker
     systemctl enable amazon-ssm-agent || true

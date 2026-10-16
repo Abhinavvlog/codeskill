@@ -30,12 +30,12 @@ import { UpdateQuestionDto } from './dto/update-question.dto';
 import { QueryQuestionsDto } from './dto/query-questions.dto';
 import { CreateQuestionBankDto } from './dto/create-question-bank.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { AdminGuard } from '../common/guards/admin.guard';
+import { AssessmentAuthorGuard } from '../common/guards/assessment-author.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Admin - Question Bank')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, AdminGuard)
+@UseGuards(JwtAuthGuard, AssessmentAuthorGuard)
 @Controller('admin/questions')
 export class QuestionsController {
   constructor(private readonly questionsService: QuestionsService) {}
@@ -239,7 +239,7 @@ export class QuestionsController {
 
 @ApiTags('Admin - Question Bank Collections')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, AdminGuard)
+@UseGuards(JwtAuthGuard, AssessmentAuthorGuard)
 @Controller('admin/question-banks')
 export class QuestionBanksController {
   constructor(private readonly questionsService: QuestionsService) {}

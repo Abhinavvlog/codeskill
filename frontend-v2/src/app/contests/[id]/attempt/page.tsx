@@ -29,22 +29,24 @@ export default function ContestAttemptPage() {
 }
 function ContestSession({ id }: { id: string }) {
   const router = useRouter(); const { user, loading: authLoading } = useAuth();
-  const [result, setResult] = useState<{ key: string; context?: AttemptContext; error?: string }>();
+  const [result, setResult] = useState<{ key: string; context?: AttemptContext; preview?: Pick<AttemptContext, "contest" | "antiCheatConfig">; error?: string }>();
   const [submissionError, setSubmissionError] = useState(""); const [retry, setRetry] = useState(0);
   const [hasStarted, setHasStarted] = useState(false); const [busy, setBusy] = useState(false); const [ended, setEnded] = useState(false);
   const [confirm, setConfirm] = useState(false); const [selected, setSelected] = useState(0); const [now, setNow] = useState(Date.now);
   const submission = useRef(false);
+  const startRequest = useRef<AbortController | null>(null);
   const finishRequest = useRef<AbortController | null>(null);
-  useEffect(() => () => finishRequest.current?.abort(), []);
+  useEffect(() => () => { startRequest.current?.abort(); finishRequest.current?.abort(); }, []);
   const key = `${id}:${user?.id || user?._id || 'guest'}:${retry}`;
   const context = result?.key === key ? result.context : undefined;
+  const preview = context || (result?.key === key ? result.preview : undefined);
   const error = submissionError || (result?.key === key ? result.error : "");
   useEffect(() => {
     if (!user || authLoading) return;
     const controller = new AbortController();
-    api.post(`/contests/${encodeURIComponent(id)}/start`, {}, { signal: controller.signal }).then(({ data }) => {
-      if (!Array.isArray(data.problems) || !data.contest || !data.sessionId) throw new Error("Invalid contest session response");
-      if (!controller.signal.aborted) setResult({ key, context: data });
+    api.get(`/contests/${encodeURIComponent(id)}/start-context`, { signal: controller.signal }).then(({ data }) => {
+      if (!data.contest || !data.antiCheatConfig) throw new Error("Invalid contest security settings");
+      if (!controller.signal.aborted) setResult({ key, preview: data });
     }).catch((failure: unknown) => {
       if (controller.signal.aborted) return;
       const response = failure as { response?: { data?: { message?: string } } };
@@ -52,6 +54,21 @@ function ContestSession({ id }: { id: string }) {
     });
     return () => controller.abort();
   }, [id, user, authLoading, key]);
+  const startContest = useCallback(async () => {
+    if (startRequest.current && !startRequest.current.signal.aborted) return;
+    const controller = new AbortController(); startRequest.current = controller;
+    try {
+      const { data } = await api.post(`/contests/${encodeURIComponent(id)}/start`, {}, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      if (!Array.isArray(data.problems) || !data.contest || !data.sessionId) throw new Error("Invalid contest session response");
+      setResult({ key, context: data });
+      setHasStarted(true);
+    } catch (failure) {
+      if (controller.signal.aborted) return;
+      const error = failure as { response?: { data?: { message?: string } } };
+      throw new Error(error.response?.data?.message || "The contest could not be started. Please try again.");
+    } finally { if (startRequest.current === controller) startRequest.current = null; }
+  }, [id, key]);
   const finish = useCallback(async (automatic = false) => {
     if (!context || submission.current) return;
     submission.current = true; setBusy(true); setConfirm(false);
@@ -70,7 +87,7 @@ function ContestSession({ id }: { id: string }) {
     id,
     user?.id || user?._id || "",
     context?.sessionId || "",
-    context?.antiCheatConfig || {
+    preview?.antiCheatConfig || {
       enableFullscreen: false,
       enableCopyProtect: false,
       enablePasteProtect: false,
@@ -89,29 +106,33 @@ function ContestSession({ id }: { id: string }) {
   }, [context, ended, finish]);
   const problem = context?.problems[selected];
   const workspaceParams = useMemo(() => Promise.resolve({ id: problem?.slug || "" }), [problem?.slug]);
-  if (authLoading || (!context && !error && user)) return <div role="status" className="min-h-screen flex justify-center items-center gap-3"><Spinner />Loading contest session...</div>;
+  if (authLoading || (!preview && !error && user)) return <div role="status" className="min-h-screen flex justify-center items-center gap-3"><Spinner />Loading contest session...</div>;
   if (!user) return <div className="pt-28 p-8 text-center space-y-4"><h1 className="text-2xl font-bold">Sign in to participate</h1><Link href="/login" className="text-primary hover:underline">Log In</Link></div>;
-  if (!context) return <div className="pt-28 p-8 text-center space-y-4"><h1 className="text-2xl font-bold">Contest unavailable</h1><p role="alert">{error}</p><Button onClick={() => setRetry(value => value + 1)}>Try again</Button><Link href="/contests" className="block text-primary">Browse contests</Link></div>;
+  if (!preview) return <div className="pt-28 p-8 text-center space-y-4"><h1 className="text-2xl font-bold">Contest unavailable</h1><p role="alert">{error}</p><Button onClick={() => setRetry(value => value + 1)}>Try again</Button><Link href="/contests" className="block text-primary">Browse contests</Link></div>;
   if (!hasStarted && !ended)
     return (
       <ContestStartGate
-        onAccept={() => setHasStarted(true)}
+        onAccept={startContest}
         requestFullscreen={proctor.requestFullscreen}
         isFullscreen={proctor.isFullscreen}
         hasRequestedFullscreen={proctor.hasRequestedFullscreen}
-        requireFullscreen={context.antiCheatConfig?.enableFullscreen !== false}
-        maxViolations={(context.antiCheatConfig as any)?.maxTabSwitchViolations ?? (context.antiCheatConfig as any)?.warningLimit ?? 3}
-        action={(context.antiCheatConfig as any)?.actionOnMaxViolations || "auto_submit"}
+        requireFullscreen={preview.antiCheatConfig?.enableFullscreen !== false}
+        maxViolations={(preview.antiCheatConfig as any)?.maxTabSwitchViolations ?? (preview.antiCheatConfig as any)?.warningLimit ?? 3}
+        action={(preview.antiCheatConfig as any)?.actionOnMaxViolations || "auto_submit"}
       />
     );
+  if (!context) return null;
+  const fullscreenBlocked = context.antiCheatConfig.enableFullscreen !== false && !proctor.isFullscreen && !ended;
   const remaining = Math.max(0, Math.ceil((new Date(context.contest.endTime).getTime() - now) / 1000));
   const elapsed = Math.max(0, Math.floor((now - new Date(context.startedAt).getTime()) / 1000));
   return <div className="h-dvh bg-background flex flex-col overflow-hidden">
     {context.antiCheatConfig?.enableWatermark && <WatermarkOverlay fullName={user.name} username={user.username || user.uid || user.name} candidateId={user.uid || user.id} contestName={context.contest.title} sessionId={context.sessionId} enabled={!ended} />}
-    <AntiCheatWarningDialog isOpen={proctor.isWarningDialogOpen && !ended} onClose={() => proctor.setIsWarningDialogOpen(false)} warnings={proctor.warnings} warningLimit={proctor.warningLimit} lastViolation={proctor.lastViolation} requestFullscreen={proctor.requestFullscreen} isFullscreen={proctor.isFullscreen} />
+    <AntiCheatWarningDialog requireFullscreen={context.antiCheatConfig.enableFullscreen !== false} isOpen={(proctor.isWarningDialogOpen || fullscreenBlocked) && !ended} onClose={() => proctor.setIsWarningDialogOpen(false)} warnings={proctor.warnings} warningLimit={proctor.warningLimit} lastViolation={proctor.lastViolation} requestFullscreen={proctor.requestFullscreen} isFullscreen={proctor.isFullscreen} />
+    <div className="contents" inert={fullscreenBlocked} aria-hidden={fullscreenBlocked}>
     <SubmissionConfirmationDialog isOpen={confirm} onClose={() => setConfirm(false)} onConfirm={() => void finish()} fullName={user.name} username={user.username || user.uid || user.name} contestName={context.contest.title} warnings={proctor.warnings} elapsedSeconds={elapsed} />
     <header className="border-b border-border bg-card px-4 py-3 flex flex-wrap gap-3 justify-between items-center shrink-0 z-50"><div className="min-w-0"><h1 className="font-bold truncate">{context.contest.title}</h1><p className="text-xs text-muted-foreground">{user.name} · Warnings {proctor.warnings} / {proctor.warningLimit}</p></div><div className="flex items-center gap-3"><span className="font-mono text-sm">{Math.floor(remaining / 3600).toString().padStart(2, "0")}:{Math.floor(remaining / 60 % 60).toString().padStart(2, "0")}:{(remaining % 60).toString().padStart(2, "0")}</span><Button size="sm" disabled={busy} onClick={() => ended ? void finish(true) : setConfirm(true)}>{busy ? "Submitting..." : ended ? "Retry submission" : "Finish Contest"}</Button></div></header>
     {error && <p role="alert" className="px-4 py-2 text-destructive shrink-0">{error}</p>}
     {ended ? <div className="p-8 text-center">This contest session has ended.</div> : <><nav aria-label="Contest problems" className="flex gap-2 overflow-x-auto p-2 border-b border-border shrink-0">{context.problems.map((item, index) => <button key={item.id} aria-pressed={selected === index} onClick={() => setSelected(index)} className={`px-3 py-2 text-sm rounded-md whitespace-nowrap ${selected === index ? "bg-foreground text-background" : "hover:bg-muted"}`}>{index + 1}. {item.title}</button>)}</nav><div className="flex-1 min-h-0"><Suspense fallback={<div role="status" className="p-8">Loading problem...</div>}>{problem ? <ProblemWorkspace key={problem.id} params={workspaceParams} embedded /> : <p className="p-8 text-center">No available problems are configured for this contest.</p>}</Suspense></div></>}
+    </div>
   </div>;
 }

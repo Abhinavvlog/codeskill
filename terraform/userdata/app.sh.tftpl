@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+umask 077
 exec > >(tee -a /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
 
 echo "=========================================================="
@@ -26,18 +27,18 @@ fi
 echo "[1/8] Installing core system packages..."
 if command -v dnf &>/dev/null; then
     dnf update -y
-    dnf install -y git curl wget jq unzip tar nginx docker
+    dnf install -y aws-cli git curl wget jq unzip tar nginx docker
     systemctl enable docker
     systemctl start docker
-    usermod -aG docker "$APP_USER" || true
+    usermod -aG docker "$APP_USER"
     systemctl enable amazon-ssm-agent || true
     systemctl start amazon-ssm-agent || true
 else
     apt-get update -y
-    apt-get install -y git curl wget jq unzip tar nginx docker.io
+    apt-get install -y awscli git curl wget jq unzip tar nginx docker.io
     systemctl enable docker
     systemctl start docker
-    usermod -aG docker "$APP_USER" || true
+    usermod -aG docker "$APP_USER"
     systemctl enable amazon-ssm-agent || true
     systemctl start amazon-ssm-agent || true
 fi
@@ -170,7 +171,7 @@ DB_NAME=""
 DB_PORT="5432"
 
 if [ -n "$DB_SECRET_ARN" ]; then
-    SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$DB_SECRET_ARN" --region "$AWS_REGION" --query SecretString --output text || echo "{}")
+    SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$DB_SECRET_ARN" --region "$AWS_REGION" --query SecretString --output text)
     if [ -n "$SECRET_JSON" ] && [ "$SECRET_JSON" != "{}" ]; then
         DB_HOST=$(echo "$SECRET_JSON" | jq -r '.host // empty')
         DB_USER=$(echo "$SECRET_JSON" | jq -r '.username // empty')
@@ -182,8 +183,9 @@ fi
 
 # Fallback to template parameters if Secret not populated
 DB_HOST="$${DB_HOST:-${db_endpoint}}"
+DB_HOST="$${DB_HOST%%:*}"
 DB_USER="$${DB_USER:-${db_username}}"
-DB_PASS="$${DB_PASS:-${db_password}}"
+: "$${DB_PASS:?Database password was not returned by Secrets Manager}"
 DB_NAME="$${DB_NAME:-${db_name}}"
 
 echo "Database target: $DB_HOST:$DB_PORT/$DB_NAME"
@@ -201,13 +203,27 @@ fi
 
 # If repo cloned, configure environment files
 if [ -d "$APP_DIR/backend-nestjs" ]; then
-    cat << EOF > "$APP_DIR/backend-nestjs/.env"
+    aws ssm get-parameter --name "${backend_env_parameter_name}" --region "$AWS_REGION" \
+      --with-decryption --query Parameter.Value --output text > "$APP_DIR/backend-nestjs/.env"
+    grep -Eq '^JWT_SECRET=.+$' "$APP_DIR/backend-nestjs/.env" || { echo "Backend configuration must contain JWT_SECRET" >&2; exit 1; }
+    curl --fail --silent --show-error --location \
+      https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+      -o "$APP_DIR/rds-global-bundle.pem"
+    chmod 644 "$APP_DIR/rds-global-bundle.pem"
+    sed '/^DATABASE_URL=/d' "$APP_DIR/backend-nestjs/.env" > "$APP_DIR/backend-nestjs/.env.tmp"
+    mv "$APP_DIR/backend-nestjs/.env.tmp" "$APP_DIR/backend-nestjs/.env"
+    cat << EOF >> "$APP_DIR/backend-nestjs/.env"
 NODE_ENV=production
 PORT=5001
-DATABASE_URL=postgresql://$DB_USER:$DB_PASS@$DB_HOST:$DB_PORT/$DB_NAME?sslmode=prefer
+DATABASE_HOST=$DB_HOST
+DATABASE_PORT=$DB_PORT
+DATABASE_USER=$DB_USER
+DATABASE_URL=postgresql://$(printf '%s' "$DB_USER" | jq -sRr @uri):$(printf '%s' "$DB_PASS" | jq -sRr @uri)@$DB_HOST:$DB_PORT/$DB_NAME?sslmode=verify-full
+DATABASE_NAME=$DB_NAME
+DATABASE_SSL=true
 REDIS_HOST=${redis_host}
 REDIS_PORT=${redis_port}
-JWT_SECRET=${jwt_secret}
+REDIS_CLUSTER_MODE=true
 JUDGE0_URL=${judge0_url}
 AWS_REGION=$AWS_REGION
 S3_BUCKET_NAME=${s3_bucket_name}
@@ -215,6 +231,7 @@ CORS_ORIGIN=${app_public_url}
 FRONTEND_URL=${app_public_url}
 EOF
 
+    chmod 600 "$APP_DIR/backend-nestjs/.env"
     cat << EOF > "$APP_DIR/frontend-v2/.env.local"
 NEXT_PUBLIC_API_URL=${app_public_url}/api
 NEXT_PUBLIC_SOCKET_URL=${app_public_url}
@@ -224,7 +241,8 @@ EOF
 
     # Build and Start
     sudo -u "$APP_USER" bash << 'SUBEOF'
-set -e
+set -euo pipefail
+export NODE_EXTRA_CA_CERTS=/opt/codeskill/rds-global-bundle.pem
 cd /opt/codeskill
 if [ -f "package.json" ]; then
     npm install --omit=dev || npm install
@@ -236,13 +254,16 @@ if [ -d "frontend-v2" ]; then
     cd frontend-v2 && npm install && npm run build && cd ..
 fi
 mkdir -p logs
-pm2 start ecosystem.config.js || true
+(cd backend-nestjs && NODE_ENV=production node dist/database/run-practice-submission-source.js)
+pm2 start ecosystem.config.js
 pm2 save
 SUBEOF
 
     # Configure PM2 startup
-    env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u "$APP_USER" --hp "/home/$APP_USER" || true
+    env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u "$APP_USER" --hp "/home/$APP_USER"
 fi
+
+if [ ! -d "$APP_DIR/backend-nestjs" ]; then echo "Application source was not deployed" >&2; exit 1; fi
 
 # 8. Configure Nginx Reverse Proxy
 echo "[8/8] Configuring Nginx reverse proxy..."
@@ -252,7 +273,9 @@ server {
     listen [::]:80 default_server;
     server_name _;
 
-    client_max_body_size 50M;
+    client_max_body_size 10M;
+    client_body_timeout 30s;
+    proxy_read_timeout 120s;
 
     # Backend API
     location /api {

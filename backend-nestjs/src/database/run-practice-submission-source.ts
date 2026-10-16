@@ -32,7 +32,7 @@ export function practiceSubmissionMigrationOptions(): DataSourceOptions {
     username: postgres.username,
     password: postgres.password,
     database: postgres.database,
-    ssl: postgres.ssl ? { rejectUnauthorized: false } : false,
+    ssl: postgres.ssl ? { rejectUnauthorized: true } : false,
   };
 }
 
@@ -46,6 +46,8 @@ export async function runPracticeSubmissionSourceMigration(): Promise<void> {
       await queryRunner.connect();
       await queryRunner.startTransaction();
       try {
+        // Serialize schema changes when an ASG starts several instances at once.
+        await queryRunner.query('SELECT pg_advisory_xact_lock(1902230159)');
         const sharding = await readShardingState(queryRunner);
         if (sharding)
           validateShardingState(parseSubmissionShardingConfig(), sharding);

@@ -39,19 +39,21 @@ judge0_worker_min_size            = 1
 judge0_worker_max_size            = 3
 
 # PostgreSQL Database (db.t4g.micro with 1 GiB RAM)
-db_instance_class       = "db.t4g.micro"
+db_instance_class       = "db.t4g.medium"
 db_allocated_storage    = 20
 db_max_allocated_storage = 50
 db_name                 = "codeskill"
 db_username             = "codeskill_admin"
-db_multi_az             = false # Set true only for enterprise Multi-AZ requirements
+db_multi_az             = true # Production database failover
 db_deletion_protection  = true
 
 # Open-Source Monitoring & Cost Controls (Prometheus, Grafana OSS, Loki, Uptime Kuma)
 alert_email            = "admin@novaserve.cloud"
 monthly_budget_amount  = "100"
 loki_retention_period  = "168h" # 7 days log retention in Loki
-grafana_admin_password = "CodeSkillGrafanaSecure2024!"
+# Set TF_VAR_grafana_admin_password, TF_VAR_judge0_db_password and
+# TF_VAR_judge0_redis_password through your secret manager; do not commit passwords.
+backend_env_parameter_name = "/codeskill-prod/production/backend_env"
 
 # Custom Resource Tags
 tags = {

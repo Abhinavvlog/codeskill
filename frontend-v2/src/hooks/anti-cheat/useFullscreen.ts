@@ -1,63 +1,35 @@
 "use client";
-
-import { useEffect, useState, useCallback } from "react";
-
+import { useEffect, useState, useCallback, useRef } from "react";
+import { enterDocumentFullscreen, fullscreenEvents, isDocumentFullscreen } from "@/lib/fullscreen";
 interface UseFullscreenOptions {
   enabled: boolean;
   onViolation: () => void;
 }
-
 export function useFullscreen({ enabled, onViolation }: UseFullscreenOptions) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hasRequested, setHasRequested] = useState(false);
-
+  const previous = useRef(false);
+  const callback = useRef(onViolation);
+  callback.current = onViolation;
   const requestFullscreen = useCallback(async () => {
-    try {
-      if (document.documentElement.requestFullscreen) {
-        await document.documentElement.requestFullscreen();
-      } else if ((document.documentElement as any).webkitRequestFullscreen) {
-        await (document.documentElement as any).webkitRequestFullscreen();
-      } else if ((document.documentElement as any).msRequestFullscreen) {
-        await (document.documentElement as any).msRequestFullscreen();
-      }
-      setIsFullscreen(true);
-      setHasRequested(true);
-    } catch (err) {
-      console.error("Failed to enter fullscreen:", err);
-    }
+    await enterDocumentFullscreen();
+    previous.current = true;
+    setIsFullscreen(true);
+    setHasRequested(true);
   }, []);
-
   useEffect(() => {
-    if (!enabled) return;
-
-    const handleFullscreenChange = () => {
-      const isCurrentlyFullscreen = !!(
-        document.fullscreenElement ||
-        (document as any).webkitFullscreenElement ||
-        (document as any).mozFullScreenElement ||
-        (document as any).msFullscreenElement
-      );
-
-      setIsFullscreen(isCurrentlyFullscreen);
-
-      // If they were in fullscreen and exited it, that's a violation
-      if (!isCurrentlyFullscreen && hasRequested) {
-        onViolation();
-      }
+    const sync = () => {
+      const active = isDocumentFullscreen();
+      const exited = previous.current && !active;
+      previous.current = active;
+      setIsFullscreen(active);
+      if (active) setHasRequested(true);
+      if (enabled && exited) callback.current();
     };
-
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
-    document.addEventListener("mozfullscreenchange", handleFullscreenChange);
-    document.addEventListener("MSFullscreenChange", handleFullscreenChange);
-
-    return () => {
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
-      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
-      document.removeEventListener("mozfullscreenchange", handleFullscreenChange);
-      document.removeEventListener("MSFullscreenChange", handleFullscreenChange);
-    };
-  }, [enabled, hasRequested, onViolation]);
-
+    // Includes fullscreen inherited from the briefing or a route transition.
+    sync();
+    for (const event of fullscreenEvents) document.addEventListener(event, sync);
+    return () => { for (const event of fullscreenEvents) document.removeEventListener(event, sync); };
+  }, [enabled]);
   return { isFullscreen, requestFullscreen, hasRequested };
 }

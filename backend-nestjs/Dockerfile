@@ -51,4 +51,4 @@ EXPOSE 5001
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:5001/api/health/live || exit 1
 
-CMD ["node", "dist/main.js"]
+CMD ["npm", "run", "prod:start"]

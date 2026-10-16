@@ -81,6 +81,12 @@ resource "aws_lb_target_group" "backend" {
     matcher             = var.health_check_matcher
   }
 
+  stickiness {
+    type            = "lb_cookie"
+    cookie_duration = 3600
+    enabled         = true
+  }
+
   tags = merge(
     var.tags,
     {
@@ -138,8 +144,8 @@ resource "aws_lb_listener" "https" {
 
 # Listener Rule 1: Route /api/* directly to the NestJS Backend Target Group
 resource "aws_lb_listener_rule" "backend_api" {
-  count        = var.certificate_arn != "" ? 1 : 0
-  listener_arn = aws_lb_listener.https[0].arn
+  count        = 1
+  listener_arn = var.certificate_arn != "" ? aws_lb_listener.https[0].arn : aws_lb_listener.http.arn
   priority     = 10
 
   action {
@@ -156,8 +162,8 @@ resource "aws_lb_listener_rule" "backend_api" {
 
 # Listener Rule 2: Route /socket.io/* directly to NestJS for real-time exam events
 resource "aws_lb_listener_rule" "backend_ws" {
-  count        = var.certificate_arn != "" ? 1 : 0
-  listener_arn = aws_lb_listener.https[0].arn
+  count        = 1
+  listener_arn = var.certificate_arn != "" ? aws_lb_listener.https[0].arn : aws_lb_listener.http.arn
   priority     = 20
 
   action {

@@ -265,3 +265,17 @@ resource "aws_iam_instance_profile" "judge0" {
   name = "${var.name_prefix}-judge0-profile"
   role = aws_iam_role.judge0.name
 }
+
+resource "aws_iam_role_policy" "frontend_pm2_monitoring" {
+  count = var.pm2_io_parameter_name != "" ? 1 : 0
+  name  = "${var.name_prefix}-frontend-pm2-monitoring"
+  role  = aws_iam_role.frontend.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ssm:GetParameter"]
+      Resource = "arn:${data.aws_partition.current.partition}:ssm:*:${data.aws_caller_identity.current.account_id}:parameter${var.pm2_io_parameter_name}"
+    }]
+  })
+}

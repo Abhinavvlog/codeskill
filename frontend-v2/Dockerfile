@@ -42,6 +42,7 @@ RUN apk add --no-cache curl tzdata
 
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV PM2_HOME=/tmp/.pm2
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN addgroup --system --gid 1001 nodejs && \
@@ -62,4 +63,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:3000/health/live || exit 1
 
-CMD ["npm", "run", "start", "--", "-p", "3000"]
+CMD ["npm", "run", "prod:start"]

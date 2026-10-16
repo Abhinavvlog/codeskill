@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /teacher/
+Disallow: /student/
+Disallow: /company/
+Disallow: /campus/
+Disallow: /assessments/
+Disallow: /api/
+Sitemap: https://codeskill.novaserve.cloud/sitemap.xml

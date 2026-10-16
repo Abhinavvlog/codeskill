@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, use, useCallback } from "react";
+import { enterDocumentFullscreen, fullscreenEvents, isDocumentFullscreen } from "@/lib/fullscreen";
 import { useRouter } from "next/navigation";
 import {
   Clock,
@@ -178,6 +179,12 @@ export default function TakeAssessmentPage({
   // Camera & Voice Proctoring State
   const [isPipMinimized, setIsPipMinimized] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const sync = () => setIsFullscreen(isDocumentFullscreen());
+    sync();
+    for (const event of fullscreenEvents) document.addEventListener(event, sync);
+    return () => { for (const event of fullscreenEvents) document.removeEventListener(event, sync); };
+  }, []);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
@@ -632,10 +639,10 @@ export default function TakeAssessmentPage({
 
   // Fullscreen trigger helper
   const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
+    if (isDocumentFullscreen()) {
+      if (proctoring?.enforceFullscreen === false) void document.exitFullscreen().catch(() => {});
     } else {
-      document.exitFullscreen().catch(() => {});
+      void enterDocumentFullscreen().catch(() => setWarningToast({ id: Date.now(), message: "Fullscreen could not be enabled. Please allow fullscreen and try again.", type: "warning" }));
     }
   };
 
@@ -919,7 +926,8 @@ export default function TakeAssessmentPage({
           <button
             onClick={toggleFullscreen}
             className="hidden sm:flex items-center justify-center p-2 rounded-md border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors"
-            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+            disabled={isFullscreen && proctoring?.enforceFullscreen !== false}
+            title={isFullscreen && proctoring?.enforceFullscreen !== false ? "Fullscreen required during the test" : isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>

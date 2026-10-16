@@ -86,7 +86,7 @@ resource "aws_db_parameter_group" "postgres" {
 resource "aws_secretsmanager_secret" "db_credentials" {
   name_prefix             = "${var.name_prefix}-db-secret-"
   description             = "Master credentials for CodeSkill PostgreSQL RDS database"
-  recovery_window_in_days = 0
+  recovery_window_in_days = 7
 
   tags = merge(
     var.tags,
@@ -106,7 +106,7 @@ resource "aws_secretsmanager_secret_version" "db_credentials" {
     password = local.master_password
     dbname   = var.db_name
     endpoint = aws_db_instance.main.endpoint
-    url      = "postgresql://${var.db_username}:${local.master_password}@${aws_db_instance.main.address}:${aws_db_instance.main.port}/${var.db_name}?sslmode=require"
+    url      = "postgresql://${urlencode(var.db_username)}:${urlencode(local.master_password)}@${aws_db_instance.main.address}:${aws_db_instance.main.port}/${var.db_name}?sslmode=verify-full"
   })
 }
 
