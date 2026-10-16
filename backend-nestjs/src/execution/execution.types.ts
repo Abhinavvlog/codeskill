@@ -52,7 +52,7 @@ export interface TestCaseInput {
 export interface TestCaseResult {
   id: number | string;
   passed: boolean;
-  status: ExecutionStatus | string;
+  status: ExecutionStatus;
   output: string;
   expected: string;
   error?: string;

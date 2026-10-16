@@ -24,4 +24,85 @@ describe('API Utils', () => {
 
     expect(result.headers.Authorization).toBeUndefined();
   });
+
+  describe('submissionAPI.awaitResult (AUD-006)', () => {
+    it('polls until submission status is accepted or completed', async () => {
+      const { submissionAPI } = await import('@/config/api');
+      const getSpy = jest.spyOn(api, 'get');
+      getSpy
+        .mockResolvedValueOnce({ data: { status: 'running', submissionId: 'sub-1' } })
+        .mockResolvedValueOnce({
+          data: {
+            status: 'accepted',
+            submissionId: 'sub-1',
+            testCasesPassed: 5,
+            totalTestCases: 5,
+            completedAt: new Date().toISOString(),
+          },
+        });
+
+      const res = await submissionAPI.awaitResult('sub-1', { intervalMs: 10, timeoutMs: 500 });
+      expect(res.data.status).toBe('accepted');
+      expect(res.data.testCasesPassed).toBe(5);
+      expect(getSpy).toHaveBeenCalledWith('/submissions/sub-1/result');
+      getSpy.mockRestore();
+    });
+
+    it('throws error when submission polling times out', async () => {
+      const { submissionAPI } = await import('@/config/api');
+      const getSpy = jest.spyOn(api, 'get');
+      getSpy.mockResolvedValue({ data: { status: 'pending', submissionId: 'sub-2' } });
+
+      await expect(
+        submissionAPI.awaitResult('sub-2', { intervalMs: 10, timeoutMs: 30 }),
+      ).rejects.toThrow('Submission evaluation timed out in queue.');
+      getSpy.mockRestore();
+    });
+  });
+
+  describe('Token Refresh & Interceptor (AUD-016)', () => {
+    it('exposes authAPI.refresh and authAPI.logout methods', async () => {
+      const { authAPI } = await import('@/config/api');
+      expect(typeof authAPI.refresh).toBe('function');
+      expect(typeof authAPI.logout).toBe('function');
+    });
+
+    it('performs transparent token refresh on 401 and updates localStorage', async () => {
+      const axios = (await import('axios')).default;
+      const postSpy = jest.spyOn(axios, 'post').mockResolvedValueOnce({
+        data: {
+          token: 'new-rotated-access-token',
+          refreshToken: 'new-rotated-refresh-token',
+        },
+      });
+
+      localStorage.setItem('codeskill_token', 'old-access-token');
+      localStorage.setItem('codeskill_refresh_token', 'valid-refresh-token');
+
+      // @ts-ignore
+      const errorHandler = api.interceptors.response.handlers[0].rejected;
+
+      const mockError = {
+        response: { status: 401 },
+        config: {
+          url: '/users/me',
+          headers: { Authorization: 'Bearer old-access-token' },
+          _retry: false,
+        },
+      };
+
+      // Mock api instance call for the retry
+      const apiSpy = jest.spyOn(api, 'request').mockResolvedValueOnce({
+        data: { id: 'user-1', name: 'Verified' },
+      } as any);
+
+      await errorHandler(mockError);
+
+      expect(localStorage.getItem('codeskill_token')).toBe('new-rotated-access-token');
+      expect(localStorage.getItem('codeskill_refresh_token')).toBe('new-rotated-refresh-token');
+
+      postSpy.mockRestore();
+      apiSpy.mockRestore();
+    });
+  });
 });

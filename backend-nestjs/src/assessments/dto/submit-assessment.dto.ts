@@ -9,6 +9,7 @@ import {
   MaxLength,
   IsObject,
   ArrayMaxSize,
+  ArrayUnique,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -59,6 +60,9 @@ export class ProctoringViolationDto {
 
 export class SubmitAssessmentDto {
   @IsArray()
+  @ArrayUnique((o: QuestionAnswerDto) => o?.questionId, {
+    message: 'Duplicate question responses are not permitted in assessment submission',
+  })
   @ValidateNested({ each: true })
   @Type(() => QuestionAnswerDto)
   responses: QuestionAnswerDto[];

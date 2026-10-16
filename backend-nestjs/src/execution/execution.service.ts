@@ -15,35 +15,16 @@ import { PistonService } from './piston/piston.service';
 import { JudgeCapacityError, PistonUnavailableError } from './piston/piston.types';
 import { compareOutput } from './output-comparison';
 import { Judge0Service } from './judge0/judge0.service';
-import { canonicalLanguage } from './execution.types';
+import {
+  Status,
+  ExecutionStatus,
+  TestCaseInput,
+  TestCaseResult,
+  canonicalLanguage,
+} from './execution.types';
 
-// ── Result Status Constants ──────────────────────────────────────────────────
-export const Status = {
-  ACCEPTED: 'accepted',
-  WRONG_ANSWER: 'wrong_answer',
-  COMPILATION_ERROR: 'compile_error',
-  RUNTIME_ERROR: 'runtime_error',
-  TIME_LIMIT_EXCEEDED: 'time_limit',
-  MEMORY_LIMIT_EXCEEDED: 'memory_limit',
-  SYSTEM_ERROR: 'system_error',
-} as const;
-
-export interface TestCaseInput {
-  id: number | string;
-  input: string;
-  expected: string;
-}
-
-export interface TestCaseResult {
-  id: number | string;
-  passed: boolean;
-  status: string;
-  output: string;
-  expected: string;
-  error?: string;
-  executionTime?: number;
-  memoryUsed?: number;
-}
+export { Status };
+export type { ExecutionStatus, TestCaseInput, TestCaseResult };
 
 interface RunOptions {
   timeout: number;
@@ -562,7 +543,7 @@ export class ExecutionService {
       const output = Buffer.from(response.stdout || '')
         .subarray(0, limit)
         .toString('utf8');
-      let status: string =
+      let status: ExecutionStatus =
         id === 3
           ? Status.ACCEPTED
           : id === 4
@@ -639,7 +620,7 @@ export class ExecutionService {
     const stage = compileFailed ? response.compile! : response.run!;
     if (stage.status === 'XX') throw new PistonUnavailableError();
     // SIGKILL is ambiguous (timeout, output, memory, host kill). Use Isolate TO only.
-    let status: string = compileFailed
+    let status: ExecutionStatus = compileFailed
       ? Status.COMPILATION_ERROR
       : stage.status === 'TO'
         ? Status.TIME_LIMIT_EXCEEDED
@@ -686,8 +667,8 @@ export class ExecutionService {
   ): Promise<TestCaseResult[]> {
     const results: TestCaseResult[] = new Array(testCases.length);
     let index = 0;
-    let failure: unknown;
-    let compileError: TestCaseResult | undefined;
+    let failure: Error | null = null;
+    let compileError: TestCaseResult | null = null;
     const workerCount = Math.min(concurrencyLimit, testCases.length);
     const workers = Array.from({ length: workerCount }, async () => {
       while (index < testCases.length && !failure && !compileError) {
@@ -701,7 +682,7 @@ export class ExecutionService {
             compileError = results[currentIndex];
           }
         } catch (error) {
-          failure = error;
+          failure = error instanceof Error ? error : new Error(String(error));
           return;
         }
       }
@@ -710,7 +691,8 @@ export class ExecutionService {
     if (failure) throw failure;
     // Compilation is independent of stdin. Keep every case accounted for, but
     // do not execute the remaining cases or invent runtime/memory measurements.
-    if (compileError) {
+    const recordedCompileError = compileError as TestCaseResult | null;
+    if (recordedCompileError) {
       for (let i = 0; i < testCases.length; i++) {
         if (!results[i]) {
           results[i] = {
@@ -719,7 +701,7 @@ export class ExecutionService {
             status: Status.COMPILATION_ERROR,
             output: '',
             expected: testCases[i].expected,
-            error: compileError.error,
+            error: recordedCompileError.error,
           };
         }
       }

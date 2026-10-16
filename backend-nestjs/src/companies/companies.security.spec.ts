@@ -106,4 +106,73 @@ describe('Companies Tenant Membership Authorization (NEW-004)', () => {
     expect(saved.isVerified).toBe(true);
     expect(saved.industry).toBe('Enterprise Security');
   });
+
+  it('AUD-024: rejects an unauthorized user from viewing company profile via getCompanyById', async () => {
+    mockCompanyRepo.findOne.mockResolvedValue(mockCompany);
+    mockCompanyUserRepo.findOne.mockResolvedValue(null);
+
+    const unauthorizedActor = {
+      id: 'outsider-id',
+      role: 'student',
+      isAdmin: false,
+    };
+
+    await expect(
+      service.getCompanyById(companyId, unauthorizedActor),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('AUD-024: allows an active member or platform admin to view company profile via getCompanyById', async () => {
+    mockCompanyRepo.findOne.mockResolvedValue(mockCompany);
+    mockCompanyUserRepo.findOne.mockResolvedValue({
+      id: 'membership-1',
+      role: 'Member',
+      isActive: true,
+    });
+
+    const memberActor = {
+      id: 'member-id',
+      role: 'company_user',
+      isAdmin: false,
+    };
+
+    const result = await service.getCompanyById(companyId, memberActor);
+    expect(result.success).toBe(true);
+    expect(result.company.id).toBe(companyId);
+  });
+
+  it('AUD-015: allows company owner to create, list, and update job postings', async () => {
+    mockCompanyRepo.findOne.mockResolvedValue(mockCompany);
+    mockCompanyUserRepo.findOne.mockResolvedValue({
+      id: 'membership-owner',
+      role: 'Owner',
+      isActive: true,
+    });
+    mockJobRepo.find.mockResolvedValue([
+      { id: 'job-1', title: 'Senior Software Engineer' },
+    ]);
+    (mockJobRepo as any).create = jest.fn((data: any) => ({
+      id: 'new-job-1',
+      ...data,
+    }));
+    (mockJobRepo as any).save = jest.fn((job: any) => Promise.resolve(job));
+
+    const ownerActor = {
+      id: 'owner-id',
+      role: 'company_admin',
+      isAdmin: false,
+    };
+
+    const jobsResult = await service.getJobs(companyId, ownerActor);
+    expect(jobsResult.success).toBe(true);
+    expect(jobsResult.jobs).toHaveLength(1);
+
+    const createResult = await service.createJob(
+      companyId,
+      { title: 'Frontend Lead', description: 'React + Next.js' },
+      ownerActor,
+    );
+    expect(createResult.success).toBe(true);
+    expect(createResult.job.title).toBe('Frontend Lead');
+  });
 });

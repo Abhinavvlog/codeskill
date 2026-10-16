@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -408,23 +409,29 @@ export class ContestsService {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pid),
     );
     let problemsSolved = 0;
-    if (problemIds.length > 0 && this.submissions?.isSharded) {
-      const solved = await this.submissions.contestSolvedProblems(problemIds, [
-        { userId, start: attempt.startedAt, end: new Date() },
-      ]);
-      problemsSolved = new Set(solved.map((row) => row.problemId)).size;
-    } else if (problemIds.length > 0) {
+    if (problemIds.length > 0) {
       try {
-        const solved = await this.attemptRepo.query(
-          `SELECT count(DISTINCT "problemId") as count 
-           FROM submissions 
-           WHERE "userId"::text = $1 AND "problemId" = ANY($2::uuid[]) AND lower(status) = 'accepted'
-             AND "createdAt" >= $3`,
-          [userId, problemIds, attempt.startedAt],
+        if (this.submissions?.isSharded) {
+          const solved = await this.submissions.contestSolvedProblems(problemIds, [
+            { userId, start: attempt.startedAt, end: new Date() },
+          ]);
+          problemsSolved = new Set(solved.map((row) => row.problemId)).size;
+        } else {
+          const solved = await this.attemptRepo.query(
+            `SELECT count(DISTINCT "problemId") as count 
+             FROM submissions 
+             WHERE "userId"::text = $1 AND "problemId" = ANY($2::uuid[]) AND lower(status) = 'accepted'
+               AND "createdAt" >= $3`,
+            [userId, problemIds, attempt.startedAt],
+          );
+          problemsSolved = Number(solved[0]?.count || 0);
+        }
+      } catch (err: any) {
+        this.logger.error(
+          `Failed to calculate contest attempt score for user ${userId} in contest ${contest.id}: ${err?.message || err}`,
+          err?.stack,
         );
-        problemsSolved = Number(solved[0]?.count || 0);
-      } catch {
-        problemsSolved = 0;
+        throw err;
       }
     }
 

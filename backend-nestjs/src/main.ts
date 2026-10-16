@@ -12,6 +12,7 @@ import * as winston from 'winston';
 import { json } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
+import { resolveAllowedCorsOrigins, isOriginAllowed } from './common/cors.util';
 
 async function bootstrap() {
   const logDir = path.join(process.cwd(), 'logs');
@@ -99,8 +100,19 @@ async function bootstrap() {
   app.use(compression());
 
   // CORS
+  const isProd = process.env.NODE_ENV === 'production';
+  const allowedOrigins = resolveAllowedCorsOrigins();
   app.enableCors({
-    origin: true,
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      if (isOriginAllowed(origin, allowedOrigins, isProd)) {
+        callback(null, true);
+      } else {
+        callback(new Error('CORS origin rejected by security policy'));
+      }
+    },
     credentials: true,
   });
 

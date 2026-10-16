@@ -8,25 +8,20 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
+import { Logger, Optional, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TokenService } from '../auth/token.service';
 import { Contest } from '../database/entities/contest.entity';
-
-const resolveAllowedCorsOrigins = (): string[] => {
-  const configured = process.env.CORS_ORIGIN || process.env.FRONTEND_URL;
-  if (configured) {
-    return configured.split(',').map((s) => s.trim()).filter(Boolean);
-  }
-  return ['http://localhost:3000', 'http://localhost:3001'];
-};
+import { resolveAllowedCorsOrigins, isOriginAllowed } from '../common/cors.util';
+import { RedisService } from '../redis/redis.service';
 
 @WebSocketGateway({
   cors: {
     origin: (origin: string, callback: (err: Error | null, allow?: boolean) => void) => {
       const allowed = resolveAllowedCorsOrigins();
-      if (!origin || allowed.includes(origin) || process.env.NODE_ENV !== 'production') {
+      const isProd = process.env.NODE_ENV === 'production';
+      if (isOriginAllowed(origin, allowed, isProd)) {
         callback(null, true);
       } else {
         callback(new Error('WebSocket connection rejected by CORS policy'));
@@ -35,18 +30,65 @@ const resolveAllowedCorsOrigins = (): string[] => {
     credentials: true,
   },
 })
-export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class AppGateway
+  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy
+{
   @WebSocketServer()
   server: Server;
 
   private readonly logger = new Logger(AppGateway.name);
   private readonly socketRateLimits = new Map<string, { count: number; resetAt: number }>();
+  private readonly nodeId = `${process.pid}-${Math.random().toString(36).slice(2, 9)}`;
+  private subscriberClient?: any;
 
   constructor(
     private readonly tokenService: TokenService,
     @InjectRepository(Contest)
     private readonly contestRepo: Repository<Contest>,
+    @Optional()
+    private readonly redisService?: RedisService,
   ) {}
+
+  async onModuleInit() {
+    try {
+      if (this.redisService) {
+        this.subscriberClient = this.redisService.createSubscriberClient();
+        if (typeof this.subscriberClient?.subscribe === 'function') {
+          await this.subscriberClient.subscribe('codeskill:ws:events');
+          this.subscriberClient.on('message', (channel: string, message: string) => {
+            if (channel === 'codeskill:ws:events') {
+              try {
+                const payload = JSON.parse(message);
+                if (payload.nodeId === this.nodeId && this.server) {
+                  return;
+                }
+                const { target, targetId, event, data } = payload;
+                if (target === 'user' && targetId) {
+                  this.server?.to(`user_${targetId}`).emit(event, data);
+                } else if (target === 'contest' && targetId) {
+                  this.server?.to(`contest_${targetId}`).emit(event, data);
+                }
+              } catch (err: any) {
+                this.logger.warn(`Failed to parse Redis WS event: ${err?.message || err}`);
+              }
+            }
+          });
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`Could not initialize Redis pub/sub listener in AppGateway: ${err?.message || err}`);
+    }
+  }
+
+  async onModuleDestroy() {
+    if (this.subscriberClient && typeof this.subscriberClient.quit === 'function') {
+      try {
+        await this.subscriberClient.quit();
+      } catch {
+        // ignore
+      }
+    }
+  }
 
   private checkRateLimit(client: Socket): boolean {
     const now = Date.now();
@@ -219,12 +261,40 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // Used to notify all clients in a contest room
   broadcastToContest(contestId: string, event: string, data: any) {
     const roomName = `contest_${contestId}`;
-    this.server?.to(roomName).emit(event, data);
+    if (this.server) {
+      this.server.to(roomName).emit(event, data);
+    }
+    if (this.redisService) {
+      this.redisService.publish(
+        'codeskill:ws:events',
+        JSON.stringify({
+          nodeId: this.nodeId,
+          target: 'contest',
+          targetId: contestId,
+          event,
+          data,
+        }),
+      );
+    }
   }
 
   // Used to notify a specific user
   emitToUser(userId: string, event: string, data: any) {
     const roomName = `user_${userId}`;
-    this.server?.to(roomName).emit(event, data);
+    if (this.server) {
+      this.server.to(roomName).emit(event, data);
+    }
+    if (this.redisService) {
+      this.redisService.publish(
+        'codeskill:ws:events',
+        JSON.stringify({
+          nodeId: this.nodeId,
+          target: 'user',
+          targetId: userId,
+          event,
+          data,
+        }),
+      );
+    }
   }
 }

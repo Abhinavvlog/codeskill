@@ -426,31 +426,52 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
     setIsSubmitting(true);
     setRunResult(null);
     try {
-      const { data, resultState } = await executeCode();
-      setRunResult(resultState);
+      const submitRes = await submissionAPI.submit({
+        problemId: problem._id || problem.id,
+        language,
+        code,
+        category: problem.categories?.[0] || "General",
+        difficulty: problem.difficulty,
+      });
+
+      const submissionId =
+        submitRes.data?.submissionId ||
+        submitRes.data?.submission?._id ||
+        submitRes.data?.submission?.id;
+
+      if (submissionId) {
+        const finalRes = await submissionAPI.awaitResult(submissionId, {
+          timeoutMs: 45000,
+          intervalMs: 1000,
+        });
+        const finalData = finalRes.data;
+        const results = Array.isArray(finalData.testResults)
+          ? finalData.testResults.map((r: any, idx: number) => ({
+              id: r.id ?? idx + 1,
+              passed: r.passed ?? r.status === "accepted",
+              status: r.status,
+              output: r.output ?? r.stdout ?? "",
+              expected: r.expected ?? "",
+              error: r.error ?? r.stderr ?? "",
+              executionTime: r.executionTime ?? r.runtime,
+              memory: r.memory,
+            }))
+          : [];
+
+        setRunResult({
+          status: (finalData.status || "completed") as SubmissionStatus,
+          results,
+          runtime: finalData.runtime || 0,
+          logs: finalData.compileOutput ? [finalData.compileOutput] : [],
+          passedCount: finalData.testCasesPassed || 0,
+          totalCount: finalData.totalTestCases || 0,
+        });
+      } else {
+        const { resultState } = await executeCode();
+        setRunResult(resultState);
+      }
       setActiveResultCase(0);
       setActiveBottomTab("console");
-
-      if (data.success && typeof window !== "undefined" && localStorage.getItem("codeskill_token")) {
-        try {
-          await submissionAPI.submit({
-            problemId: problem._id,
-            language,
-            code,
-            status: data.status,
-            runtime: data.runtime || 0,
-            memory: 0,
-            testCasesPassed: data.passedCount,
-            totalTestCases: data.totalCount,
-            category: problem.categories?.[0] || "General",
-            difficulty: problem.difficulty
-          });
-        } catch (err) {
-          console.error("Failed to save submission to database", err);
-        }
-      } else if (!localStorage.getItem("codeskill_token")) {
-        setShowLoginModal(true);
-      }
     } catch (err: any) {
       if (err.response?.status === 401 || err.response?.status === 403) {
         setRunResult({
@@ -467,7 +488,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
           status: "error",
           results: [],
           runtime: 0,
-          logs: [err.response?.data?.message || err.message || "Failed to connect to the backend."],
+          logs: [err.response?.data?.message || err.message || "Failed to retrieve submission verdict."],
           passedCount: 0,
           totalCount: 0,
         });
@@ -476,7 +497,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
     } finally {
       setIsSubmitting(false);
     }
-  }, [code, language, problem]);
+  }, [code, language, problem, executeCode]);
 
   const handleSaveNote = () => {
     if (!problem) return;

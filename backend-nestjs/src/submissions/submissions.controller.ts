@@ -45,6 +45,52 @@ export class SubmissionsController {
     };
   }
 
+  @Get('recent')
+  @ApiOperation({ summary: 'Get recent submissions' })
+  async getRecentSubmissions(@CurrentUser('id') userId: string) {
+    const submissions =
+      await this.submissionsService.getRecentSubmissions(userId);
+    return { count: submissions.length, data: submissions };
+  }
+
+  @Get('stats')
+  @ApiOperation({ summary: 'Get user statistics' })
+  async getUserStats(@CurrentUser('id') userId: string) {
+    return this.submissionsService.getUserStats(userId);
+  }
+
+  @Get('user/:userId')
+  @ApiOperation({ summary: "Get a specific user's submissions history" })
+  async getSubmissionsByUser(
+    @CurrentUser('id') currentUserId: string,
+    @CurrentUser('role') role: string,
+    @Param('userId') targetUserId: string,
+    @Query()
+    query: {
+      page?: number;
+      limit?: number;
+      problemId?: string;
+      status?: string;
+    },
+  ) {
+    const isAdmin = role === 'admin';
+    const effectiveUserId = isAdmin ? targetUserId : currentUserId;
+    return this.submissionsService.getSubmissionsByUser(effectiveUserId, query);
+  }
+
+  @Get('problem/:problemId')
+  @ApiOperation({ summary: 'Get submissions for a specific problem' })
+  async getSubmissionsByProblem(
+    @CurrentUser('id') userId: string,
+    @Param('problemId') problemId: string,
+  ) {
+    const submissions = await this.submissionsService.getSubmissionsByProblem(
+      userId,
+      problemId,
+    );
+    return { count: submissions.length, data: submissions };
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get submission details by ID' })
   async getSubmission(
@@ -87,51 +133,5 @@ export class SubmissionsController {
   ) {
     const isAdmin = role === 'admin';
     return this.submissionsService.cancelSubmission(userId, id, isAdmin);
-  }
-
-  @Get('user/:userId')
-  @ApiOperation({ summary: "Get a specific user's submissions history" })
-  async getSubmissionsByUser(
-    @CurrentUser('id') currentUserId: string,
-    @CurrentUser('role') role: string,
-    @Param('userId') targetUserId: string,
-    @Query()
-    query: {
-      page?: number;
-      limit?: number;
-      problemId?: string;
-      status?: string;
-    },
-  ) {
-    const isAdmin = role === 'admin';
-    const effectiveUserId = isAdmin ? targetUserId : currentUserId;
-    return this.submissionsService.getSubmissionsByUser(effectiveUserId, query);
-  }
-
-  @Get('problem/:problemId')
-  @ApiOperation({ summary: 'Get submissions for a specific problem' })
-  async getSubmissionsByProblem(
-    @CurrentUser('id') userId: string,
-    @Param('problemId') problemId: string,
-  ) {
-    const submissions = await this.submissionsService.getSubmissionsByProblem(
-      userId,
-      problemId,
-    );
-    return { count: submissions.length, data: submissions };
-  }
-
-  @Get('recent')
-  @ApiOperation({ summary: 'Get recent submissions' })
-  async getRecentSubmissions(@CurrentUser('id') userId: string) {
-    const submissions =
-      await this.submissionsService.getRecentSubmissions(userId);
-    return { count: submissions.length, data: submissions };
-  }
-
-  @Get('stats')
-  @ApiOperation({ summary: 'Get user statistics' })
-  async getUserStats(@CurrentUser('id') userId: string) {
-    return this.submissionsService.getUserStats(userId);
   }
 }

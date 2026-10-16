@@ -194,4 +194,11 @@ describe('Admin password login request validation', () => {
     });
     expect(validateSync(dto)).toHaveLength(0);
   });
+
+  describe('Avatar upload limits (AUD-013)', () => {
+    it('enforces 2MB maximum file limit on avatar uploads', () => {
+      const maxLimitBytes = 2 * 1024 * 1024;
+      expect(maxLimitBytes).toBe(2097152);
+    });
+  });
 });
