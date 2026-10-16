@@ -70,6 +70,9 @@ resource "aws_autoscaling_group" "this" {
 
   launch_template {
     id      = aws_launch_template.this.id
+    # Pin the group to a concrete version so instance refresh rollback has a
+    # stable configuration to restore. The deployment workflow resolves this
+    # version explicitly before starting a refresh as well.
     version = aws_launch_template.this.latest_version
   }
 
