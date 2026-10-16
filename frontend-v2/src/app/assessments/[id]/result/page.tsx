@@ -40,6 +40,8 @@ export default function AssessmentResultPage({
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRetaking, setIsRetaking] = useState(false);
+  const [resultError, setResultError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     releaseAssessmentStream(id);
@@ -61,18 +63,27 @@ export default function AssessmentResultPage({
   useEffect(() => {
     const fetchResult = async () => {
       setIsLoading(true);
+      setResultError(null);
       try {
         const res = await studentAssessmentsAPI.getResult(id);
         setData(res.data);
-      } catch (err) {
-        console.error("Failed to load result:", err);
+      } catch (err: any) {
+        // A 400 means the API has no finalized attempt yet; show the normal
+        // empty scorecard state instead of logging an expected API response as
+        // an uncaught-looking client error. Surface outages with a retry.
+        if (err?.response?.status === 400) {
+          setData(null);
+        } else {
+          const message = err?.response?.data?.message;
+          setResultError(Array.isArray(message) ? message.join(" ") : message || "We could not load the scorecard. Please retry.");
+        }
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchResult();
-  }, [id]);
+  }, [id, retryCount]);
 
   if (isLoading) {
     return (
@@ -87,6 +98,20 @@ export default function AssessmentResultPage({
 
   const attempt = data?.attempt;
   const assessment = data?.assessment;
+
+  if (resultError) {
+    return (
+      <div className="flex-1 min-h-screen bg-background flex items-center justify-center font-sans p-6">
+        <div role="alert" className="text-center space-y-4 max-w-sm">
+          <h2 className="text-lg font-bold text-foreground">Scorecard temporarily unavailable</h2>
+          <p className="text-xs text-muted-foreground">{resultError}</p>
+          <button type="button" onClick={() => setRetryCount((count) => count + 1)} className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-xl text-xs hover:bg-primary/90 transition-colors">
+            <RefreshCw className="w-4 h-4" /> Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!attempt) {
     return (

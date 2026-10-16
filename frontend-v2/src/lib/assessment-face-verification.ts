@@ -39,7 +39,23 @@ async function getFaceLandmarker() {
 
 async function countFaces(snapshot: HTMLCanvasElement) {
   const landmarker = await getFaceLandmarker();
-  const result = landmarker.detect(snapshot);
+  // The MediaPipe CPU wasm runtime reports XNNPACK initialization as an
+  // error-level console message in some browsers. Next's dev overlay treats
+  // it as a fatal client error, so filter only this known informational log
+  // during the synchronous inference call.
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => {
+    if (args.some((arg) => typeof arg === "string" && arg.includes("Created TensorFlow Lite XNNPACK delegate for CPU."))) {
+      return;
+    }
+    originalConsoleError.apply(console, args);
+  };
+  let result;
+  try {
+    result = landmarker.detect(snapshot);
+  } finally {
+    console.error = originalConsoleError;
+  }
   return (result.faceLandmarks || []).length as number;
 }
 

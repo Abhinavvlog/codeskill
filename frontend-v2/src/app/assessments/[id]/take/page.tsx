@@ -124,6 +124,7 @@ export default function TakeAssessmentPage({
   const [loadedAssessmentId, setLoadedAssessmentId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submissionRequestedRef = useRef(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isAutoSubmitting, setIsAutoSubmitting] = useState(false);
   const [snapshotStatus, setSnapshotStatus] = useState("First snapshot is captured after 20 seconds; S3 storage is confirmed per capture");
   const [assessmentTitle, setAssessmentTitle] = useState("Proctored Assessment");
@@ -328,7 +329,7 @@ export default function TakeAssessmentPage({
     faceDetectionStatus,
     stopCamera,
   } = useAssessmentMedia(
-    id, proctoring?.useCamera !== false && loadedAssessmentId === id && questions.length > 0 && !isLoading && !isSubmitting && timeLeftSeconds > 0, recordViolation,
+    id, proctoring?.useCamera !== false && loadedAssessmentId === id && questions.length > 0 && !isLoading && timeLeftSeconds > 0, recordViolation,
   );
 
   // 3. Submit Attempt Handler
@@ -337,10 +338,7 @@ export default function TakeAssessmentPage({
       if (isSubmitting || submissionRequestedRef.current || submitStartedRef.current) return;
       submissionRequestedRef.current = true;
       submitStartedRef.current = true;
-      stopCamera();
-      // Also release any preflight stream that was handed off but not adopted
-      // by the exam media hook (for example, after a quick route transition).
-      releaseAssessmentStream(id);
+      setSubmitError(null);
       setIsSubmitting(true);
 
       const formattedResponses = questions.map((q) => {
@@ -358,14 +356,39 @@ export default function TakeAssessmentPage({
       });
 
       try {
-        await studentAssessmentsAPI.submitAttempt(id, {
+        const payload = {
           responses: formattedResponses,
           timeSpentSeconds: Math.floor((Date.now() - startedAt.getTime()) / 1000),
           violations: violationsRef.current,
-        });
-      } catch (err) {
-        console.error("Submission response:", err);
+        };
+        let lastError: any;
+        // Code evaluation can briefly fail while the judge service is busy.
+        // Retry transient service/network failures before leaving the attempt.
+        for (let retry = 0; retry < 3; retry++) {
+          try {
+            await studentAssessmentsAPI.submitAttempt(id, payload);
+            lastError = null;
+            break;
+          } catch (error: any) {
+            lastError = error;
+            const status = error?.response?.status;
+            const transient = !status || status === 429 || status >= 500;
+            if (!transient || retry === 2) break;
+            await new Promise((resolve) => window.setTimeout(resolve, 750 * (retry + 1)));
+          }
+        }
+        if (lastError) throw lastError;
+      } catch (err: any) {
+        const responseMessage = err?.response?.data?.message;
+        const message = Array.isArray(responseMessage) ? responseMessage.join(" ") : responseMessage;
+        setSubmitError(message || "We could not confirm your submission. Your saved answers are still here; please retry submission.");
+        setIsSubmitting(false);
+        return;
       }
+      stopCamera();
+      // Release a preflight stream that was handed off but not adopted by the
+      // exam media hook (for example, after a quick route transition).
+      releaseAssessmentStream(id);
       if (isAuto) {
         await new Promise((resolve) => window.setTimeout(resolve, 2500));
       }
@@ -836,7 +859,7 @@ export default function TakeAssessmentPage({
       onTerminate={() => submitExam(true)}
       onViolation={recordViolation}
     >
-      <div ref={examPageRef} data-assessment-page-capture className="h-dvh overflow-hidden bg-background text-foreground font-sans flex flex-col select-none relative [touch-action:pan-x_pan-y_pinch-zoom]">
+      <div ref={examPageRef} data-assessment-page-capture className={`h-dvh overflow-hidden bg-background text-foreground font-sans flex flex-col relative [touch-action:pan-x_pan-y_pinch-zoom] ${proctoring?.blockCopyPaste !== false ? "select-none" : ""}`}>
       {/* Top Test Header Bar */}
       <header className="h-16 shrink-0 border-b border-border bg-card/95 backdrop-blur-xl px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 shadow-sm">
         <div className="flex items-center gap-3">
@@ -921,6 +944,14 @@ export default function TakeAssessmentPage({
       </header>
 
       {/* Warning Toast Floating Notification */}
+      {submitError && (
+        <div role="alert" className="fixed top-20 left-1/2 z-[60] w-[min(92vw,44rem)] -translate-x-1/2 rounded-xl border border-rose-300 bg-card p-4 text-sm text-foreground shadow-xl">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="min-w-0 flex-1">{submitError}</p>
+            <button type="button" onClick={() => { submissionRequestedRef.current = false; submitStartedRef.current = false; void submitExam(isAutoSubmitting); }} className="rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground">Retry submission</button>
+          </div>
+        </div>
+      )}
       {warningToast && (
         <div className="fixed top-20 right-6 z-50 animate-in slide-in-from-top-3 fade-in duration-200">
           <div className="bg-card border border-rose-500/40 text-foreground px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-xs max-w-sm">
@@ -975,7 +1006,7 @@ export default function TakeAssessmentPage({
           const isCodingQuestion = ["coding", "algorithmic", "dsa"].includes(currentQ.questionType?.toLowerCase()) || (!currentQ.options?.length && Boolean(currentQ.starterCode || currentQ.codeSnippet));
           return <AssessmentReadingZoom>{readingScale => <main className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden p-3 gap-3">
             {isCodingQuestion ? <>
-              <DSAAssessmentEditor readingScale={readingScale} key={currentQ._id} question={currentQ} savedResponse={responses[currentQ._id]} onDraftChange={handleCodingDraft} onSave={handleSaveCodingQuestion} />
+              <DSAAssessmentEditor readingScale={readingScale} key={currentQ._id} question={currentQ} savedResponse={responses[currentQ._id]} onDraftChange={handleCodingDraft} onSave={handleSaveCodingQuestion} blockCopyPaste={proctoring?.blockCopyPaste !== false} />
               <div className="shrink-0 flex items-center justify-between rounded-xl border border-border bg-card px-4 py-2">
                 <button onClick={handleMarkForReview} className="inline-flex items-center gap-2 text-xs font-semibold text-amber-500"><Bookmark className="size-4" />{currentResponse?.status === "marked_for_review" ? "Unreview" : "Review later"}</button>
                 <div className="flex gap-3"><button onClick={() => setCurrentIndex(i => Math.max(0, i - 1))} disabled={currentIndex === 0} className="text-xs font-medium disabled:opacity-30">Previous</button><button onClick={handleSaveAndNext} className="rounded-lg border border-border bg-muted px-4 py-2 text-xs font-semibold">{isLastQuestion ? "Review & finish" : "Next question"}</button></div>
