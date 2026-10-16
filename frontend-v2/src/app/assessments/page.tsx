@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Code2, ListChecks, CheckSquare2, ToggleLeft, Terminal, Layers, Clock, Award, ArrowRight, ShieldCheck, Search, RefreshCw, BarChart3, GraduationCap, LockKeyhole } from "lucide-react";
@@ -46,13 +46,28 @@ export default function StudentAssessmentsPage() {
       && (availability === "All availability" || availability === status)
       && (difficulty === "All difficulties" || assessment.difficulties?.some(value => value.toLowerCase() === difficulty.toLowerCase()) || assessment.difficulty?.toLowerCase() === difficulty.toLowerCase());
   });
+  const selectAdjacentTab = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let nextIndex: number;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    setTab(tabs[nextIndex]);
+    requestAnimationFrame(() => document.getElementById(`assessment-tab-${nextIndex}`)?.focus());
+  };
   return <main className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-28 pb-12">
     <div aria-hidden={showGuestPrompt} inert={showGuestPrompt} className={`space-y-7 transition-[filter,opacity] duration-300 ${showGuestPrompt ? "pointer-events-none select-none blur-[3px] opacity-45" : ""}`}>
     <header className="flex flex-col sm:flex-row justify-between gap-5 sm:items-end"><div><p className="text-primary text-sm font-semibold flex gap-2 items-center mb-2"><GraduationCap className="w-4 h-4" /> CodeSkill assessment portal</p><h1 className="text-3xl font-bold tracking-tight">Assessments &amp; Technical Tests</h1><p className="text-muted-foreground mt-2 max-w-2xl">Build confidence with coding challenges and technical tests. Find your assigned assessments and track your results.</p></div><Button variant="outline" aria-label="Refresh assessments" disabled={loading || !user} onClick={() => setRetry(value => value + 1)}><RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /></Button></header>
-    <div className="flex flex-wrap gap-2 border-b border-border pb-4">{tabs.map(value => <button key={value} aria-pressed={tab === value} onClick={() => setTab(value)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === value ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>{value}</button>)}</div>
+    <div className="min-w-0 overflow-x-auto overscroll-x-contain border-b border-border pb-4" role="tablist" aria-label="Assessment categories">
+      <div className="flex w-max min-w-full gap-2">
+        {tabs.map((value, index) => <button key={value} id={`assessment-tab-${index}`} type="button" role="tab" aria-selected={tab === value} aria-controls="assessment-results" tabIndex={tab === value ? 0 : -1} onClick={() => setTab(value)} onKeyDown={event => selectAdjacentTab(event, index)} className={`box-border h-10 shrink-0 whitespace-nowrap rounded-lg border-2 px-4 text-sm font-medium leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${tab === value ? "border-transparent bg-foreground text-background" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}>{value}</button>)}
+      </div>
+    </div>
     <div className="flex flex-col md:flex-row gap-3"><div className="relative flex-1"><Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" /><input aria-label="Search assessments" placeholder="Search by assessment title..." value={search} onChange={event => setSearch(event.target.value)} className="w-full py-2 pl-10 pr-3 rounded-lg bg-background border border-border" /></div><select aria-label="Availability" value={availability} onChange={event => setAvailability(event.target.value)} className="p-2 rounded-lg border border-border bg-background">{["All availability", "Upcoming", "Live", "Completed"].map(value => <option key={value}>{value}</option>)}</select><select aria-label="Difficulty" value={difficulty} onChange={event => setDifficulty(event.target.value)} className="p-2 rounded-lg border border-border bg-background">{["All difficulties", "Easy", "Medium", "Hard"].map(value => <option key={value}>{value}</option>)}</select></div>
     {error && <div role="alert" className="p-5 border border-destructive/30 rounded-xl flex flex-wrap gap-3 items-center justify-between"><p className="text-destructive">{error}</p><Button variant="outline" onClick={() => setRetry(value => value + 1)}>Try again</Button></div>}
-    {authLoading || loading ? <div role="status" className="py-16 flex justify-center gap-3 text-muted-foreground"><Spinner />Loading assessments...</div> : !user ? <div className="min-h-64 rounded-2xl border border-dashed border-border bg-muted/30 flex items-center justify-center p-8 text-center"><p className="max-w-sm text-sm text-muted-foreground">Your assigned assessments, upcoming tests and results will appear here after you sign in.</p></div> : !error && visible.length === 0 ? <div className="text-center p-12 border border-border rounded-2xl text-muted-foreground">No assessments match your filters.</div> : <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">{visible.map(assessment => {
+    <div id="assessment-results" role="tabpanel" aria-labelledby={`assessment-tab-${tabs.indexOf(tab)}`} tabIndex={0} className="min-w-0 focus-visible:outline-none">{authLoading || loading ? <div role="status" className="py-16 flex justify-center gap-3 text-muted-foreground"><Spinner />Loading assessments...</div> : !user ? <div className="min-h-64 rounded-2xl border border-dashed border-border bg-muted/30 flex items-center justify-center p-8 text-center"><p className="max-w-sm text-sm text-muted-foreground">Your assigned assessments, upcoming tests and results will appear here after you sign in.</p></div> : !error && visible.length === 0 ? <div className="text-center p-12 border border-border rounded-2xl text-muted-foreground">No assessments match your filters.</div> : <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">{visible.map(assessment => {
       const types = assessmentTypes(assessment); const Icon = types.length === 1 ? icons[types[0]] : Layers;
       const completed = assessmentCompleted(assessment); const status = completed ? "Completed" : assessmentWindow(assessment, now);
       const canAttempt = canAttemptAssessment(assessment, now); const id = assessment.id || assessment._id;
@@ -64,7 +79,7 @@ export default function StudentAssessmentsPage() {
         <div className="text-xs text-muted-foreground flex flex-wrap gap-3">{levels.length > 0 && <span className="capitalize">Difficulty: {levels.length === 1 ? levels[0] : "Mixed"}</span>}{assessment.proctoring && Object.values(assessment.proctoring).some(Boolean) && <span className="flex gap-1 items-center"><ShieldCheck className="w-3.5 h-3.5" /> Proctored</span>}{assessment.code && <span className="font-mono">{assessment.code}</span>}</div>
         <footer className="mt-auto pt-2 space-y-3">{completed && <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><span>Score: <strong>{assessment.attemptScore ?? 0} / {assessment.totalMarks} pts</strong></span><Link href={`/assessments/${id}/result`} className="font-semibold text-primary flex items-center gap-1 hover:underline"><BarChart3 className="w-4 h-4" />Scorecard</Link></div>}{canAttempt ? completed ? <Button className="w-full" onClick={() => retake(id)}>Re-attempt</Button> : <Link href={`/assessments/${id}`} className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg bg-foreground text-background font-semibold text-sm hover:opacity-90">{assessment.attemptStatus === "in_progress" ? "Resume Assessment" : "Attempt Now"}<ArrowRight className="w-4 h-4" /></Link> : <Button variant="outline" className="w-full" disabled>{status === "Upcoming" ? "Opens at the scheduled start time" : "Assessment closed"}</Button>}</footer>
       </article>;
-    })}</div>}
+    })}</div>}</div>
     </div>
     {showGuestPrompt && <div className="absolute inset-x-0 top-28 z-20 flex justify-center px-4 sm:top-32" role="region" aria-labelledby="student-sign-in-heading">
       <section className="w-full max-w-xl rounded-3xl border border-primary/20 bg-card/95 p-6 shadow-2xl shadow-primary/10 ring-1 ring-primary/10 backdrop-blur-md sm:p-8">
