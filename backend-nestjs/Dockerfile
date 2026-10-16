@@ -16,6 +16,7 @@ RUN npm ci --legacy-peer-deps
 
 COPY tsconfig*.json nest-cli.json ./
 COPY src/ ./src/
+COPY scripts/build.js ./scripts/build.js
 
 # Compile TypeScript
 RUN npm run build
