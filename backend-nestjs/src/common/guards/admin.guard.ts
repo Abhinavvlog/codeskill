@@ -5,14 +5,11 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 
-export const ADMIN_OR_TEACHER_ROLES = [
+export const ADMIN_ROLES = [
   'admin',
   'super_admin',
   'student_admin',
   'assessment_admin',
-  'teacher',
-  'faculty',
-  'instructor',
 ];
 
 @Injectable()
@@ -23,7 +20,7 @@ export class AdminGuard implements CanActivate {
 
     if (
       user &&
-      (user.isAdmin || ADMIN_OR_TEACHER_ROLES.includes(user.role))
+      (user.isAdmin || ADMIN_ROLES.includes(user.role))
     ) {
       return true;
     }
