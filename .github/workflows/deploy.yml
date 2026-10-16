@@ -164,13 +164,13 @@ jobs:
               refresh_id=$(aws autoscaling start-instance-refresh \
                 --auto-scaling-group-name "$asg" \
                 --desired-configuration "$desired" \
-                --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 180, "SkipMatching": false, "AutoRollback": true}' \
+                --preferences '{"MinHealthyPercentage": 50, "MaxHealthyPercentage": 150, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": true}' \
                 --region "${{ env.AWS_REGION }}" \
                 --query 'InstanceRefreshId' --output text)
             else
               refresh_id=$(aws autoscaling start-instance-refresh \
                 --auto-scaling-group-name "$asg" \
-                --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 180, "SkipMatching": false, "AutoRollback": false}' \
+                --preferences '{"MinHealthyPercentage": 50, "MaxHealthyPercentage": 150, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": false}' \
                 --region "${{ env.AWS_REGION }}" \
                 --query 'InstanceRefreshId' --output text)
             fi
@@ -193,13 +193,13 @@ jobs:
               refresh_id=$(aws autoscaling start-instance-refresh \
                 --auto-scaling-group-name "$asg" \
                 --desired-configuration "$desired" \
-                --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 180, "SkipMatching": false, "AutoRollback": true}' \
+                --preferences '{"MinHealthyPercentage": 50, "MaxHealthyPercentage": 150, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": true}' \
                 --region "${{ env.AWS_REGION }}" \
                 --query 'InstanceRefreshId' --output text)
             else
               refresh_id=$(aws autoscaling start-instance-refresh \
                 --auto-scaling-group-name "$asg" \
-                --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 180, "SkipMatching": false, "AutoRollback": false}' \
+                --preferences '{"MinHealthyPercentage": 50, "MaxHealthyPercentage": 150, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": false}' \
                 --region "${{ env.AWS_REGION }}" \
                 --query 'InstanceRefreshId' --output text)
             fi
@@ -221,28 +221,30 @@ jobs:
             refreshes+=("${{ env.BACKEND_ASG }}:$BACKEND_REFRESH_ID")
           fi
 
-          for attempt in {1..80}; do
+          for attempt in {1..160}; do
             pending=0
             for refresh in "${refreshes[@]}"; do
               asg="${refresh%%:*}"
               refresh_id="${refresh#*:}"
-              status=$(aws autoscaling describe-instance-refreshes \
+              info=$(aws autoscaling describe-instance-refreshes \
                 --auto-scaling-group-name "$asg" \
                 --instance-refresh-ids "$refresh_id" \
                 --region "${{ env.AWS_REGION }}" \
-                --query 'InstanceRefreshes[0].Status' --output text)
-              echo "$asg refresh $refresh_id status: $status"
+                --query 'InstanceRefreshes[0].[Status,PercentageComplete,StatusReason]' --output text || echo "Unknown 0 Unknown")
+              read -r status pct reason <<< "$info"
+              echo "[Attempt $attempt/160] $asg ($refresh_id): status=$status, progress=${pct:-0}%, reason=${reason:-none}"
               case "$status" in
                 Successful) ;;
                 Pending|InProgress|Baking|CheckpointDelay) pending=1 ;;
-                *) echo "$asg instance refresh did not succeed (status: $status)" >&2; exit 1 ;;
+                *) echo "$asg instance refresh did not succeed (status: $status, reason: $reason)" >&2; exit 1 ;;
               esac
             done
             if [ "$pending" -eq 0 ]; then
+              echo "All Auto Scaling instance refreshes completed successfully."
               break
             fi
-            if [ "$attempt" -eq 80 ]; then
-              echo "Timed out waiting for Auto Scaling instance refreshes." >&2
+            if [ "$attempt" -eq 160 ]; then
+              echo "Timed out waiting for Auto Scaling instance refreshes after 40 minutes." >&2
               exit 1
             fi
             sleep 15
