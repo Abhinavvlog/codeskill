@@ -116,6 +116,7 @@ it("selects Python automatically for a Python-only problem and submits its resto
       expect.any(Function),
     ),
   );
+  expect(await screen.findByTestId("practice-confetti")).toBeInTheDocument();
 });
 
 it("disables execution when no enabled runtime supports the problem", async () => {
@@ -158,6 +159,7 @@ it("practice Submit waits for the full verdict and reveals only failing hidden-c
   );
   await screen.findByText("Waiting for a judge");
   expect(screen.queryByText("Accepted")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("practice-confetti")).not.toBeInTheDocument();
   expect(runAPI.run).not.toHaveBeenCalled();
   expect(
     screen.getByRole("button", { name: "Run", exact: true }),
@@ -188,6 +190,7 @@ it("practice Submit waits for the full verdict and reveals only failing hidden-c
   expect(screen.getByText("2 / 3")).toBeInTheDocument();
   expect(screen.getByText("FAILED-HIDDEN-INPUT")).toBeInTheDocument();
   expect(screen.getByText("ACTUAL")).toBeInTheDocument();
+  expect(screen.queryByTestId("practice-confetti")).not.toBeInTheDocument();
   expect(screen.queryByText("DO-NOT-SHOW-PASSED")).not.toBeInTheDocument();
   expect(submissionAPI.submitAndWait).toHaveBeenCalledWith(
     expect.objectContaining({ problemId: "problem-1" }),
@@ -211,6 +214,7 @@ it("practice Run checks samples and displays a run result without creating a sub
     await screen.findByRole("button", { name: "Run", exact: true }),
   );
   await screen.findByText("Run successful");
+  expect(screen.queryByTestId("practice-confetti")).not.toBeInTheDocument();
   await waitFor(() =>
     expect(runAPI.run).toHaveBeenCalledWith(
       expect.objectContaining({

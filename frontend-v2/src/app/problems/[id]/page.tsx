@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import PracticePet from "@/components/pet/PracticePet";
 import ExecutionFeedback from "@/components/Result/ExecutionFeedback";
+import PracticeConfetti from "@/components/Result/PracticeConfetti";
 import { ExecutionFeedbackResult, normalizeVerdict } from "@/lib/submission-feedback";
 import { editorLanguages } from '@/lib/editor-languages';
 import { ProgrammingLanguageIcon } from "@/components/ui/ProgrammingLanguageIcon";
@@ -145,6 +146,7 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [resultMode, setResultMode] = useState<'run' | 'submission'>('run');
   const [executionPhase, setExecutionPhase] = useState<string | null>(null);
+  const [celebrationCount, setCelebrationCount] = useState(0);
 
   // Notes State
   const [noteContent, setNoteContent] = useState("");
@@ -516,6 +518,9 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
     try {
       const result = await submissionAPI.submitAndWait({ problemId: problem._id, language, code }, setExecutionPhase);
       setRunResult({ ...result, logs: [] });
+      if (normalizeVerdict(result.status) === 'accepted') {
+        setCelebrationCount(count => count + 1);
+      }
     } catch (err: any) {
       if (err.response?.status === 401 || err.response?.status === 403) {
         setRunResult({
@@ -1456,6 +1461,10 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
           </div>
       </footer>
 
+
+      {celebrationCount > 0 && resultMode === 'submission' && runResult && normalizeVerdict(runResult.status) === 'accepted' && (
+        <PracticeConfetti key={celebrationCount} />
+      )}
 
       <PracticePet
         key={problem.slug}
