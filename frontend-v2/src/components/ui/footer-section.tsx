@@ -71,6 +71,7 @@ const defaultFooterLinks: FooterSection[] = [
   {
     label: 'Institutional & Legal',
     links: [
+      { title: 'Skill Development', href: '/skill-development' },
       { title: 'Help & Contact', href: '/contact' },
       { title: 'Privacy Policy', href: '/privacy' },
       { title: 'Terms of Examination', href: '/terms' },
