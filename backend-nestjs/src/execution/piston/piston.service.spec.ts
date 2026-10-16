@@ -34,6 +34,10 @@ describe('Piston contract client (mock transport, not sandbox verification)', ()
     process.env = { ...original };
   });
   const run = () => service.execute('py', 'main.py', 'print(30)', '10 20');
+  it('uses a short discovery timeout instead of waiting for a compiler deadline', async () => {
+    await run();
+    expect(get).toHaveBeenCalledWith('/runtimes', { timeout: 2000 });
+  });
   it('uses a discovered exact runtime, bounded API limits, correlation ID and no expected answer', async () => {
     await run();
     expect(post.mock.calls[0][0]).toBe('/execute');

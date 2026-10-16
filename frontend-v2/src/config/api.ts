@@ -1,4 +1,5 @@
 import { awaitExecution } from "@/lib/await-execution";
+import { awaitSubmission } from "@/lib/submission-feedback";
 import axios from "axios";
 import { getBrowserApiBaseURL } from "@/lib/api-base-url";
 import { normalizeProblemQuery } from "@/lib/public-problems";
@@ -558,6 +559,9 @@ export const adminAssessmentsAPI = {
 };
 
 export const studentAssessmentsAPI = {
+  evaluateCode: (id: string, data: { questionId: string; code: string; language: string }) => awaitExecution(
+    () => api.post(`/assessments/${id}/evaluate-code`, data), jobId => runAPI.getJob(jobId),
+  ),
   getMyAssessments: (signal?: AbortSignal) => api.get("/assessments/my-assessments", { signal }),
   getOverview: (id: string) => api.get(`/assessments/${id}/overview`),
   startAttempt: (id: string) => api.post(`/assessments/${id}/start`),

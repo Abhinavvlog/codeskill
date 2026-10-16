@@ -99,6 +99,101 @@ describe('Judge0 primary and Piston fallback', () => {
     secondary.execute.mockRejectedValue(new PistonUnavailableError());
     await expect(run()).rejects.toBeInstanceOf(PistonUnavailableError);
   });
+  it('stops scheduling the same compilation failure across every test case', async () => {
+    primary.execute.mockResolvedValue({
+      status: { id: 6 },
+      stdout: '',
+      stderr: null,
+      compile_output: 'main.cpp: syntax error',
+      time: null,
+      memory: null,
+    });
+    const tests = Array.from({ length: 7 }, (_, i) => ({
+      id: i + 1,
+      input: String(i),
+      expected: String(i + 1),
+    }));
+    const results = await service.executeCode('cpp', 'invalid source', tests);
+    expect(primary.execute).toHaveBeenCalledTimes(2);
+    expect(secondary.execute).not.toHaveBeenCalled();
+    expect(results).toHaveLength(7);
+    expect(results.map((r) => r.id)).toEqual(tests.map((t) => t.id));
+    expect(results.every((r) => r.status === Status.COMPILATION_ERROR)).toBe(
+      true,
+    );
+    expect(results[6]).toMatchObject({
+      expected: '7',
+      error: 'main.cpp: syntax error',
+    });
+    expect(results[6].executionTime).toBeUndefined();
+    expect(results[6].memoryUsed).toBeUndefined();
+  });
+  it('uses fallback for remaining cases after an outage and tries primary again on the next request', async () => {
+    primary.execute.mockRejectedValue(new PistonUnavailableError());
+    const tests = Array.from({ length: 7 }, (_, i) => ({
+      id: i + 1,
+      input: String(i),
+      expected: '5',
+    }));
+    const results = await service.executeCode('python', 'print(5)', tests);
+    expect(results.every((r) => r.passed)).toBe(true);
+    expect(primary.execute).toHaveBeenCalledTimes(2);
+    expect(secondary.execute).toHaveBeenCalledTimes(7);
+    primary.execute.mockResolvedValue({
+      status: { id: 3 },
+      stdout: '5',
+      time: null,
+      memory: null,
+    });
+    expect((await run())[0].passed).toBe(true);
+    expect(primary.execute).toHaveBeenCalledTimes(3);
+    expect(secondary.execute).toHaveBeenCalledTimes(7);
+  });
+  it('continues checking every case for valid compilations and wrong answers', async () => {
+    const results = await service.executeCode(
+      'cpp',
+      'source',
+      Array.from({ length: 7 }, (_, i) => ({
+        input: String(i),
+        expected: i === 6 ? '6' : '5',
+      })),
+    );
+    expect(primary.execute).toHaveBeenCalledTimes(7);
+    expect(results.filter((r) => r.passed)).toHaveLength(6);
+    expect(results[6].status).toBe(Status.WRONG_ANSWER);
+  });
+  it('completes on a smaller fallback without exhausting its own slots and restarting the job', async () => {
+    const fallback = {
+      ...secondary,
+      config: { ...secondary.config, globalConcurrency: 1 },
+    };
+    primary.execute.mockRejectedValue(new PistonUnavailableError());
+    let active = 0;
+    let peak = 0;
+    secondary.execute.mockImplementation(async () => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setImmediate(resolve));
+      active--;
+      return {
+        run: { stdout: '5', stderr: '', output: '5', code: 0, signal: null },
+      };
+    });
+    service = new ExecutionService(fallback as never, primary as never);
+    const results = await service.executeCode(
+      'python',
+      'print(5)',
+      Array.from({ length: 7 }, (_, i) => ({
+        id: i + 1,
+        input: '',
+        expected: '5',
+      })),
+    );
+    expect(results.every((r) => r.passed)).toBe(true);
+    expect(peak).toBe(1);
+    expect(secondary.execute).toHaveBeenCalledTimes(7);
+    expect(primary.execute).toHaveBeenCalledTimes(1);
+  });
   it('drains in-flight cases before reporting failure and freeing a user reservation', async () => {
     let finish!: (value: unknown) => void;
     primary.execute.mockImplementation((_language, _source, stdin: string) =>

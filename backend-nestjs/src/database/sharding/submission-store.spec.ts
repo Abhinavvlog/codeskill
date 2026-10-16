@@ -136,3 +136,19 @@ it('routes contest aggregates only to shards with eligible attempts, excluding s
   expect(a.query.mock.calls[0][0]).toContain('min(s."createdAt")');
   expect(a.query.mock.calls[0][0]).not.toContain('s.code');
 });
+
+it('combines anonymous candidate comparison counts across shards', async () => {
+  const { store, a, b, primary } = setup();
+  a.query.mockResolvedValue([{ runtimeCount: '2', runtimeBetter: '1', memoryCount: '2', memoryBetter: '2' }]);
+  b.query.mockResolvedValue([{ runtimeCount: '1', runtimeBetter: '1', memoryCount: '0', memoryBetter: '0' }]);
+  const result = await store.performanceComparison({ problemId: 'p', problemSource: 'metadata', userId: 'student-a', totalTestCases: 5, runtime: 8, memory: 16 } as never, ['python', 'py', 'python3']);
+  expect(result).toEqual({ runtime: { percentile: 66.7, sampleSize: 3 }, memory: { percentile: 100, sampleSize: 2 } });
+  expect(primary.query).not.toHaveBeenCalled();
+  expect(a.query.mock.calls[0][1]).toEqual(['p', 'metadata', ['python', 'py', 'python3'], 'student-a', 5, 8, 16]);
+  expect(a.query.mock.calls[0][0]).toContain('GROUP BY "userId"');
+  expect(a.query.mock.calls[0][0]).toContain('"userId" <> $4');
+});
+it('does not fabricate comparisons without peer measurements', async () => {
+  const { store } = setup(false);
+  expect(await store.performanceComparison({} as never, ['python'])).toEqual({ runtime: null, memory: null });
+});
