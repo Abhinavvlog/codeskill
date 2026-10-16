@@ -1258,6 +1258,7 @@ export class AssessmentsService {
           id: q.id,
           questionIndex: index + 1,
           question: q.question,
+          description: q.problemStatement || q.description || '',
           questionType: q.questionType,
           topic: q.topic,
           subtopic: q.subtopic,
