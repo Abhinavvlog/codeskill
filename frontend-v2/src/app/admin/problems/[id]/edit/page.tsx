@@ -66,6 +66,8 @@ export default function EditProblemPage({ params }: { params: Promise<{ id: stri
   const [timeLimit, setTimeLimit] = useState(2000);
   const [memoryLimit, setMemoryLimit] = useState(256);
   const [languages, setLanguages] = useState<string[]>(["python", "cpp"]);
+  const [defaultLanguage, setDefaultLanguage] = useState("python");
+  const [starterCode, setStarterCode] = useState<Record<string, string>>({});
   const [cases, setCases] = useState<TestCaseRow[]>([
     { input: "", output: "", isHidden: false },
   ]);
@@ -110,6 +112,10 @@ export default function EditProblemPage({ params }: { params: Promise<{ id: stri
           setMemoryLimit(prob.config.memoryLimit || 256);
           if (Array.isArray(prob.config.supportedLanguages) && prob.config.supportedLanguages.length > 0) {
             setLanguages(prob.config.supportedLanguages);
+          }
+          if (prob.config.defaultLanguage) setDefaultLanguage(prob.config.defaultLanguage);
+          if (prob.config.starterCode && typeof prob.config.starterCode === "object") {
+            setStarterCode(prob.config.starterCode);
           }
         }
 
@@ -202,6 +208,8 @@ export default function EditProblemPage({ params }: { params: Promise<{ id: stri
           visibility: targetVisibility,
         },
         languages,
+        defaultLanguage,
+        starterCode,
         execution: {
           timeLimit: Number(timeLimit) || 2000,
           memoryLimit: Number(memoryLimit) || 256,
@@ -515,6 +523,36 @@ export default function EditProblemPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
 
+        <div className="space-y-1.5 pt-2">
+          <label className="text-xs font-semibold text-foreground block">Default language</label>
+          <select
+            className={`${inputClass} max-w-xs`}
+            value={languages.includes(defaultLanguage) ? defaultLanguage : languages[0]}
+            onChange={(e) => setDefaultLanguage(e.target.value)}
+          >
+            {languages.map((l) => (
+              <option key={l} value={l}>{l}</option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Candidates see this language pre-selected and can switch to any supported language.
+          </p>
+        </div>
+        <div className="space-y-2 pt-2">
+          <label className="text-xs font-semibold text-foreground block">Starter code (per language)</label>
+          {languages.map((l) => (
+            <div key={l} className="space-y-1">
+              <span className="text-xs font-mono text-muted-foreground">{l}</span>
+              <textarea
+                rows={4}
+                className={`${inputClass} font-mono`}
+                value={starterCode[l] || ""}
+                onChange={(e) => setStarterCode((prev) => ({ ...prev, [l]: e.target.value }))}
+                placeholder={`Starter code for ${l} (optional)`}
+              />
+            </div>
+          ))}
+        </div>
         <div className="space-y-2 pt-2">
           <label className="text-xs font-semibold text-foreground block">Enabled Programming Languages</label>
           <div className="flex flex-wrap gap-2">

@@ -28,6 +28,7 @@ import {
 import { runAPI, studentAssessmentsAPI } from "@/config/api";
 import { awaitExecution } from "@/lib/await-execution";
 import ExecutionFeedback from '@/components/Result/ExecutionFeedback';
+import { hasSampleContent } from '@/components/problems/SampleTestCasesPanel';
 import { Spinner } from "@/components/ui/spinner";
 
 const LANGUAGES = [
@@ -203,7 +204,14 @@ export default function DSAAssessmentEditor({
   blockCopyPaste = true,
 }: DSAAssessmentEditorProps) {
   const { resolvedTheme } = useTheme();
-  const initialLang = savedResponse?.language || question.language || "python";
+  const initialLang = (() => {
+    // The candidate's saved language preference wins over the author's default.
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(`codeskill_lang_q_${question._id}`);
+      if (saved) return saved;
+    }
+    return savedResponse?.language || question.language || "python";
+  })();
   const executionRuntimes = useExecutionRuntimes();
   const [language, setLanguage] = useState(initialLang);
 
@@ -244,7 +252,9 @@ export default function DSAAssessmentEditor({
 
 
   // Normalize test cases from question
-  const sampleCases: TestCase[] = (question.testCases || []).filter((tc) => !tc.isHidden);
+  const sampleCases: TestCase[] = (question.testCases || []).filter(
+    (tc) => !tc.isHidden && hasSampleContent(tc),
+  );
 
   // The parent keys this workspace by question ID. Drafts are restored from
   // attempt state on each mount; saving does not reset the active editor model.
@@ -279,6 +289,11 @@ export default function DSAAssessmentEditor({
     setCodeByLang(updatedCache);
     setCode(targetCode);
     setLanguage(newLang);
+    try {
+      localStorage.setItem(`codeskill_lang_q_${question._id}`, newLang);
+    } catch {
+      // Preference persistence must never block the language switch.
+    }
     onDraftChange?.(targetCode, newLang);
     setShowLangDropdown(false);
     setRunResult(null);
