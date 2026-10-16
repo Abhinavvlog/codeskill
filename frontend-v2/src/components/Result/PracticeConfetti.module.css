@@ -1,0 +1,91 @@
+.celebration {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  overflow: hidden;
+  pointer-events: none;
+  contain: layout style paint;
+  mask-image: linear-gradient(to bottom, #000 0%, #000 80%, transparent 100%);
+}
+
+.fall {
+  position: absolute;
+  top: -32px;
+  opacity: 0;
+  perspective: 400px;
+  animation: fall var(--confetti-duration) linear var(--confetti-delay) both;
+}
+
+.piece {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 1px;
+  background-color: var(--confetti-color);
+  background-image: linear-gradient(
+    135deg,
+    rgb(255 255 255 / 38%),
+    transparent 45%,
+    rgb(0 0 0 / 12%)
+  );
+  box-shadow: 0 1px 1px rgb(0 0 0 / 8%);
+  animation: flutter var(--confetti-turn) ease-in-out var(--confetti-phase)
+    infinite alternate;
+}
+
+.ribbon {
+  border-radius: 35% 10% 35% 10%;
+}
+
+.diamond {
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
+
+@keyframes fall {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -5vh, 0);
+  }
+  10%,
+  70% {
+    opacity: var(--confetti-opacity);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--confetti-drift), calc(100vh + 60px), 0);
+  }
+}
+
+@keyframes flutter {
+  0% {
+    transform: translateX(calc(var(--confetti-sway) * -1))
+      rotateZ(var(--confetti-rotation)) rotateX(15deg) rotateY(-35deg);
+  }
+  50% {
+    transform: translateX(0)
+      rotateZ(calc(var(--confetti-rotation) + 90deg)) rotateX(160deg)
+      rotateY(20deg);
+  }
+  100% {
+    transform: translateX(var(--confetti-sway))
+      rotateZ(calc(var(--confetti-rotation) + 180deg)) rotateX(300deg)
+      rotateY(65deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .fall:nth-child(n + 73) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .celebration {
+    display: none;
+  }
+
+  .fall,
+  .piece {
+    animation: none;
+  }
+}

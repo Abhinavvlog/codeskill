@@ -1,6 +1,6 @@
 # Judge0 primary, Piston fallback
 
-CodeSkill sends each test case to Judge0 first. A transport error, unhealthy sandbox, unavailable runtime, open circuit, or full primary fleet sends that test case to Piston. A compilation error, runtime error, time limit, or incorrect answer is a student verdict and does not trigger fallback. CodeSkill compares stdout against the authoritative expected answer locally; neither provider receives expected answers. Hidden results remain redacted before storage and WebSocket delivery.
+CodeSkill sends each test case to Judge0 first. A transport error, unhealthy sandbox, unavailable runtime, open circuit, or full primary fleet sends that test case to Piston. A compilation error, runtime error, time limit, or incorrect answer is a student verdict and does not trigger fallback. CodeSkill compares stdout against the authoritative expected answer locally; neither provider receives expected answers. Assessment hidden payloads remain redacted before storage and WebSocket delivery; practice submissions expose failed-case details only.
 
 ```mermaid
 flowchart TD
@@ -21,6 +21,43 @@ flowchart TD
 ```
 
 ## Local Docker setup
+
+### Apple Silicon: native execution
+
+Use `bash scripts/judges/native-local.sh start` from the repository root. It uses
+the existing pinned ARM source builds in a dedicated `codeskill-native` Colima
+VM, with no host directory mounts or SSH-agent forwarding. Judge0 and Piston
+have separate internal networks and sandbox cgroups. It performs live execution
+and isolation checks before updating only judge-related keys in the ignored
+backend `.env`; restart the backend after it completes. It never runs the AWS
+installer or changes production. The first run downloads/builds images; unchanged
+image builds are reused on later starts.
+
+If internal space is limited, set `CODESKILL_NATIVE_DISK_DIR` to an absolute
+external folder on the first start. The script stops the new VM before moving its
+Docker disk and preserves that location with a symlink. On this laptop it is
+`/Volumes/ps5/codeskill-judges/vm-disks/native/docker.raw`; keep PS5 connected
+while the native VM runs, and stop the VM before ejecting the drive. The startup
+script reports a missing drive before attempting to boot.
+The local API entrypoint clears Rails' stale PID file before boot so stopping
+and restarting the VM does not leave Judge0 in a restart loop.
+
+The native ports are Judge0 `127.0.0.1:2359` and Piston
+`127.0.0.1:2002/api/v2`. Credentials stay in the VM and ignored local files.
+`bash scripts/judges/native-local.sh status` checks the VM and containers;
+`bash scripts/judges/native-local.sh stop` stops it. Wait for the start command's
+verification to finish before testing code. Native execution uses multiplier 1,
+250ms Judge0 polling, short HTTP/discovery deadlines, and a 20-second Judge0
+submission deadline. The old x86 profiles and external disk images are preserved
+for rollback and should be stopped after switching to avoid wasting RAM.
+
+The original backend environment is backed up once to
+`.local-dev/native-judges/backend.env.before-native`. To roll back, stop native
+execution, restore that private file to `backend-nestjs/.env`, start the original
+two profiles with the external drive attached, and restart the backend. Preserve
+any unrelated environment edits made after the backup.
+
+### Previous emulated setup
 
 The local judges run in separate dedicated Colima VMs. Judge0 1.13.1 uses cgroup v1; Piston uses cgroup v2. Only each judge's configuration folder is mounted into its VM. Application source, application PostgreSQL, submission shards, credentials, and the application Redis are not mounted into the execution hosts. Compose networks deny outbound traffic during student execution, and Piston's public gateway blocks package-management routes. Upstream sandbox containers need privileged access; isolation therefore includes the dedicated VM/host, not just Docker.
 
@@ -96,6 +133,16 @@ Use `JUDGE0_BASE_URLS` / `PISTON_BASE_URLS` JSON arrays for up to eight independ
 The shared Redis leases select the least occupied eligible endpoint. Per-process circuit breakers skip repeatedly failing endpoints and probe recovery after cooldown. Metadata health checks do not reset an execution circuit. Lease IDs are unique: late cleanup cannot remove a newer request's capacity slot. Redis outage rejects new executions rather than allowing unbounded work. Scaling is configurable horizontal replication and load balancing; cloud autoscaling infrastructure remains a deployment task.
 
 ## Submission rules and failure handling
+
+Runtime discovery has its own short `JUDGE_DISCOVERY_TIMEOUT_MS` deadline, rather
+than the compiler timeout. After a primary infrastructure outage, remaining
+cases in that request use Piston; the next request can probe Judge0 again through
+its circuit breaker. A compilation error stops scheduling further identical
+compilations. Already running cases drain, and remaining case summaries report
+the compilation error without invented execution measurements. Wrong answers,
+runtime errors, and time limits still evaluate all remaining tests.
+Per-submission concurrency fits both providers' configured slot limits so a
+smaller fallback cannot be exhausted by the same submission's parallel tests.
 
 - Practice requests reserve atomically after validation, before database persistence/queue insertion. Simultaneous requests across API instances share the same allowance. Identical outstanding payloads return 409; other requests over user/rate limits return 429, and a full global queue returns 503. Requests rejected by admission do not consume the sliding-window quota. Coding assessment evaluation reserves the same user allowance before evaluating the attempt.
 - Run and Submit use a unique reservation ID as the BullMQ job ID. Worker ownership and heartbeats retain the reservation through retries. Successful completion, terminal failure, queue insertion failure, and queued cancellation release only that job's reservation.

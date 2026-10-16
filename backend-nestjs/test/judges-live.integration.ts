@@ -45,17 +45,25 @@ async function main() {
   };
   const report: {
     at: string;
-    checks: Array<{ name: string; passed: boolean; error?: string }>;
+    checks: Array<{
+      name: string;
+      passed: boolean;
+      durationMs: number;
+      error?: string;
+    }>;
   } = { at: new Date().toISOString(), checks: [] };
   const check = async (name: string, run: () => Promise<void>) => {
+    const start = Date.now();
     try {
       await run();
-      report.checks.push({ name, passed: true });
-      console.log(`PASS: ${name}`);
+      const durationMs = Date.now() - start;
+      report.checks.push({ name, passed: true, durationMs });
+      console.log(`PASS: ${name} (${durationMs}ms)`);
     } catch (error) {
       report.checks.push({
         name,
         passed: false,
+        durationMs: Date.now() - start,
         error: error instanceof Error ? error.message : 'execution failed',
       });
       console.log(`FAIL: ${name}`);
@@ -103,6 +111,25 @@ async function main() {
         assert.equal(result.status, status);
         assert.equal(execution.executionMetrics().failovers, 0);
       });
+    await check(
+      'compilation failure accounts for all seven cases',
+      async () => {
+        const results = await execution.executeCode(
+          'cpp',
+          '#include <iostream>\nint main(){ std::coutddkjlkj; }',
+          Array.from({ length: 7 }, (_, i) => ({
+            id: i + 1,
+            input: String(i),
+            expected: '30',
+          })),
+        );
+        assert.equal(results.length, 7);
+        assert(
+          results.every((result) => result.status === Status.COMPILATION_ERROR),
+        );
+        assert.equal(execution.executionMetrics().failovers, 0);
+      },
+    );
     process.env.JUDGE0_BASE_URL = 'http://127.0.0.1:59999';
     const unavailable = new Judge0Service(wrapper as never);
     try {

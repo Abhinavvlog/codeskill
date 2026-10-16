@@ -12,7 +12,7 @@ import { randomUUID as uuidv4 } from 'crypto';
 import { commandBasename, getLanguageAdapter } from './language-adapters';
 
 import { PistonService } from './piston/piston.service';
-import { PistonUnavailableError } from './piston/piston.types';
+import { JudgeCapacityError, PistonUnavailableError } from './piston/piston.types';
 import { compareOutput } from './output-comparison';
 import { Judge0Service } from './judge0/judge0.service';
 import { canonicalLanguage } from './execution.types';
@@ -479,12 +479,24 @@ export class ExecutionService {
       // Piston isolates every test in a new job, including its compilation stage.
       // Bound the fan-out per submission so one submission cannot monopolise the
       // global semaphore; every test case still flows through the semaphore + breaker.
+      const route = { fallback: false };
+      const slots = (provider?: Judge0Service | PistonService) =>
+        Math.min(
+          provider?.config.testCaseConcurrency || 2,
+          provider?.config.concurrency || Infinity,
+          provider?.config.globalConcurrency || Infinity,
+        );
+      // A submission must fit the fallback too. Otherwise its own parallel
+      // tests can exhaust a smaller fallback and restart the entire job forever.
+      const concurrency =
+        this.provider === 'judge0'
+          ? Math.min(slots(this.judge0), slots(this.piston))
+          : slots(this.piston);
       return this.runTestCasesConcurrently(
         normalizedTestCases,
-        this.provider === 'judge0'
-          ? this.judge0?.config.testCaseConcurrency || 2
-          : this.piston?.config.testCaseConcurrency || 2,
-        (tc) => this.executeRemoteTestCase(language, prepared, tc, config),
+        concurrency,
+        (tc) => this.executeRemoteTestCase(language, prepared, tc, config, route),
+        true,
       );
     }
 
@@ -514,8 +526,9 @@ export class ExecutionService {
     prepared: { source: string; filename: string },
     tc: TestCaseInput,
     config: any,
+    route: { fallback: boolean },
   ): Promise<TestCaseResult> {
-    if (this.provider === 'piston') {
+    if (this.provider === 'piston' || route.fallback) {
       if (!this.piston) throw new PistonUnavailableError();
       return this.executePistonTestCase(language, prepared, tc, config);
     }
@@ -585,6 +598,9 @@ export class ExecutionService {
     } catch (error) {
       if (!(error instanceof PistonUnavailableError) || !this.piston)
         throw error;
+      // Once a provider fails, do not pay its timeout again for every test.
+      // Capacity is transient; another test may still use the primary's free slot.
+      if (!(error instanceof JudgeCapacityError)) route.fallback = true;
       this.failovers++;
       this.logger.warn('Judge0 unavailable; executing the test case on Piston');
       return this.executePistonTestCase(language, prepared, tc, config);
@@ -666,16 +682,24 @@ export class ExecutionService {
     testCases: TestCaseInput[],
     concurrencyLimit: number,
     runFn: (tc: TestCaseInput) => Promise<TestCaseResult>,
+    stopOnCompileError = false,
   ): Promise<TestCaseResult[]> {
     const results: TestCaseResult[] = new Array(testCases.length);
     let index = 0;
     let failure: unknown;
+    let compileError: TestCaseResult | undefined;
     const workerCount = Math.min(concurrencyLimit, testCases.length);
     const workers = Array.from({ length: workerCount }, async () => {
-      while (index < testCases.length && !failure) {
+      while (index < testCases.length && !failure && !compileError) {
         const currentIndex = index++;
         try {
           results[currentIndex] = await runFn(testCases[currentIndex]);
+          if (
+            stopOnCompileError &&
+            results[currentIndex].status === Status.COMPILATION_ERROR
+          ) {
+            compileError = results[currentIndex];
+          }
         } catch (error) {
           failure = error;
           return;
@@ -684,6 +708,22 @@ export class ExecutionService {
     });
     await Promise.all(workers);
     if (failure) throw failure;
+    // Compilation is independent of stdin. Keep every case accounted for, but
+    // do not execute the remaining cases or invent runtime/memory measurements.
+    if (compileError) {
+      for (let i = 0; i < testCases.length; i++) {
+        if (!results[i]) {
+          results[i] = {
+            id: testCases[i].id,
+            passed: false,
+            status: Status.COMPILATION_ERROR,
+            output: '',
+            expected: testCases[i].expected,
+            error: compileError.error,
+          };
+        }
+      }
+    }
     return results;
   }
 
