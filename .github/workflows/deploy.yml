@@ -196,9 +196,9 @@ jobs:
           for attempt in {1..12}; do
             cmd=(aws autoscaling start-instance-refresh --auto-scaling-group-name "$asg" --region "${{ env.AWS_REGION }}" --query 'InstanceRefreshId' --output text)
             if [[ -n "$desired" ]]; then
-              cmd+=(--desired-configuration "$desired" --preferences '{"MinHealthyPercentage": 50, "MaxHealthyPercentage": 150, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": true}')
+              cmd+=(--desired-configuration "$desired" --preferences '{"MinHealthyPercentage": 0, "MaxHealthyPercentage": 100, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": true}')
             else
-              cmd+=(--preferences '{"MinHealthyPercentage": 50, "MaxHealthyPercentage": 150, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": false}')
+              cmd+=(--preferences '{"MinHealthyPercentage": 0, "MaxHealthyPercentage": 100, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": false}')
             fi
 
             out=$("${cmd[@]}" 2>&1) && { refresh_id="$out"; break; }
@@ -266,9 +266,9 @@ jobs:
           for attempt in {1..12}; do
             cmd=(aws autoscaling start-instance-refresh --auto-scaling-group-name "$asg" --region "${{ env.AWS_REGION }}" --query 'InstanceRefreshId' --output text)
             if [[ -n "$desired" ]]; then
-              cmd+=(--desired-configuration "$desired" --preferences '{"MinHealthyPercentage": 50, "MaxHealthyPercentage": 150, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": true}')
+              cmd+=(--desired-configuration "$desired" --preferences '{"MinHealthyPercentage": 0, "MaxHealthyPercentage": 100, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": true}')
             else
-              cmd+=(--preferences '{"MinHealthyPercentage": 50, "MaxHealthyPercentage": 150, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": false}')
+              cmd+=(--preferences '{"MinHealthyPercentage": 0, "MaxHealthyPercentage": 100, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": false}')
             fi
 
             out=$("${cmd[@]}" 2>&1) && { refresh_id="$out"; break; }
