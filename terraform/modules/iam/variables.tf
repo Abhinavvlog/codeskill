@@ -21,3 +21,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "pm2_io_parameter_name" {
+  description = "Optional SSM parameter path for frontend PM2.io monitoring"
+  type        = string
+  default     = ""
+}

@@ -1,11 +1,12 @@
 "use client";
 
+import { isDocumentFullscreen } from "@/lib/fullscreen";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Maximize } from "lucide-react";
 
 interface ContestStartGateProps {
-  onAccept: () => void;
+  onAccept: () => void | Promise<void>;
   requestFullscreen: () => Promise<void>;
   isFullscreen: boolean;
   hasRequestedFullscreen: boolean;
@@ -26,16 +27,16 @@ export function ContestStartGate({
   const [fullscreenError, setFullscreenError] = useState("");
 
   const handleStart = async () => {
-    if (!agreed) return;
+    if (!agreed || loading) return;
     setLoading(true);
     
     try {
       setFullscreenError("");
-      const fullscreenDocument = document as Document & { webkitFullscreenElement?: Element; msFullscreenElement?: Element };
-      const active = () => !!(fullscreenDocument.fullscreenElement || fullscreenDocument.webkitFullscreenElement || fullscreenDocument.msFullscreenElement);
-      if (requireFullscreen && !active()) await requestFullscreen();
-      if (requireFullscreen && !active()) { setFullscreenError("Fullscreen is required. Allow fullscreen and try again."); return; }
-      onAccept();
+      if (requireFullscreen && !isDocumentFullscreen()) await requestFullscreen();
+      if (requireFullscreen && !isDocumentFullscreen()) { setFullscreenError("Fullscreen is required. Allow fullscreen and try again."); return; }
+      await onAccept();
+    } catch (error) {
+      setFullscreenError(error instanceof Error ? error.message : "Unable to enter fullscreen. Please try again.");
     } finally { setLoading(false); }
   };
 

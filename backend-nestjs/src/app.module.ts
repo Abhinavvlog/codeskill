@@ -7,7 +7,9 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { SmartThrottlerGuard } from './common/guards/smart-throttler.guard';
+import { ThrottlerRedisStorageService } from './redis/throttler-redis-storage.service';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { GraphQLModule } from '@nestjs/graphql';
@@ -142,23 +144,28 @@ import { ExamSecurityModule } from './exam-security/exam-security.module';
     ReportsModule,
     PetModule,
     ThrottlerModule.forRootAsync({
-      useFactory: () => [
-        {
-          name: 'short',
-          ttl: 1000,
-          limit: 30, // 30 req/sec burst
-        },
-        {
-          name: 'medium',
-          ttl: 10000,
-          limit: 150, // 150 req/10s
-        },
-        {
-          name: 'long',
-          ttl: 60000,
-          limit: 600, // 600 req/min
-        },
-      ],
+      imports: [ConfigModule, RedisModule],
+      inject: [ThrottlerRedisStorageService],
+      useFactory: (storage: ThrottlerRedisStorageService) => ({
+        throttlers: [
+          {
+            name: 'short',
+            ttl: 1000,
+            limit: 30, // 30 req/sec burst per identity
+          },
+          {
+            name: 'medium',
+            ttl: 10000,
+            limit: 150, // 150 req/10s per identity
+          },
+          {
+            name: 'long',
+            ttl: 60000,
+            limit: 600, // 600 req/min per identity
+          },
+        ],
+        storage,
+      }),
     }),
   ],
   controllers: [AppController],
@@ -166,8 +173,9 @@ import { ExamSecurityModule } from './exam-security/exam-security.module';
     AppService,
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: SmartThrottlerGuard,
     },
+
     {
       provide: APP_FILTER,
       useClass: HttpExceptionFilter,

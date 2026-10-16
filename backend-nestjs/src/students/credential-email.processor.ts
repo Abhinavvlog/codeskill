@@ -62,7 +62,9 @@ export class CredentialEmailProcessor extends WorkerHost {
 
       emailJob.retryCount = (emailJob.retryCount || 0) + 1;
       emailJob.error = error.message;
-      emailJob.status = emailJob.retryCount >= 3 ? 'failed' : 'retrying';
+      const terminal = job.attemptsMade + 1 >= (job.opts.attempts || 1);
+      emailJob.status = terminal ? 'failed' : 'retrying';
+      if (terminal) emailJob.temporaryPassword = '';
       await this.emailJobRepo.save(emailJob);
 
       throw error;

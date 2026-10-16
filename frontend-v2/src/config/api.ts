@@ -113,6 +113,52 @@ api.interceptors.response.use(
       );
     }
 
+    // Handle 429 Too Many Requests with RFC 6585 Retry-After backoff
+    if (status === 429 && originalRequest && !originalRequest._retry429) {
+      originalRequest._retryCount429 = (originalRequest._retryCount429 || 0) + 1;
+
+      const isAutoRetryable =
+        reqUrl.includes("save-progress") ||
+        reqUrl.includes("violations") ||
+        reqUrl.includes("proctor-capture") ||
+        reqUrl.includes("overview") ||
+        reqUrl.includes("my-assessments") ||
+        originalRequest.method?.toUpperCase() === "GET";
+
+      if (isAutoRetryable && originalRequest._retryCount429 <= 3) {
+        if (originalRequest._retryCount429 >= 3) {
+          originalRequest._retry429 = true;
+        }
+
+        const retryAfterHeader =
+          error.response?.headers?.["retry-after"] ||
+          error.response?.headers?.["retry-after-short"] ||
+          error.response?.headers?.["retry-after-long"];
+
+        let delayMs = 1500;
+        if (retryAfterHeader) {
+          const parsed = parseInt(String(retryAfterHeader), 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            delayMs = parsed * 1000;
+          }
+        } else {
+          delayMs = Math.min(
+            1000 * Math.pow(2, originalRequest._retryCount429 - 1) + Math.random() * 500,
+            6000
+          );
+        }
+
+        logger.warn(
+          `[429 Rate Limit] ${reqUrl} throttled. Retrying in ${Math.round(delayMs)}ms (attempt ${originalRequest._retryCount429}/3)...`,
+          { requestId, url: reqUrl, delayMs },
+          "APIClient"
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        return api(originalRequest);
+      }
+    }
+
     if (
       error.response?.status === 401 &&
       typeof window !== "undefined" &&

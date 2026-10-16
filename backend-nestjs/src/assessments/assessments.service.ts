@@ -1580,6 +1580,11 @@ export class AssessmentsService {
       }
     }
 
+    const responseIds = (dto.responses || []).map((answer) => String(answer.questionId));
+    if (new Set(responseIds).size !== responseIds.length) {
+      throw new BadRequestException('Duplicate question responses are not allowed');
+    }
+
     // SERVER-SIDE EVALUATION (AUD-002 & NEW-003)
     const questionIds = assessment.questions || [];
     const questions =

@@ -99,7 +99,7 @@ variable "certificate_arn" {
 variable "health_check_path" {
   description = "Health check path for application target group"
   type        = string
-  default     = "/healthz"
+  default     = "/health/ready"
 }
 
 # -------------------------------------------------------------------------------------------------
@@ -159,11 +159,10 @@ variable "git_branch" {
   default     = "main"
 }
 
-variable "jwt_secret" {
-  description = "JWT Secret for application authentication"
+variable "backend_env_parameter_name" {
+  description = "SSM SecureString containing backend dotenv configuration, including a unique JWT_SECRET"
   type        = string
-  default     = "codeskill-prod-secret-change-me"
-  sensitive   = true
+  default     = "/codeskill-prod/production/backend_env"
 }
 
 # -------------------------------------------------------------------------------------------------
@@ -232,14 +231,12 @@ variable "judge0_max_processes" {
 variable "judge0_db_password" {
   description = "Internal database password for Judge0 container database"
   type        = string
-  default     = "Judge0InternalDbSecret!2024"
   sensitive   = true
 }
 
 variable "judge0_redis_password" {
   description = "Internal Redis password for Judge0 container queue"
   type        = string
-  default     = "Judge0InternalRedisSecret!2024"
   sensitive   = true
 }
 
@@ -268,7 +265,7 @@ variable "judge0_worker_max_size" {
 variable "db_instance_class" {
   description = "Database instance class. db.t4g.micro is ARM-based with 2 vCPU and 1 GiB RAM."
   type        = string
-  default     = "db.t4g.micro"
+  default     = "db.t4g.medium"
 }
 
 variable "db_allocated_storage" {
@@ -303,9 +300,9 @@ variable "db_password" {
 }
 
 variable "db_multi_az" {
-  description = "Enable multi-AZ deployment for RDS. False in budget profile to save 100% replica cost."
+  description = "Enable Multi-AZ database failover for production availability"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "db_deletion_protection" {
@@ -338,7 +335,6 @@ variable "loki_retention_period" {
 variable "grafana_admin_password" {
   description = "Administrator password for Grafana OSS monitoring portal"
   type        = string
-  default     = "CodeSkillGrafana2024!"
   sensitive   = true
 }
 

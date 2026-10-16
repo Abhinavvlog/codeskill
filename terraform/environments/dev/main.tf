@@ -91,22 +91,23 @@ module "ec2" {
 }
 
 module "asg" {
-  source                    = "../../modules/asg"
-  name_prefix               = local.name_prefix
-  private_app_subnet_ids    = module.vpc.private_app_subnet_ids
-  target_group_arn          = module.alb.target_group_arn
-  app_security_group_id     = module.ec2.app_security_group_id
-  instance_type             = "t3.micro"
-  min_size                  = 1
-  max_size                  = 2
-  desired_capacity          = 1
-  ami_id                    = var.ami_id
-  iam_instance_profile_name = module.iam.instance_profile_name
-  db_endpoint               = module.rds.endpoint
-  db_username               = var.db_username
-  db_password               = var.db_password
-  db_name                   = var.db_name
-  redis_endpoint            = module.redis.endpoint
+  source                       = "../../modules/asg"
+  name_prefix                  = local.name_prefix
+  private_app_subnet_ids       = module.vpc.private_app_subnet_ids
+  target_group_arn             = module.alb.target_group_arn
+  additional_target_group_arns = [module.alb.backend_target_group_arn]
+  app_security_group_id        = module.ec2.app_security_group_id
+  instance_type                = "t3.micro"
+  min_size                     = 1
+  max_size                     = 2
+  desired_capacity             = 1
+  ami_id                       = var.ami_id
+  iam_instance_profile_name    = module.iam.instance_profile_name
+  db_endpoint                  = module.rds.endpoint
+  db_username                  = var.db_username
+  db_password                  = var.db_password
+  db_name                      = var.db_name
+  redis_endpoint               = module.redis.endpoint
 }
 
 module "rds" {

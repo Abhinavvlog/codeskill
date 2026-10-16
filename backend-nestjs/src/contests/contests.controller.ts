@@ -38,6 +38,12 @@ export class ContestsController {
     return this.contestsService.registration(id, userId);
   }
 
+  @Get(':id/start-context')
+  @UseGuards(JwtAuthGuard)
+  async startContext(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.contestsService.getStartContext(id, userId);
+  }
+
   @Post(':id/start')
   @UseGuards(JwtAuthGuard)
   async startAttempt(

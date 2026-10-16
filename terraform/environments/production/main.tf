@@ -264,29 +264,31 @@ module "s3" {
 }
 
 module "iam" {
-  source        = "../../modules/iam"
-  name_prefix   = local.name_prefix
-  s3_bucket_arn = module.s3.bucket_arn
+  source                = "../../modules/iam"
+  name_prefix           = local.name_prefix
+  s3_bucket_arn         = module.s3.bucket_arn
+  pm2_io_parameter_name = var.pm2_io_parameter_name
 }
 
 # -----------------------------------------------------------------------------
 # 7. Database & Caching Services (Private RDS PostgreSQL & ElastiCache Redis)
 # -----------------------------------------------------------------------------
 module "rds" {
-  source                = "../../modules/rds"
-  name_prefix           = local.name_prefix
-  vpc_id                = module.vpc.vpc_id
-  private_db_subnet_ids = module.vpc.private_db_subnet_ids
-  security_group_ids    = [aws_security_group.rds.id]
-  db_name               = var.db_name
-  db_username           = var.db_username
-  db_password           = var.db_password
-  instance_class        = "db.t4g.medium"
-  allocated_storage     = 50
-  max_allocated_storage = 200
-  multi_az              = true
-  storage_encrypted     = true
-  deletion_protection   = true
+  source                  = "../../modules/rds"
+  name_prefix             = local.name_prefix
+  vpc_id                  = module.vpc.vpc_id
+  private_db_subnet_ids   = module.vpc.private_db_subnet_ids
+  security_group_ids      = [aws_security_group.rds.id]
+  db_name                 = var.db_name
+  db_username             = var.db_username
+  db_password             = var.db_password
+  instance_class          = var.db_instance_class
+  allocated_storage       = 20
+  max_allocated_storage   = 200
+  multi_az                = true
+  backup_retention_period = 7
+  storage_encrypted       = true
+  deletion_protection     = true
 }
 
 module "redis" {
@@ -315,9 +317,11 @@ module "frontend_asg" {
 
   iam_instance_profile_name = module.iam.frontend_instance_profile_name
 
-  min_size         = 1
-  desired_capacity = 1
-  max_size         = 2
+  min_size         = 2
+  desired_capacity = 2
+  max_size         = 6
+
+  cpu_target_utilization = 65.0
 
   health_check_type         = "ELB"
   health_check_grace_period = 180
@@ -325,10 +329,11 @@ module "frontend_asg" {
   instance_warmup           = 180
 
   user_data = templatefile("${path.module}/userdata/frontend.sh.tftpl", {
-    aws_region     = var.aws_region
-    ecr_registry   = local.ecr_registry
-    frontend_image = "${module.ecr.frontend_repository_url}:${var.frontend_image_tag}"
-    domain_name    = local.domain_name
+    aws_region            = var.aws_region
+    ecr_registry          = local.ecr_registry
+    pm2_io_parameter_name = var.pm2_io_parameter_name
+    frontend_image        = "${module.ecr.frontend_repository_url}:${var.frontend_image_tag}"
+    domain_name           = local.domain_name
   })
 
   scheduled_exam_scale_up_cron   = var.exam_scale_up_cron
@@ -348,9 +353,11 @@ module "backend_asg" {
 
   iam_instance_profile_name = module.iam.backend_instance_profile_name
 
-  min_size         = 1
-  desired_capacity = 1
-  max_size         = 2
+  min_size         = 2
+  desired_capacity = 3
+  max_size         = 6
+
+  cpu_target_utilization = 60.0
 
   health_check_type         = "ELB"
   health_check_grace_period = 180
@@ -358,22 +365,22 @@ module "backend_asg" {
   instance_warmup           = 180
 
   user_data = templatefile("${path.module}/userdata/backend.sh.tftpl", {
-    aws_region         = var.aws_region
-    ecr_registry       = local.ecr_registry
-    backend_image      = "${module.ecr.backend_repository_url}:${var.backend_image_tag}"
-    domain_name        = local.domain_name
-    db_secret_arn      = module.rds.secret_arn
-    db_host            = split(":", module.rds.endpoint)[0]
-    db_username        = var.db_username
-    db_password        = var.db_password
-    db_name            = var.db_name
-    redis_host         = module.redis.endpoint
-    redis_cluster_mode = "true"
-    redis_tls          = "false"
-    jwt_secret         = var.jwt_secret
-    piston_base_url    = module.service_discovery.piston_base_url
-    judge0_base_url    = module.service_discovery.judge0_base_url
-    s3_bucket_name     = module.s3.bucket_name
+    aws_region                 = var.aws_region
+    ecr_registry               = local.ecr_registry
+    pm2_io_parameter_name      = var.pm2_io_parameter_name
+    backend_image              = "${module.ecr.backend_repository_url}:${var.backend_image_tag}"
+    domain_name                = local.domain_name
+    db_secret_arn              = module.rds.secret_arn
+    db_host                    = split(":", module.rds.endpoint)[0]
+    db_username                = var.db_username
+    db_name                    = var.db_name
+    redis_host                 = module.redis.endpoint
+    redis_cluster_mode         = "true"
+    redis_tls                  = "false"
+    backend_env_parameter_name = var.backend_env_parameter_name
+    piston_base_url            = module.service_discovery.piston_base_url
+    judge0_base_url            = module.service_discovery.judge0_base_url
+    s3_bucket_name             = module.s3.bucket_name
   })
 
   scheduled_exam_scale_up_cron   = var.exam_scale_up_cron
@@ -393,9 +400,11 @@ module "piston_asg" {
 
   iam_instance_profile_name = module.iam.piston_instance_profile_name
 
-  min_size         = 1
-  desired_capacity = 1
-  max_size         = 2
+  min_size         = 2
+  desired_capacity = 3
+  max_size         = 8
+
+  cpu_target_utilization = 60.0
 
   health_check_type         = "EC2"
   health_check_grace_period = 180
@@ -427,8 +436,10 @@ module "judge0_asg" {
   iam_instance_profile_name = module.iam.judge0_instance_profile_name
 
   min_size         = 1
-  desired_capacity = 1
-  max_size         = 2
+  desired_capacity = 2
+  max_size         = 4
+
+  cpu_target_utilization = 65.0
 
   health_check_type         = "EC2"
   health_check_grace_period = 180

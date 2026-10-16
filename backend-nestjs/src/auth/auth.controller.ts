@@ -21,6 +21,7 @@ import {
   ApiBearerAuth,
   ApiConsumes,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { S3Service } from '../s3/s3.service';
 import {
@@ -67,6 +68,11 @@ export class AuthController {
   @Post('login')
   @ApiOperation({ summary: 'Login with email and password' })
   @HttpCode(HttpStatus.OK)
+  @Throttle({
+    short: { limit: 10, ttl: 1000 },
+    medium: { limit: 30, ttl: 10000 },
+    long: { limit: 60, ttl: 60000 },
+  })
   async login(@Body() dto: LoginDto, @Req() req: any) {
     const ip = req.ip || req.connection?.remoteAddress;
     return this.authService.login(dto, ip);
@@ -75,6 +81,11 @@ export class AuthController {
   @Post('student-login')
   @ApiOperation({ summary: 'Student login with University UID and password' })
   @HttpCode(HttpStatus.OK)
+  @Throttle({
+    short: { limit: 10, ttl: 1000 },
+    medium: { limit: 30, ttl: 10000 },
+    long: { limit: 60, ttl: 60000 },
+  })
   async studentLogin(@Body() dto: StudentLoginDto, @Req() req: any) {
     const ip = req.ip || req.connection?.remoteAddress;
     return this.authService.studentLogin(dto, ip);

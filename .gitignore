@@ -91,3 +91,6 @@ uploads/
 
 # Local development database and service state
 .local-dev/
+
+# Local load testing scripts and credentials
+scripts/k6/

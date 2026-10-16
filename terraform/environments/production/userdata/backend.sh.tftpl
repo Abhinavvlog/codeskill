@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 exec > >(tee -a /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
 
 echo "=========================================================="
@@ -30,7 +31,7 @@ DB_NAME=""
 DB_PORT="5432"
 
 if [ -n "$DB_SECRET_ARN" ]; then
-  SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$DB_SECRET_ARN" --region "$REGION" --query SecretString --output text 2>/dev/null || echo "{}")
+  SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$DB_SECRET_ARN" --region "$REGION" --query SecretString --output text)
   if [ -n "$SECRET_JSON" ] && [ "$SECRET_JSON" != "{}" ]; then
     DB_HOST=$(echo "$SECRET_JSON" | jq -r '.host // empty')
     DB_USER=$(echo "$SECRET_JSON" | jq -r '.username // empty')
@@ -42,7 +43,7 @@ fi
 
 DB_HOST="$${DB_HOST:-${db_host}}"
 DB_USER="$${DB_USER:-${db_username}}"
-DB_PASS="$${DB_PASS:-${db_password}}"
+: "$${DB_PASS:?Database password was not returned by Secrets Manager}"
 DB_NAME="$${DB_NAME:-${db_name}}"
 
 # 3. Authenticate to Amazon ECR & Pull Backend Image
@@ -57,9 +58,38 @@ done
 echo "Pulling immutable image: $IMAGE..."
 docker pull "$IMAGE"
 
+# Load PM2.io credentials at boot so secret values never enter Terraform user data.
+umask 077
+mkdir -p /opt/codeskill
+PM2_PARAMETER="${pm2_io_parameter_name}"
+printf '' > /opt/codeskill/pm2.env
+if [ -n "$PM2_PARAMETER" ]; then
+  PM2_JSON=$(aws ssm get-parameter --name "$PM2_PARAMETER" --region "$REGION" --with-decryption --query Parameter.Value --output text)
+  printf '%s' "$PM2_JSON" | jq -er '
+    select((.PM2_SECRET_KEY | type == "string") and (.PM2_PUBLIC_KEY | type == "string")) |
+    select((.PM2_SECRET_KEY | test("^[A-Za-z0-9_-]+$")) and (.PM2_PUBLIC_KEY | test("^[A-Za-z0-9_-]+$"))) |
+    "PM2_SECRET_KEY=\(.PM2_SECRET_KEY)\nPM2_PUBLIC_KEY=\(.PM2_PUBLIC_KEY)"
+  ' > /opt/codeskill/pm2.env
+  unset PM2_JSON
+fi
+printf 'PM2_MACHINE_NAME=codeskill-backend-%s\n' "$(hostname)" >> /opt/codeskill/pm2.env
+chmod 600 /opt/codeskill/pm2.env
+
 # 4. Create Environment Configuration File
 mkdir -p /opt/codeskill
-cat << EOF > /opt/codeskill/backend.env
+aws ssm get-parameter --name "${backend_env_parameter_name}" --region "$REGION" \
+  --with-decryption --query Parameter.Value --output text > /opt/codeskill/backend.env
+if ! grep -Eq '^JWT_SECRET=.+$' /opt/codeskill/backend.env; then
+  echo "Backend SSM configuration must contain JWT_SECRET" >&2
+  exit 1
+fi
+curl --fail --silent --show-error --location \
+  https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+  -o /opt/codeskill/rds-global-bundle.pem
+chmod 644 /opt/codeskill/rds-global-bundle.pem
+sed '/^DATABASE_URL=/d' "/opt/codeskill/backend.env" > "/opt/codeskill/backend.env.tmp"
+mv "/opt/codeskill/backend.env.tmp" "/opt/codeskill/backend.env"
+cat << EOF >> /opt/codeskill/backend.env
 NODE_ENV=production
 PORT=5001
 DATABASE_HOST=$DB_HOST
@@ -68,20 +98,29 @@ DATABASE_USER=$DB_USER
 DATABASE_PASSWORD=$DB_PASS
 DATABASE_NAME=$DB_NAME
 DATABASE_SSL=true
-DATABASE_URL=postgresql://$DB_USER:$DB_PASS@$DB_HOST:$DB_PORT/$DB_NAME?sslmode=require
 REDIS_HOST=${redis_host}
 REDIS_PORT=6379
 REDIS_CLUSTER_MODE=${redis_cluster_mode}
 REDIS_TLS=${redis_tls}
-JWT_SECRET=${jwt_secret}
+NODE_EXTRA_CA_CERTS=/app/certs/rds-global-bundle.pem
+CORS_ORIGIN=https://${domain_name}
 CLIENT_URL=https://${domain_name}
 FRONTEND_URL=https://${domain_name}
 CORS_ORIGIN=https://${domain_name}
 CODE_EXECUTION_PROVIDER=piston
 PISTON_BASE_URL=${piston_base_url}
 PISTON_RUNTIME_VERSIONS={"c":"10.2.0","cpp":"10.2.0","java":"15.0.2","python":"3.10.0","javascript":"18.15.0","typescript":"5.0.3"}
+PISTON_MAX_CONCURRENT_EXECUTIONS=25
+PISTON_GLOBAL_MAX_CONCURRENT=80
+PISTON_NODE_MAX_CONCURRENT=25
+PISTON_TEST_CASE_CONCURRENCY=4
 JUDGE0_BASE_URL=${judge0_base_url}
+JUDGE0_MAX_CONCURRENT_EXECUTIONS=20
+JUDGE0_GLOBAL_MAX_CONCURRENT=50
+JUDGE0_NODE_MAX_CONCURRENT=20
 ENABLE_EMBEDDED_JUDGE=true
+DB_POOL_MAX=30
+DB_POOL_MIN=5
 S3_BUCKET_NAME=${s3_bucket_name}
 AWS_REGION=$REGION
 EOF
@@ -102,7 +141,9 @@ ExecStartPre=-/usr/bin/docker stop codeskill-backend
 ExecStartPre=-/usr/bin/docker rm codeskill-backend
 ExecStart=/usr/bin/docker run --rm --name codeskill-backend \\
   -p 5001:5001 \\
+  --env-file /opt/codeskill/pm2.env \\
   --env-file /opt/codeskill/backend.env \\
+  -v /opt/codeskill/rds-global-bundle.pem:/app/certs/rds-global-bundle.pem:ro \\
   $IMAGE
 ExecStop=/usr/bin/docker stop -t 30 codeskill-backend
 
@@ -110,18 +151,27 @@ ExecStop=/usr/bin/docker stop -t 30 codeskill-backend
 WantedBy=multi-user.target
 EOF
 
+# Run the migration in the same image/configuration before accepting requests.
+docker run --rm --env-file /opt/codeskill/backend.env \
+  -v /opt/codeskill/rds-global-bundle.pem:/app/certs/rds-global-bundle.pem:ro \
+  "$IMAGE" node dist/database/run-practice-submission-source.js
+
 # 6. Start Backend Service
 systemctl daemon-reload
 systemctl enable --now codeskill-backend.service
 
 # 7. Verify Readiness Probe before signaling bootstrap completion
 echo "Waiting for backend readiness probe (/api/health/ready)..."
+READY=false
 for i in {1..40}; do
   if curl -sf http://127.0.0.1:5001/api/health/ready >/dev/null 2>&1; then
+    READY=true
     echo "Backend readiness probe passed on attempt $i."
     break
   fi
   sleep 3
 done
+
+if [ "$READY" != true ]; then echo "Backend readiness probe failed" >&2; exit 1; fi
 
 echo "CodeSkill Backend instance ready at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"

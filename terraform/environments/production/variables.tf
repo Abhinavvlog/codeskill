@@ -63,6 +63,12 @@ variable "db_password" {
   sensitive = true
 }
 
+variable "db_instance_class" {
+  description = "RDS PostgreSQL instance class (x86_64 to match ap-south-1 availability zone capacity)"
+  type        = string
+  default     = "db.t3.medium"
+}
+
 # Image tags for immutable deployments
 variable "frontend_image_tag" {
   description = "Docker image tag for frontend container"
@@ -88,36 +94,35 @@ variable "judge0_image_tag" {
   default     = "latest"
 }
 
-# Sizing and Instance Types (Free-tier eligible Intel x86_64)
+# Sizing and Instance Types (Production capacity for 1,000 concurrent users)
 variable "frontend_instance_type" {
   description = "EC2 instance type for Next.js frontend"
   type        = string
-  default     = "t3.small"
+  default     = "t3.medium"
 }
 
 variable "backend_instance_type" {
   description = "EC2 instance type for NestJS backend"
   type        = string
-  default     = "t3.small"
+  default     = "t3.medium"
 }
 
 variable "piston_instance_type" {
-  description = "EC2 instance type for Piston execution engine"
+  description = "EC2 instance type for Piston execution engine (compute/RAM for concurrent sandbox runs)"
   type        = string
-  default     = "t3.small"
+  default     = "t3.large"
 }
 
 variable "judge0_instance_type" {
   description = "EC2 instance type for Judge0 execution engine"
   type        = string
-  default     = "t3.small"
+  default     = "t3.medium"
 }
 
-variable "jwt_secret" {
-  description = "JWT Secret for backend API"
+variable "backend_env_parameter_name" {
+  description = "SSM SecureString containing backend dotenv configuration, including a unique JWT_SECRET"
   type        = string
-  default     = "codeskill_prod_secure_jwt_token_2026_super_secret_enterprise_key"
-  sensitive   = true
+  default     = "/codeskill-prod/production/backend_env"
 }
 
 # Scheduled Scaling for 2,000 Concurrent Examination Hours
@@ -131,4 +136,10 @@ variable "exam_scale_down_cron" {
   description = "Cron expression for post-exam scale in"
   type        = string
   default     = ""
+}
+
+variable "pm2_io_parameter_name" {
+  description = "SSM SecureString JSON containing PM2_SECRET_KEY and PM2_PUBLIC_KEY; empty disables PM2.io linking"
+  type        = string
+  default     = "/codeskill-prod/monitoring/pm2"
 }

@@ -18,12 +18,12 @@ import {
   UpdateAssessmentStatusDto,
 } from './dto/update-assessment.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { AdminGuard } from '../common/guards/admin.guard';
+import { AssessmentAuthorGuard } from '../common/guards/assessment-author.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Admin Assessments')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, AdminGuard)
+@UseGuards(JwtAuthGuard, AssessmentAuthorGuard)
 @Controller('admin/assessments')
 export class AssessmentsAdminController {
   constructor(private readonly assessmentsService: AssessmentsService) {}

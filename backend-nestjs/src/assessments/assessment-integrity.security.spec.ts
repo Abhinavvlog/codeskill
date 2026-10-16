@@ -140,6 +140,15 @@ describe('Assessment Integrity & Server-Side Scoring (AUD-002, NEW-001, NEW-002,
     expect(mockExecutionService.runCode).not.toHaveBeenCalled();
   });
 
+  it('rejects duplicate answers before executing code or saving a score', async () => {
+    const dto = codingAttempt();
+    dto.responses.push({ ...dto.responses[0] });
+    await expect(service.submitAttempt(assessmentId, dto as never, studentUser))
+      .rejects.toThrow('Duplicate question responses');
+    expect(mockExecutionService.runCode).not.toHaveBeenCalled();
+    expect(mockAttemptRepo.save).not.toHaveBeenCalled();
+  });
+
   it('rejects submission if attempt does not belong to the calling candidate (NEW-001)', async () => {
     mockAssessmentRepo.findOne.mockResolvedValue(mockAssessment);
     mockAttemptRepo.findOne.mockResolvedValue({

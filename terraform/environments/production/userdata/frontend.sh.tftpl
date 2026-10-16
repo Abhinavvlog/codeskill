@@ -35,6 +35,23 @@ done
 echo "Pulling immutable image: $IMAGE..."
 docker pull "$IMAGE"
 
+# Load PM2.io credentials at boot so secret values never enter Terraform user data.
+umask 077
+mkdir -p /opt/codeskill
+PM2_PARAMETER="${pm2_io_parameter_name}"
+printf '' > /opt/codeskill/pm2.env
+if [ -n "$PM2_PARAMETER" ]; then
+  PM2_JSON=$(aws ssm get-parameter --name "$PM2_PARAMETER" --region "$REGION" --with-decryption --query Parameter.Value --output text)
+  printf '%s' "$PM2_JSON" | jq -er '
+    select((.PM2_SECRET_KEY | type == "string") and (.PM2_PUBLIC_KEY | type == "string")) |
+    select((.PM2_SECRET_KEY | test("^[A-Za-z0-9_-]+$")) and (.PM2_PUBLIC_KEY | test("^[A-Za-z0-9_-]+$"))) |
+    "PM2_SECRET_KEY=\(.PM2_SECRET_KEY)\nPM2_PUBLIC_KEY=\(.PM2_PUBLIC_KEY)"
+  ' > /opt/codeskill/pm2.env
+  unset PM2_JSON
+fi
+printf 'PM2_MACHINE_NAME=codeskill-frontend-%s\n' "$(hostname)" >> /opt/codeskill/pm2.env
+chmod 600 /opt/codeskill/pm2.env
+
 # 4. Create Systemd Service for CodeSkill Frontend
 cat << EOF > /etc/systemd/system/codeskill-frontend.service
 [Unit]
@@ -50,6 +67,7 @@ ExecStartPre=-/usr/bin/docker stop codeskill-frontend
 ExecStartPre=-/usr/bin/docker rm codeskill-frontend
 ExecStart=/usr/bin/docker run --rm --name codeskill-frontend \\
   -p 3000:3000 \\
+  --env-file /opt/codeskill/pm2.env \\
   -e NODE_ENV=production \\
   -e PORT=3000 \\
   -e NEXT_PUBLIC_API_URL=https://${domain_name}/api \\
@@ -68,12 +86,16 @@ systemctl enable --now codeskill-frontend.service
 
 # 6. Verify Readiness Probe before signaling bootstrap completion
 echo "Waiting for frontend readiness probe (/health/ready)..."
+READY=false
 for i in {1..30}; do
   if curl -sf http://127.0.0.1:3000/health/ready >/dev/null 2>&1; then
+    READY=true
     echo "Frontend readiness probe passed on attempt $i."
     break
   fi
   sleep 3
 done
+
+if [ "$READY" != true ]; then echo "Frontend readiness probe failed" >&2; exit 1; fi
 
 echo "CodeSkill Frontend instance ready at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"

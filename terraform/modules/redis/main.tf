@@ -22,7 +22,7 @@ resource "aws_security_group" "redis" {
     from_port       = 6379
     to_port         = 6379
     protocol        = "tcp"
-    security_groups = var.authorized_security_group_ids
+    security_groups = distinct(concat(var.authorized_security_group_ids, var.app_security_group_id != "" ? [var.app_security_group_id] : []))
   }
 
   egress {
@@ -47,6 +47,11 @@ resource "aws_elasticache_parameter_group" "noeviction" {
   description = "Redis 7 parameter group with noeviction policy for BullMQ job queue integrity"
 
   parameter {
+    name  = "cluster-enabled"
+    value = "yes"
+  }
+
+  parameter {
     name  = "maxmemory-policy"
     value = "noeviction"
   }
@@ -59,7 +64,8 @@ resource "aws_elasticache_replication_group" "main" {
   description                = "Redis OSS cluster for ${var.name_prefix} (BullMQ & Cache)"
   node_type                  = var.node_type
   port                       = 6379
-  parameter_group_name       = "default.redis7.cluster.on"
+  engine                     = "redis"
+  parameter_group_name       = aws_elasticache_parameter_group.noeviction.name
   automatic_failover_enabled = true
 
   subnet_group_name  = aws_elasticache_subnet_group.main.name

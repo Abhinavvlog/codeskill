@@ -32,18 +32,13 @@ echo "Instance ID: $INSTANCE_ID, Private IP: $PRIVATE_IP"
 
 # 3. Pull and Launch Judge0 Container
 JUDGE0_IMAGE="${judge0_image}"
-if [ -n "$JUDGE0_IMAGE" ] && [ "$JUDGE0_IMAGE" != "none" ]; then
-  ECR_REGISTRY="${ecr_registry}"
-  aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY" || true
-  if ! docker pull "$JUDGE0_IMAGE"; then
-    echo "ECR pull failed, falling back to public judge0/judge0:latest"
-    JUDGE0_IMAGE="judge0/judge0:latest"
-    docker pull "$JUDGE0_IMAGE" || true
-  fi
-else
-  JUDGE0_IMAGE="judge0/judge0:latest"
-  docker pull "$JUDGE0_IMAGE" || true
+if [ -z "$JUDGE0_IMAGE" ] || [ "$JUDGE0_IMAGE" = "none" ]; then
+  echo "An approved judge0 image is required" >&2
+  exit 1
 fi
+ECR_REGISTRY="${ecr_registry}"
+aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+docker pull "$JUDGE0_IMAGE"
 
 cat << EOF > /etc/systemd/system/codeskill-judge0.service
 [Unit]
@@ -68,7 +63,14 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now codeskill-judge0.service || true
+systemctl enable --now codeskill-judge0.service
+
+READY=false
+for i in {1..40}; do
+  if curl -fsS http://127.0.0.1:2358/languages >/dev/null 2>&1; then READY=true; break; fi
+  sleep 3
+done
+if [ "$READY" != true ]; then echo "Judge0 readiness probe failed" >&2; exit 1; fi
 
 # 4. Register with AWS Cloud Map Private DNS Service
 if [ -n "$CLOUD_MAP_SERVICE_ID" ]; then
@@ -77,7 +79,7 @@ if [ -n "$CLOUD_MAP_SERVICE_ID" ]; then
     --service-id "$CLOUD_MAP_SERVICE_ID" \
     --instance-id "$INSTANCE_ID" \
     --attributes AWS_INSTANCE_IPV4="$PRIVATE_IP",AWS_INSTANCE_PORT=2358 \
-    --region "$REGION" || true
+    --region "$REGION"
 fi
 
 echo "CodeSkill Judge0 bootstrap complete at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"

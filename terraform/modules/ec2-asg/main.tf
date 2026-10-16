@@ -70,7 +70,7 @@ resource "aws_autoscaling_group" "this" {
 
   launch_template {
     id      = aws_launch_template.this.id
-    version = "$Latest"
+    version = aws_launch_template.this.latest_version
   }
 
   instance_refresh {

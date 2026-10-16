@@ -48,3 +48,17 @@ it("does not warn before the student enters fullscreen", () => {
   fireEvent.blur(window);
   expect(violation).not.toHaveBeenCalled();
 });
+
+it("keeps answers inert before fullscreen and after exit, and starts only after real entry", async () => {
+  Object.defineProperty(document, "fullscreenElement", { configurable: true, value: null });
+  const start = jest.fn();
+  Object.defineProperty(document.documentElement, "requestFullscreen", { configurable: true, value: jest.fn(async () => { Object.defineProperty(document, "fullscreenElement", { configurable: true, value: document.documentElement }); }) });
+  const { getByText, getByRole } = render(<SafeExamBrowser onFullscreenEntered={start}><button>Choose answer</button></SafeExamBrowser>);
+  expect(getByText("Choose answer").closest('[inert]')).not.toBeNull();
+  expect(start).not.toHaveBeenCalled();
+  await act(async () => { fireEvent.click(getByRole("button", { name: "Enter Fullscreen to Continue" })); });
+  expect(start).toHaveBeenCalledTimes(1);
+  expect(getByText("Choose answer").closest('[inert]')).toBeNull();
+  act(() => { Object.defineProperty(document, "fullscreenElement", { configurable: true, value: null }); document.dispatchEvent(new Event("fullscreenchange")); });
+  expect(getByText("Choose answer").closest('[inert]')).not.toBeNull();
+});

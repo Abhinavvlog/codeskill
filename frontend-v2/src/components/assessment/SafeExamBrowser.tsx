@@ -1,5 +1,6 @@
 "use client";
 
+import { enterDocumentFullscreen, fullscreenEvents, isDocumentFullscreen } from "@/lib/fullscreen";
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldAlert, Maximize, AlertTriangle } from 'lucide-react';
@@ -48,7 +49,7 @@ export default function SafeExamBrowser({
   useEffect(() => {
     if (!isEnabled) return;
     let away = false;
-    let engaged = !requireFullscreen || Boolean(document.fullscreenElement);
+    let engaged = !requireFullscreen || isDocumentFullscreen();
     const warnAway = (type: string, message: string) => {
       if (!monitorViolations || !engaged || away) return;
       away = true;
@@ -61,7 +62,7 @@ export default function SafeExamBrowser({
     // A route transition can preserve document fullscreen while this component
     // mounts with fresh local state. Sync immediately so the exam is not gated.
     const checkFullscreen = () => {
-      const fullscreen = Boolean(document.fullscreenElement);
+      const fullscreen = isDocumentFullscreen();
       setIsFullscreen(fullscreen);
       if (fullscreen) engaged = true;
       if (requireFullscreen && !fullscreen) {
@@ -70,8 +71,8 @@ export default function SafeExamBrowser({
     };
 
     // Fullscreen event listener
-    document.addEventListener('fullscreenchange', checkFullscreen);
-    setIsFullscreen(Boolean(document.fullscreenElement));
+    for (const event of fullscreenEvents) document.addEventListener(event, checkFullscreen);
+    setIsFullscreen(isDocumentFullscreen());
     
     // Visibility change (tab switching)
     const handleVisibilityChange = () => {
@@ -135,7 +136,7 @@ export default function SafeExamBrowser({
     // but the fullscreenchange will handle actual exits.
 
     return () => {
-      document.removeEventListener('fullscreenchange', checkFullscreen);
+      for (const event of fullscreenEvents) document.removeEventListener(event, checkFullscreen);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
       window.removeEventListener('focus', checkReturned);
@@ -165,17 +166,12 @@ export default function SafeExamBrowser({
 
   const requestFullscreen = async () => {
     try {
-      if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen();
-      }
-
-      // Keep the gate state in sync even when fullscreen was entered before
-      // this page mounted (for example, from the assessment briefing).
-      setIsFullscreen(Boolean(document.fullscreenElement));
-      if (document.fullscreenElement) await callbacksRef.current.onFullscreenEntered?.();
+      await enterDocumentFullscreen();
+      // The effect calls the start callback once fullscreen state is confirmed.
+      setIsFullscreen(isDocumentFullscreen());
     } catch (err) {
       console.error("Error attempting to enable fullscreen:", err);
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      setIsFullscreen(isDocumentFullscreen());
       toast.error("Failed to enter fullscreen. Please try again.");
     }
   };
@@ -187,7 +183,7 @@ export default function SafeExamBrowser({
   return (
     <div ref={containerRef} className="relative w-full h-screen overflow-hidden bg-background">
       {/* The actual content */}
-      <div className={`w-full h-full overflow-hidden transition-opacity duration-300 ${requireFullscreen && !isFullscreen ? 'opacity-0 pointer-events-none blur-sm' : 'opacity-100'}`}>
+      <div inert={requireFullscreen && !isFullscreen} aria-hidden={requireFullscreen && !isFullscreen} className={`w-full h-full overflow-hidden transition-opacity duration-300 ${requireFullscreen && !isFullscreen ? 'opacity-0 pointer-events-none blur-sm' : 'opacity-100'}`}>
         {children}
       </div>
 

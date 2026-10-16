@@ -56,6 +56,12 @@ describe('practice submission source migration runner', () => {
     await runPracticeSubmissionSourceMigration();
 
     expect(queryRunner.startTransaction).toHaveBeenCalledTimes(1);
+    expect(queryRunner.query).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(1902230159)',
+    );
+    expect(queryRunner.query.mock.invocationCallOrder[0]).toBeLessThan(
+      applyMigration.mock.invocationCallOrder[0],
+    );
     expect(applyMigration).toHaveBeenCalledWith(queryRunner);
     expect(queryRunner.commitTransaction).toHaveBeenCalledTimes(1);
     expect(queryRunner.rollbackTransaction).not.toHaveBeenCalled();
@@ -167,7 +173,7 @@ describe('practice submission source migration runner', () => {
       username: 'migration_user',
       password: 'test-only-password',
       database: 'migration_test',
-      ssl: { rejectUnauthorized: false },
+      ssl: { rejectUnauthorized: true },
     });
   });
 });

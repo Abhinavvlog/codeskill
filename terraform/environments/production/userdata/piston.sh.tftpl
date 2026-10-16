@@ -32,18 +32,13 @@ echo "Instance ID: $INSTANCE_ID, Private IP: $PRIVATE_IP"
 
 # 3. Pull and Launch Piston Container
 PISTON_IMAGE="${piston_image}"
-if [ -n "$PISTON_IMAGE" ] && [ "$PISTON_IMAGE" != "none" ]; then
-  ECR_REGISTRY="${ecr_registry}"
-  aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY" || true
-  if ! docker pull "$PISTON_IMAGE"; then
-    echo "ECR pull failed, falling back to public ghcr.io/engineer-man/piston"
-    PISTON_IMAGE="ghcr.io/engineer-man/piston"
-    docker pull "$PISTON_IMAGE"
-  fi
-else
-  PISTON_IMAGE="ghcr.io/engineer-man/piston"
-  docker pull "$PISTON_IMAGE"
+if [ -z "$PISTON_IMAGE" ] || [ "$PISTON_IMAGE" = "none" ]; then
+  echo "An approved piston image is required" >&2
+  exit 1
 fi
+ECR_REGISTRY="${ecr_registry}"
+aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+docker pull "$PISTON_IMAGE"
 
 mkdir -p /var/lib/piston/packages /var/lib/piston/jobs
 
@@ -74,13 +69,17 @@ systemctl daemon-reload
 systemctl enable --now codeskill-piston.service
 
 # 4. Wait for Piston API readiness
+READY=false
 for i in {1..30}; do
   if curl -sf http://127.0.0.1:2001/api/v2/runtimes >/dev/null 2>&1; then
+    READY=true
     echo "Piston ready on port 2001."
     break
   fi
   sleep 3
 done
+
+if [ "$READY" != true ]; then echo "Piston readiness probe failed" >&2; exit 1; fi
 
 # 5. Register with AWS Cloud Map Private DNS Service
 if [ -n "$CLOUD_MAP_SERVICE_ID" ]; then
@@ -89,7 +88,7 @@ if [ -n "$CLOUD_MAP_SERVICE_ID" ]; then
     --service-id "$CLOUD_MAP_SERVICE_ID" \
     --instance-id "$INSTANCE_ID" \
     --attributes AWS_INSTANCE_IPV4="$PRIVATE_IP",AWS_INSTANCE_PORT=2001 \
-    --region "$REGION" || true
+    --region "$REGION"
 fi
 
 # 6. Configure Deregistration Hook on Shutdown

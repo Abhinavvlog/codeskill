@@ -333,3 +333,19 @@ it('leaves the contest attempt open when shard scoring fails', async () => {
   ).rejects.toThrow('shard unavailable');
   expect(builder.update).not.toHaveBeenCalled();
 });
+
+it('loads contest security settings without creating an attempt or exposing private data', async () => {
+  const { service, attempts, builder, problems } = setup();
+  const result = await service.getStartContext(id, userId);
+  expect(result.contest.title).toBe('Real Contest');
+  expect(result.antiCheatConfig).toEqual(contest.antiCheatConfig);
+  expect(JSON.stringify(result)).not.toContain('SECRET-PASSWORD');
+  expect(attempts.findOne).not.toHaveBeenCalled();
+  expect(builder.insert).not.toHaveBeenCalled();
+  expect(problems.getExecutionProblem).not.toHaveBeenCalled();
+});
+it('requires registration before exposing start security settings', async () => {
+  const { service, contests } = setup();
+  contests.findOne.mockResolvedValue({ ...contest, participants: [] });
+  await expect(service.getStartContext(id, userId)).rejects.toBeInstanceOf(ForbiddenException);
+});

@@ -22,3 +22,11 @@ it("respects a contest configured without fullscreen", async () => {
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Start Contest" })));
   expect(accept).toHaveBeenCalledTimes(1); expect(request).not.toHaveBeenCalled();
 });
+it("shows rejected fullscreen requests and never starts the attempt", async () => {
+  Object.defineProperty(document, "fullscreenElement", { configurable: true, value: null });
+  const accept = jest.fn();
+  render(<ContestStartGate onAccept={accept} requestFullscreen={jest.fn().mockRejectedValue(new Error("Fullscreen denied"))} isFullscreen={false} hasRequestedFullscreen={false} />);
+  fireEvent.click(screen.getByRole("checkbox", { name: "Agree to contest rules" }));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Enter Fullscreen & Start" })));
+  expect(screen.getByRole("alert")).toHaveTextContent("Fullscreen denied"); expect(accept).not.toHaveBeenCalled();
+});

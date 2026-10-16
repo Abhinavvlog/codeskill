@@ -44,6 +44,16 @@ describe('WebSocket Gateway Security (AUD-010, AUD-012, AUD-024)', () => {
     return socket;
   };
 
+  it('publishes headless worker notifications to the API relay', async () => {
+    const publish = jest.fn().mockResolvedValue(1);
+    const workerGateway = new AppGateway(mockTokenService as never, mockContestRepo as never,
+      { getClient: () => ({ publish }) } as never);
+    workerGateway.emitToUser('student-1', 'submission_completed', { status: 'accepted' });
+    expect(publish).toHaveBeenCalledWith('codeskill:gateway:events', JSON.stringify({
+      room: 'user_student-1', event: 'submission_completed', data: { status: 'accepted' },
+    }));
+  });
+
   describe('handleConnection authentication (AUD-010)', () => {
     it('disconnects sockets that provide no authentication token', async () => {
       const socket = createMockSocket({});

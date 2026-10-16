@@ -41,7 +41,11 @@ test -f frontend-v2/Dockerfile && echo "PASS: frontend-v2/Dockerfile exists."
 
 # 6. ALB Routing Verification
 echo "[6/6] Verifying ALB routing..."
-bash terraform/scripts/test-alb-routing.sh codeskill.novaserve.cloud || true
+if [ "${CHECK_LIVE_ROUTING:-false}" = "true" ]; then
+  bash terraform/scripts/test-alb-routing.sh "${PLATFORM_DOMAIN:-codeskill.novaserve.cloud}"
+else
+  echo "SKIP: Live routing check (set CHECK_LIVE_ROUTING=true to enable)."
+fi
 
 echo "=========================================================="
 echo " All Local Validation Checks Succeeded!"
