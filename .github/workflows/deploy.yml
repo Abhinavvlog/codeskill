@@ -150,29 +150,76 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Trigger Frontend Auto Scaling Rolling Refresh
+        id: refresh-frontend
         if: github.event.inputs.service == 'all' || github.event.inputs.service == 'frontend' || github.event_name == 'push'
         run: |
           echo "Initiating rolling instance refresh for ${{ env.FRONTEND_ASG }}..."
-          aws autoscaling start-instance-refresh \
+          REFRESH_ID=$(aws autoscaling start-instance-refresh \
             --auto-scaling-group-name ${{ env.FRONTEND_ASG }} \
-            --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 180, "SkipMatching": true, "AutoRollback": true}' \
-            --region ${{ env.AWS_REGION }} || true
+            --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 180, "SkipMatching": false, "AutoRollback": true}' \
+            --region ${{ env.AWS_REGION }} \
+            --query 'InstanceRefreshId' --output text)
+          echo "refresh_id=$REFRESH_ID" >> "$GITHUB_OUTPUT"
 
       - name: Trigger Backend Auto Scaling Rolling Refresh
+        id: refresh-backend
         if: github.event.inputs.service == 'all' || github.event.inputs.service == 'backend' || github.event_name == 'push'
         run: |
           echo "Initiating rolling instance refresh for ${{ env.BACKEND_ASG }}..."
-          aws autoscaling start-instance-refresh \
+          REFRESH_ID=$(aws autoscaling start-instance-refresh \
             --auto-scaling-group-name ${{ env.BACKEND_ASG }} \
-            --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 180, "SkipMatching": true, "AutoRollback": true}' \
-            --region ${{ env.AWS_REGION }} || true
+            --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 180, "SkipMatching": false, "AutoRollback": true}' \
+            --region ${{ env.AWS_REGION }} \
+            --query 'InstanceRefreshId' --output text)
+          echo "refresh_id=$REFRESH_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Auto Scaling refreshes to finish
+        env:
+          FRONTEND_REFRESH_ID: ${{ steps['refresh-frontend'].outputs.refresh_id }}
+          BACKEND_REFRESH_ID: ${{ steps['refresh-backend'].outputs.refresh_id }}
+        run: |
+          set -euo pipefail
+          refreshes=()
+          if [ -n "$FRONTEND_REFRESH_ID" ]; then
+            refreshes+=("${{ env.FRONTEND_ASG }}:$FRONTEND_REFRESH_ID")
+          fi
+          if [ -n "$BACKEND_REFRESH_ID" ]; then
+            refreshes+=("${{ env.BACKEND_ASG }}:$BACKEND_REFRESH_ID")
+          fi
+
+          for attempt in {1..80}; do
+            pending=0
+            for refresh in "${refreshes[@]}"; do
+              asg="${refresh%%:*}"
+              refresh_id="${refresh#*:}"
+              status=$(aws autoscaling describe-instance-refreshes \
+                --auto-scaling-group-name "$asg" \
+                --instance-refresh-ids "$refresh_id" \
+                --region "${{ env.AWS_REGION }}" \
+                --query 'InstanceRefreshes[0].Status' --output text)
+              echo "$asg refresh $refresh_id status: $status"
+              case "$status" in
+                Successful) ;;
+                Pending|InProgress|Baking|CheckpointDelay) pending=1 ;;
+                *) echo "$asg instance refresh did not succeed (status: $status)" >&2; exit 1 ;;
+              esac
+            done
+            if [ "$pending" -eq 0 ]; then
+              break
+            fi
+            if [ "$attempt" -eq 80 ]; then
+              echo "Timed out waiting for Auto Scaling instance refreshes." >&2
+              exit 1
+            fi
+            sleep 15
+          done
 
       - name: Verify Live Production Readiness Checks
         run: |
           echo "Polling production domain readiness endpoints..."
           for i in {1..20}; do
-            STATUS_FE=$(curl -s -o /dev/null -w "%%{http_code}" https://codeskill.novaserve.cloud/health/ready || echo "000")
-            STATUS_BE=$(curl -s -o /dev/null -w "%%{http_code}" https://codeskill.novaserve.cloud/api/health/ready || echo "000")
+            STATUS_FE=$(curl -s -o /dev/null -w "%{http_code}" https://codeskill.novaserve.cloud/health/ready || echo "000")
+            STATUS_BE=$(curl -s -o /dev/null -w "%{http_code}" https://codeskill.novaserve.cloud/api/health/ready || echo "000")
             echo "Attempt $i: Frontend Readiness HTTP $STATUS_FE, Backend Readiness HTTP $STATUS_BE"
             if [ "$STATUS_FE" = "200" ] && [ "$STATUS_BE" = "200" ]; then
               echo "Both Frontend and Backend passed live readiness verification."
@@ -180,4 +227,17 @@ jobs:
             fi
             sleep 15
           done
-          echo "Warning: Live readiness verification did not return 200 within timeout."
+          echo "Live readiness verification did not return 200 within timeout." >&2
+          exit 1
+
+      - name: Verify Skill Development page is deployed
+        if: github.event.inputs.service == 'all' || github.event.inputs.service == 'frontend' || github.event_name == 'push'
+        run: |
+          echo "Checking that the Skill Development page is served from production..."
+          PAGE_CONTENT=$(curl --fail --silent --show-error --retry 5 --retry-delay 5 \
+            "https://codeskill.novaserve.cloud/skill-development?deploy-check=${GITHUB_SHA}")
+          if ! grep -q "Our Sincere Gratitude" <<< "$PAGE_CONTENT"; then
+            echo "The production route responded but did not contain the Skill Development page content." >&2
+            exit 1
+          fi
+          echo "Skill Development page is live."
