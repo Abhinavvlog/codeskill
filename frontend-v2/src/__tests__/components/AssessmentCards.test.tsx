@@ -29,12 +29,42 @@ it("renders every configured type with its actual metadata, icon and assessment 
 });
 it("supports title search, grouped MCQ tabs, availability and difficulty filters", async () => {
   render(<Page />); await screen.findByRole("heading", { name: "Coding Problem Test" });
-  fireEvent.click(screen.getByRole("button", { name: "MCQs", exact: true })); expect(screen.getAllByRole("article")).toHaveLength(2);
+  fireEvent.click(screen.getByRole("tab", { name: "MCQs", exact: true })); expect(screen.getAllByRole("article")).toHaveLength(2);
   fireEvent.change(screen.getByRole("textbox", { name: "Search assessments" }), { target: { value: "Multiple" } }); expect(screen.getAllByRole("article")).toHaveLength(1);
   fireEvent.change(screen.getByRole("textbox", { name: "Search assessments" }), { target: { value: "" } });
-  fireEvent.click(screen.getByRole("button", { name: "All Assessments" }));
+  fireEvent.click(screen.getByRole("tab", { name: "All Assessments" }));
   fireEvent.change(screen.getByRole("combobox", { name: "Difficulty" }), { target: { value: "Hard" } }); expect(screen.getAllByRole("article")).toHaveLength(1);
   fireEvent.change(screen.getByRole("combobox", { name: "Availability" }), { target: { value: "Upcoming" } }); expect(screen.getByText("No assessments match your filters.")).toBeInTheDocument();
+});
+it("keeps category tabs dimensionally consistent through every category transition", async () => {
+  render(<Page />); await screen.findByRole("heading", { name: "Coding Problem Test" });
+  const categories = ["All Assessments", "DSA / Coding", "MCQs", "True / False", "Code Output"];
+  const tabs = screen.getAllByRole("tab");
+  expect(tabs).toHaveLength(5);
+  expect(screen.getByRole("tablist", { name: "Assessment categories" })).toBeInTheDocument();
+  const stableDimensions = ["box-border", "h-10", "shrink-0", "whitespace-nowrap", "rounded-lg", "border-2", "px-4", "text-sm", "font-medium", "leading-5"];
+  tabs.forEach(item => stableDimensions.forEach(token => expect(item).toHaveClass(token)));
+  for (const category of [...categories.slice(1), categories[0], "True / False", "DSA / Coding", "Code Output", "MCQs", "All Assessments"]) {
+    const selected = screen.getByRole("tab", { name: category, exact: true });
+    fireEvent.click(selected);
+    expect(selected).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", selected.id);
+    const expected = category === "All Assessments" ? fixtures.length : category === "MCQs" ? 2 : 1;
+    expect(screen.getAllByRole("article")).toHaveLength(expected);
+  }
+});
+it("supports keyboard navigation between category tabs", async () => {
+  render(<Page />); await screen.findByRole("heading", { name: "Coding Problem Test" });
+  const all = screen.getByRole("tab", { name: "All Assessments" });
+  all.focus(); fireEvent.keyDown(all, { key: "ArrowRight" });
+  expect(screen.getByRole("tab", { name: "DSA / Coding" })).toHaveAttribute("aria-selected", "true");
+});
+it("keeps the result panel stable for empty category and search states", async () => {
+  render(<Page />); await screen.findByRole("heading", { name: "Coding Problem Test" });
+  fireEvent.click(screen.getByRole("tab", { name: "Code Output" }));
+  expect(screen.getByRole("tabpanel")).toHaveTextContent("Code Output Test");
+  fireEvent.change(screen.getByRole("textbox", { name: "Search assessments" }), { target: { value: "no match" } });
+  expect(screen.getByRole("tabpanel")).toHaveTextContent("No assessments match your filters.");
 });
 it.each(["upcoming", "ended", "draft"])("does not offer attempts for %s assessments", async state => {
   load.mockResolvedValue({ data: { assessments: [{ ...fixtures[0], ...(state === "upcoming" ? { startTime: new Date(Date.now() + 60000).toISOString() } : state === "ended" ? { endTime: new Date(Date.now() - 1000).toISOString() } : { status: "draft" }) }] } });
