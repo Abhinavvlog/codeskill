@@ -76,6 +76,13 @@ const entities = [
           throw new Error('DB_SYNCHRONIZE must be disabled when using submission shards');
         }
 
+        const poolConfig = {
+          max: parseInt(process.env.DB_POOL_MAX || '50', 10),
+          min: parseInt(process.env.DB_POOL_MIN || '5', 10),
+          idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000', 10),
+          connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONN_TIMEOUT || '5000', 10),
+        };
+
         const url = configService.get<string>('database.postgres.url');
         if (url) {
           const usesSsl =
@@ -88,6 +95,7 @@ const entities = [
             ssl: usesSsl ? { rejectUnauthorized: false } : false,
             autoLoadEntities: true,
             synchronize: isSyncAllowed,
+            extra: poolConfig,
             invalidWhereValuesBehavior: {
               null: 'ignore',
             },
@@ -105,6 +113,7 @@ const entities = [
             : false,
           autoLoadEntities: true,
           synchronize: isSyncAllowed,
+          extra: poolConfig,
           invalidWhereValuesBehavior: {
             null: 'ignore',
           },

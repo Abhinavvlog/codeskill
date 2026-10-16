@@ -336,14 +336,14 @@ export default function AdminAssessmentsPage() {
                     </Link>
 
                     {/* Edit Test Trigger */}
-                    <button
-                      onClick={() => handleOpenScheduleModal(test)}
+                    <Link
+                      href={`/admin/assessments/create?id=${encodeURIComponent(test._id)}`}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 hover:bg-primary/20 text-xs font-bold text-primary transition-colors"
-                      title="Edit Assessment Title, Attempts, Duration, and Policy"
+                      title="Edit all assessment settings"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       <span>Edit Test</span>
-                    </button>
+                    </Link>
                   </div>
 
                   <div className="flex items-center gap-1">

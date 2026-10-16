@@ -52,6 +52,7 @@ describe('Assessment code evaluation', () => {
       {} as never,
       execution as never,
       admission as never,
+      undefined,
       queue as never,
     );
     jest.spyOn(service as any, 'isStudentTargeted').mockReturnValue(true);

@@ -224,7 +224,7 @@ export default function TopicsDistributionPage() {
                     Active: <b className="text-emerald-400">{t.active || t.total}</b>
                   </span>
                   <Link
-                    href={`/admin/questions`}
+                    href={`/admin/questions?topic=${encodeURIComponent(t.topic)}`}
                     className="inline-flex items-center gap-1 text-xs font-semibold text-amber-500 hover:text-amber-400 transition-colors"
                   >
                     Browse Questions

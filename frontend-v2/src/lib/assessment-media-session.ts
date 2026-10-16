@@ -75,3 +75,28 @@ export function getPreferredAssessmentCamera(assessmentId: string) {
     return undefined;
   }
 }
+
+export function handoffAssessmentFaceIdentity(assessmentId: string, descriptor: number[]) {
+  try {
+    sessionStorage.setItem(`assessment-face-identity:${assessmentId}`, JSON.stringify(descriptor));
+  } catch {
+    // Storage might fail in incognito/quota
+  }
+}
+
+export function getAssessmentFaceIdentity(assessmentId: string): number[] | null {
+  try {
+    const raw = sessionStorage.getItem(`assessment-face-identity:${assessmentId}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearAssessmentFaceIdentity(assessmentId: string) {
+  try {
+    sessionStorage.removeItem(`assessment-face-identity:${assessmentId}`);
+  } catch {
+    // no-op
+  }
+}

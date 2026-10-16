@@ -162,21 +162,38 @@ export class StudentsController {
       limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
     }),
   )
-  async importPreview(@UploadedFile() file: Express.Multer.File) {
+  async importPreview(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('defaultBatch') defaultBatch?: string,
+    @Body('defaultDepartment') defaultDepartment?: string,
+    @Body('defaultCourse') defaultCourse?: string,
+    @Body('defaultSemester') defaultSemester?: string,
+    @Body('defaultYear') defaultYear?: string,
+    @Body('defaultUniversity') defaultUniversity?: string,
+  ) {
     if (!file) {
       throw new BadRequestException('Spreadsheet file is required');
     }
-    return this.studentsService.parseAndValidateImport(file.buffer);
+    const defaultOptions = {
+      defaultBatch: defaultBatch?.trim(),
+      defaultDepartment: defaultDepartment?.trim(),
+      defaultCourse: defaultCourse?.trim(),
+      defaultSemester: defaultSemester ? Number(defaultSemester) : undefined,
+      defaultYear: defaultYear ? Number(defaultYear) : undefined,
+      defaultUniversity: defaultUniversity?.trim(),
+    };
+    return this.studentsService.parseAndValidateImport(file.buffer, defaultOptions);
   }
 
   @Post('import/confirm')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
-      'Commit validated students import into database in high-speed batches',
+      'Commit validated students import into database with idempotent duplicate handling',
   })
   async confirmImport(
     @Body('validRows') validRows: any[],
+    @Body('defaultOptions') defaultOptions: any,
     @CurrentUser() adminUser: any,
     @Req() req: any,
   ) {
@@ -187,6 +204,7 @@ export class StudentsController {
       adminUser,
       ip,
       userAgent,
+      defaultOptions,
     );
   }
 

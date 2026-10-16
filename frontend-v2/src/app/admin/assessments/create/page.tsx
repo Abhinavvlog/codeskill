@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { adminAssessmentsAPI, adminQuestionsAPI, adminUsersAPI } from "@/config/api";
-import { useAssessmentStore } from "./_store/useAssessmentStore";
+import { useAssessmentStore, type ProctoringSettings } from "./_store/useAssessmentStore";
 import QuestionPicker from "./_components/QuestionPicker";
 import {
   ArrowLeft, CheckCircle2, Clock, Plus, Trash2, ShieldAlert,
@@ -20,7 +20,49 @@ type AutoSelectionCriteria = {
   mediumCount: number;
   hardCount: number;
 };
-
+type AssessmentApiQuestion = {
+  id?: string;
+  _id?: string;
+  question?: string;
+  questionText?: string;
+  questionType?: string;
+  topic?: string;
+  difficulty?: string;
+  marks?: number;
+  negativeMarks?: number;
+};
+type AssessmentApiQuestionConfig = AssessmentApiQuestion & {
+  questionId?: string | AssessmentApiQuestion;
+  order?: number;
+};
+type AssessmentApiSection = {
+  title?: string;
+  description?: string;
+  order?: number;
+  timeLimit?: number;
+  autoSelection?: AutoSelectionCriteria;
+  questions?: AssessmentApiQuestionConfig[];
+};
+type AssessmentApiData = {
+  sections?: AssessmentApiSection[];
+  questions?: Array<AssessmentApiQuestion | string>;
+  title?: string;
+  code?: string;
+  description?: string;
+  instructions?: string[];
+  durationMinutes?: number;
+  passingMarks?: number | null;
+  negativeMarking?: boolean;
+  category?: string;
+  allowedAttempts?: number;
+  proctoring?: Partial<ProctoringSettings>;
+  status?: string;
+  targetSemesters?: string[];
+  targetSections?: string[];
+  targetGroups?: string[];
+  startTime?: string | Date | null;
+  endTime?: string | Date | null;
+};
 function yearLabel(year: string) {
   const suffix = Number(year) % 10 === 1 && Number(year) !== 11 ? "st"
     : Number(year) % 10 === 2 && Number(year) !== 12 ? "nd"
@@ -36,6 +78,14 @@ function optionLabel(label: string, value: string) {
 
 function toggleValue(values: string[], value: string) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+}
+
+function toDateTimeLocal(value?: string | Date | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
 }
 
 function MultiSelectDropdown({
@@ -109,6 +159,112 @@ function AssessmentBuilder() {
   const [targetGroup, setTargetGroup] = useState<"" | "a" | "b" | "both">("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formReady, setFormReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const assessmentId = new URLSearchParams(window.location.search).get("id");
+    const hydrateForm = async () => {
+      try {
+        if (!assessmentId) {
+          useAssessmentStore.getState().reset();
+          await Promise.resolve();
+          if (active) setFormReady(true);
+          return;
+        }
+
+        const response = await adminAssessmentsAPI.getById(assessmentId);
+        const assessment = response.data?.assessment as AssessmentApiData | undefined;
+        if (!assessment) throw new Error("Assessment details were not returned by the server.");
+        const sections = (assessment.sections || []).map((section, sectionIndex) => ({
+          id: `section-${sectionIndex}`,
+          title: section.title || `Section ${String.fromCharCode(65 + sectionIndex)}`,
+          description: section.description || "",
+          order: Number(section.order) || 0,
+          timeLimit: Number(section.timeLimit) || 0,
+          autoSelection: section.autoSelection,
+          questions: (section.questions || []).map((entry, questionIndex) => {
+            const question = entry.questionId && typeof entry.questionId === "object" ? entry.questionId : undefined;
+            const questionId = question?._id || question?.id || entry.questionId;
+            return {
+              questionId: String(questionId),
+              marks: Number(entry.marks ?? question?.marks ?? 1),
+              negativeMarks: Number(entry.negativeMarks ?? question?.negativeMarks ?? 0),
+              order: Number(entry.order ?? questionIndex),
+              topic: question?.topic,
+              difficulty: question?.difficulty,
+              questionText: question?.question || question?.questionText || "Question details unavailable",
+              questionType: question?.questionType || "",
+            };
+          }),
+        }));
+        if (sections.length === 0 && Array.isArray(assessment.questions) && assessment.questions.length > 0) {
+          sections.push({
+            id: "section-0",
+            title: "Section A",
+            description: "",
+            order: 0,
+            timeLimit: 0,
+            autoSelection: undefined,
+            questions: assessment.questions.map((entry, questionIndex) => {
+              const question = entry && typeof entry === "object" ? entry : undefined;
+              const questionId = question?._id || question?.id || entry;
+              return {
+                questionId: String(questionId),
+                marks: Number(question?.marks ?? 1),
+                negativeMarks: Number(question?.negativeMarks ?? 0),
+                order: questionIndex,
+                topic: question?.topic,
+                difficulty: question?.difficulty,
+                questionText: question?.question || question?.questionText || "Question details unavailable",
+                questionType: question?.questionType || "",
+              };
+            }),
+          });
+        }
+
+        useAssessmentStore.getState().hydrate({
+          title: assessment.title || "",
+          code: assessment.code || "",
+          description: assessment.description || "",
+          instructions: Array.isArray(assessment.instructions) ? assessment.instructions : [],
+          durationMinutes: Number(assessment.durationMinutes ?? 60),
+          passingMarks: assessment.passingMarks == null ? "" : Number(assessment.passingMarks),
+          negativeMarking: assessment.negativeMarking ?? true,
+          category: assessment.category || "exam",
+          allowedAttempts: Number(assessment.allowedAttempts ?? 1),
+          proctoring: assessment.proctoring || {},
+          sections,
+          status: assessment.status === "published" ? "published" : "draft",
+        });
+
+        const semesters = Array.isArray(assessment.targetSemesters) ? assessment.targetSemesters.map(String) : [];
+        setAutoSelections(Object.fromEntries(sections
+          .filter((section) => section.autoSelection)
+          .map((section) => [section.id, section.autoSelection as AutoSelectionCriteria])));
+        setEditingId(assessmentId);
+        setTargetSemesters(semesters);
+        setSelectedYears(Array.from(new Set(semesters.map((semester: string) => String(Math.ceil(Number(semester) / 2))))));
+        setTargetSections(Array.isArray(assessment.targetSections) ? assessment.targetSections : []);
+        const groups = (assessment.targetGroups || []).map((group: string) => String(group).toLowerCase());
+        setTargetGroup(groups.length > 1 ? "both" : groups[0] === "a" || groups[0] === "b" ? groups[0] : "");
+        setStartTime(toDateTimeLocal(assessment.startTime));
+        setEndTime(toDateTimeLocal(assessment.endTime));
+        if (active) setFormReady(true);
+      } catch (error) {
+        if (active) {
+          const message = error && typeof error === "object" && "response" in error
+            ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+            : undefined;
+          addToast("error", "Unable to load assessment", message || (error instanceof Error ? error.message : "Please try again."));
+          router.push("/admin/assessments");
+        }
+      }
+    };
+    void hydrateForm();
+    return () => { active = false; };
+  }, [addToast, router]);
 
   useEffect(() => {
     let active = true;
@@ -121,7 +277,7 @@ function AssessmentBuilder() {
         const remainingPages = await Promise.all(Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) =>
           adminUsersAPI.getAll("", false, index + 2, 100),
         ));
-        remainingPages.forEach((response) => {
+        remainingPages.forEach((response: any) => {
           const pagePayload = response.data?.users ? response.data : response.data?.data || {};
           users.push(...(pagePayload.users || []));
         });
@@ -147,9 +303,12 @@ function AssessmentBuilder() {
     const firstSemester = (Number(year) - 1) * 2 + 1;
     return [String(firstSemester), String(firstSemester + 1)];
   }))).sort((a, b) => Number(a) - Number(b));
-  const visibleSections = Array.from(new Set(cohorts
-    .filter((cohort) => targetSemesters.includes(cohort.semester))
-    .map((cohort) => cohort.section).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const visibleSections = Array.from(new Set([
+    ...cohorts
+      .filter((cohort) => targetSemesters.includes(cohort.semester))
+      .map((cohort) => cohort.section).filter(Boolean),
+    ...targetSections,
+  ])).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const sectionOptions = visibleSections;
 
   const updateYears = (year: string) => {
@@ -168,7 +327,6 @@ function AssessmentBuilder() {
   const updateGroup = (group: "a" | "b" | "both") => {
     setTargetGroup(group);
   };
-
   const clearAutoSelection = (sectionId: string) => {
     setAutoSelections((current) => {
       const next = { ...current };
@@ -212,10 +370,9 @@ function AssessmentBuilder() {
       addToast("error", "Validation Error", `Passing marks must be between 0 and total marks (${totalMarks}).`);
       return;
     }
-
     setIsPublishing(true);
     try {
-      await adminAssessmentsAPI.create({
+      const payload = {
         title: store.title,
         code: store.code,
         description: store.description,
@@ -226,8 +383,8 @@ function AssessmentBuilder() {
         targetSemesters: targetSemesters.length ? targetSemesters : selectedYears.length ? visibleSemesters : [],
         targetSections,
         targetGroups: targetGroup === "both" ? ["A", "B"] : targetGroup ? [targetGroup.toUpperCase()] : [],
-        startTime: startTime ? new Date(startTime).toISOString() : undefined,
-        endTime: endTime ? new Date(endTime).toISOString() : undefined,
+        startTime: startTime ? new Date(startTime).toISOString() : editingId ? null : undefined,
+        endTime: endTime ? new Date(endTime).toISOString() : editingId ? null : undefined,
         negativeMarking: store.negativeMarking,
         proctoring: store.proctoring,
         instructions: store.instructions,
@@ -245,7 +402,12 @@ function AssessmentBuilder() {
             order: q.order
           }))
         }))
-      });
+      };
+      if (editingId) {
+        await adminAssessmentsAPI.update(editingId, payload);
+      } else {
+        await adminAssessmentsAPI.create(payload);
+      }
 
       addToast("success", "Success", `Assessment ${status === 'published' ? 'published' : 'saved as draft'}`);
       setTimeout(() => router.push("/admin/assessments"), 1000);
@@ -253,11 +415,15 @@ function AssessmentBuilder() {
       const message = err && typeof err === "object" && "response" in err
         ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
         : undefined;
-      addToast("error", "Error", message || "Failed to create assessment.");
+      addToast("error", "Error", message || `Failed to ${editingId ? "update" : "create"} assessment.`);
       setIsPublishing(false);
       setShowConfirm(false);
     }
   };
+
+  if (!formReady) {
+    return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground"><Spinner className="w-4 h-4 animate-spin mr-2" />{editingId ? "Loading assessment..." : "Preparing assessment form..."}</div>;
+  }
 
   return (
     <div className="min-h-screen bg-background pb-32">
@@ -269,8 +435,8 @@ function AssessmentBuilder() {
               <ArrowLeft className="w-4 h-4" />
             </Link>
             <div>
-              <h1 className="text-base font-bold text-foreground">Assessment Builder</h1>
-              <p className="text-[11px] text-muted-foreground font-medium">Design professional evaluations.</p>
+              <h1 className="text-base font-bold text-foreground">{editingId ? "Edit Assessment" : "Assessment Builder"}</h1>
+              <p className="text-[11px] text-muted-foreground font-medium">{editingId ? "Update the complete assessment configuration." : "Design professional evaluations."}</p>
             </div>
           </div>
 

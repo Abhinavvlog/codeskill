@@ -218,6 +218,45 @@ const defaultSignUpContent = {
     }
 };
 
+const CURATED_QUOTES = [
+  {
+    text: "First, solve the problem. Then, write the code.",
+    author: "John Johnson",
+  },
+  {
+    text: "Any fool can write code that a computer can understand. Good programmers write code that humans can understand.",
+    author: "Martin Fowler",
+  },
+  {
+    text: "Simplicity is prerequisite for reliability.",
+    author: "Edsger W. Dijkstra",
+  },
+  {
+    text: "Make it work, make it right, make it fast.",
+    author: "Kent Beck",
+  },
+  {
+    text: "Talk is cheap. Show me the code.",
+    author: "Linus Torvalds",
+  },
+  {
+    text: "Build your technical foundation. Master your skills securely.",
+    author: "CodeSkill",
+  },
+  {
+    text: "The best error message is the one that never shows up.",
+    author: "Thomas Fuchs",
+  },
+  {
+    text: "Experience is the name everyone gives to their mistakes.",
+    author: "Oscar Wilde",
+  },
+  {
+    text: "Knowledge is power, but practice is the key to mastery.",
+    author: "CodeSkill",
+  },
+];
+
 export function AuthUI({ signInContent = {}, signUpContent = {}, children }: AuthUIProps) {
   const finalSignInContent = {
       image: { ...defaultSignInContent.image, ...signInContent.image },
@@ -227,47 +266,25 @@ export function AuthUI({ signInContent = {}, signUpContent = {}, children }: Aut
   const currentContent = finalSignInContent;
 
   const [quote, setQuote] = useState<{ text: string; author: string }>(currentContent.quote);
-  const [isQuoteLoading, setIsQuoteLoading] = useState(true);
+  const [isQuoteLoading, setIsQuoteLoading] = useState(false);
 
   useEffect(() => {
-    let isMounted = true;
     let rotationInterval: NodeJS.Timeout;
 
-    const fetchQuotes = async () => {
-      try {
-        const response = await fetch("https://type.fit/api/quotes");
-        if (!response.ok) throw new Error("Network response was not ok");
-        const data = await response.json();
-        
-        if (Array.isArray(data) && data.length > 0) {
-          const cleaned = data.map((q: any) => ({
-            text: q.text,
-            author: (q.author || "Unknown").replace(/,\s*type\.fit$/, "")
-          })).filter(q => q.text);
+    const availableQuotes = [
+      currentContent.quote,
+      ...CURATED_QUOTES.filter(q => q.text !== currentContent.quote.text)
+    ];
 
-          if (isMounted && cleaned.length > 0) {
-            const pickRandom = () => cleaned[Math.floor(Math.random() * cleaned.length)];
-            setQuote(pickRandom());
-            setIsQuoteLoading(false);
+    const pickRandom = () => availableQuotes[Math.floor(Math.random() * availableQuotes.length)];
+    
+    setIsQuoteLoading(false);
 
-            rotationInterval = setInterval(() => {
-              setQuote(pickRandom());
-            }, 10000);
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching quotes:", error);
-        if (isMounted) {
-          setQuote(currentContent.quote);
-          setIsQuoteLoading(false);
-        }
-      }
-    };
-
-    fetchQuotes();
+    rotationInterval = setInterval(() => {
+      setQuote(pickRandom());
+    }, 10000);
 
     return () => {
-      isMounted = false;
       if (rotationInterval) clearInterval(rotationInterval);
     };
   }, [currentContent.quote]);

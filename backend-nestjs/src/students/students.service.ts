@@ -149,7 +149,7 @@ export class StudentsService {
       );
     }
 
-    const rawPassword = dto.password || this.generateSecurePassword();
+    const rawPassword = dto.password || '12345678';
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(rawPassword, salt);
 
@@ -353,7 +353,19 @@ export class StudentsService {
     };
   }
 
-  async parseAndValidateImport(fileBuffer: Buffer) {
+  async parseAndValidateImport(
+    fileBuffer: Buffer,
+    defaultOptions?: {
+      defaultBatch?: string;
+      defaultDepartment?: string;
+      defaultCourse?: string;
+      defaultSemester?: number;
+      defaultSection?: string;
+      defaultGroup?: string;
+      defaultYear?: number;
+      defaultUniversity?: string;
+    },
+  ) {
     let workbook: xlsx.WorkBook;
     try {
       workbook = xlsx.read(fileBuffer, { type: 'buffer' });
@@ -426,22 +438,56 @@ export class StudentsService {
         'mail',
       ]).toLowerCase();
 
-      const department = findField(row, ['department', 'dept', 'branch']);
-      const course = findField(row, ['course', 'degree', 'program']);
-      const batch = findField(row, ['batch', 'year_of_study']);
-      const section = findField(row, ['section', 'sec']);
-      const group = findField(row, ['group', 'grp']);
-      const university = findField(row, [
-        'university',
-        'college',
-        'institution',
+      const mobile = findField(row, [
+        'mobile',
+        'phone',
+        'mobile_number',
+        'phone_number',
+        'contact',
+        'contact_number',
+        'mobile_no',
+        'phoneno',
       ]);
 
+      const department =
+        findField(row, ['department', 'dept', 'branch']) ||
+        defaultOptions?.defaultDepartment ||
+        '';
+      const course =
+        findField(row, ['course', 'degree', 'program']) ||
+        defaultOptions?.defaultCourse ||
+        '';
+      const batch =
+        findField(row, ['batch', 'year_of_study']) ||
+        defaultOptions?.defaultBatch ||
+        '';
+      const section =
+        findField(row, ['section', 'sec']) ||
+        defaultOptions?.defaultSection ||
+        '';
+      const group =
+        findField(row, ['group', 'grp']) ||
+        defaultOptions?.defaultGroup ||
+        '';
+      const university =
+        findField(row, [
+          'university',
+          'college',
+          'institution',
+        ]) ||
+        defaultOptions?.defaultUniversity ||
+        '';
+
       const rawSem = findField(row, ['semester', 'sem']);
-      const semester = rawSem ? Number(rawSem) : 1;
+      const semester = rawSem
+        ? Number(rawSem)
+        : defaultOptions?.defaultSemester || 1;
 
       const rawYear = findField(row, ['year', 'grad_year', 'graduation_year']);
-      const year = rawYear ? Number(rawYear) : NaN;
+      const parsedYear = rawYear ? Number(rawYear) : NaN;
+      const year = !isNaN(parsedYear)
+        ? parsedYear
+        : defaultOptions?.defaultYear || new Date().getFullYear();
 
       const password = findField(row, [
         'password',
@@ -455,6 +501,7 @@ export class StudentsService {
         uid,
         name,
         email,
+        mobile,
         department,
         course,
         batch,
@@ -485,17 +532,18 @@ export class StudentsService {
         : [],
     ]);
 
-    const existingUidSet = new Set(existingUsersByUid.map((u) => u.uid));
+    const existingUidSet = new Set(existingUsersByUid.map((u) => u.uid?.toUpperCase()));
     const existingEmailSet = new Set(
       existingUsersByEmail.map((u) => u.email.toLowerCase()),
     );
 
-    const emailRegex = /^\S+@\S+\.\S+$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const errors: {
       row: number;
       uid?: string;
       email?: string;
       error: string;
+      isDuplicate?: boolean;
     }[] = [];
     const validRows: any[] = [];
     let duplicates = 0;
@@ -503,13 +551,20 @@ export class StudentsService {
 
     for (const row of parsedRows) {
       const rowErrors: string[] = [];
+      let rowIsDuplicate = false;
 
       if (!row.uid) {
-        rowErrors.push('UID is missing');
+        rowErrors.push('UID / Student ID is missing');
+      } else if (!/^[A-Za-z0-9_\-\.]{2,32}$/.test(row.uid)) {
+        rowErrors.push(
+          `Invalid UID format '${row.uid}' (must be 2-32 alphanumeric characters)`,
+        );
       } else if (fileUidMap.has(row.uid)) {
         rowErrors.push(`Duplicate UID '${row.uid}' within the uploaded file`);
+        rowIsDuplicate = true;
       } else if (existingUidSet.has(row.uid)) {
         rowErrors.push(`UID '${row.uid}' already exists in database`);
+        rowIsDuplicate = true;
       }
 
       if (!row.name) {
@@ -517,11 +572,11 @@ export class StudentsService {
       }
 
       if (!row.batch) {
-        rowErrors.push('Batch/class is missing');
+        rowErrors.push('Batch/class is missing (set in sheet or choose a default batch)');
       }
 
       if (!Number.isInteger(row.year) || row.year < 1990 || row.year > 2100) {
-        rowErrors.push('Year is missing or invalid');
+        rowErrors.push('Graduation year is missing or invalid');
       }
 
       if (
@@ -540,18 +595,26 @@ export class StudentsService {
         rowErrors.push(
           `Duplicate email '${row.email}' within the uploaded file`,
         );
+        rowIsDuplicate = true;
       } else if (existingEmailSet.has(row.email)) {
         rowErrors.push(`Email '${row.email}' already exists in database`);
+        rowIsDuplicate = true;
+      }
+
+      if (row.mobile) {
+        const cleanMobile = String(row.mobile).replace(/[\s\-().]/g, '');
+        if (!/^\+?[0-9]{10,15}$/.test(cleanMobile)) {
+          rowErrors.push(
+            `Invalid mobile number '${row.mobile}' (must be 10-15 digits)`,
+          );
+        }
       }
 
       if (row.uid) fileUidMap.add(row.uid);
       if (row.email) fileEmailMap.add(row.email);
 
       if (rowErrors.length > 0) {
-        const isDuplicate = rowErrors.some(
-          (e) => e.includes('already exists') || e.includes('Duplicate'),
-        );
-        if (isDuplicate) duplicates++;
+        if (rowIsDuplicate) duplicates++;
         else invalid++;
 
         errors.push({
@@ -559,6 +622,7 @@ export class StudentsService {
           uid: row.uid,
           email: row.email,
           error: rowErrors.join('; '),
+          isDuplicate: rowIsDuplicate,
         });
       } else {
         validRows.push(row);
@@ -581,46 +645,108 @@ export class StudentsService {
     adminUser: any,
     ip = '',
     userAgent = '',
+    defaultOptions?: any,
   ) {
     if (!validRows || validRows.length === 0) {
       throw new BadRequestException('No valid rows provided for import');
     }
 
-    const uids = validRows.map((r) => String(r.uid || '').toUpperCase());
-    const emails = validRows.map((r) => String(r.email || '').toLowerCase());
+    const uids = [...new Set(validRows.map((r) => String(r.uid || '').toUpperCase().trim()))].filter(Boolean);
+    const emails = [...new Set(validRows.map((r) => String(r.email || '').toLowerCase().trim()))].filter(Boolean);
 
+    // Dynamic duplicate verification at confirm time
     const [dupUids, dupEmails] = await Promise.all([
-      this.userRepository.find({ where: { uid: In(uids) }, select: { uid: true } }),
-      this.userRepository.find({ where: { email: In(emails) }, select: { email: true } }),
+      uids.length > 0
+        ? this.userRepository.find({
+            where: { uid: In(uids) },
+            select: { uid: true },
+          })
+        : [],
+      emails.length > 0
+        ? this.userRepository.find({
+            where: { email: In(emails) },
+            select: { email: true },
+          })
+        : [],
     ]);
 
-    if (dupUids.length || dupEmails.length) {
-      throw new ConflictException(
-        'Some students already exist; please re-upload the file for validation',
-      );
-    }
-    if (
-      new Set(uids).size !== uids.length ||
-      new Set(emails).size !== emails.length
-    ) {
-      throw new BadRequestException('Duplicate UIDs or emails in import data');
+    const existingUidSet = new Set(dupUids.map((u) => u.uid?.toUpperCase()));
+    const existingEmailSet = new Set(dupEmails.map((u) => u.email.toLowerCase()));
+
+    const rowsToInsert: any[] = [];
+    const skippedDuplicates: Array<{
+      rowNumber: number;
+      uid: string;
+      email: string;
+      name: string;
+      reason: string;
+    }> = [];
+    const seenBatchUids = new Set<string>();
+    const seenBatchEmails = new Set<string>();
+
+    for (const row of validRows) {
+      const rowUid = String(row.uid || '').toUpperCase().trim();
+      const rowEmail = String(row.email || '').toLowerCase().trim();
+
+      if (!rowUid || !rowEmail) continue;
+
+      if (existingUidSet.has(rowUid)) {
+        skippedDuplicates.push({
+          rowNumber: row.rowNumber,
+          uid: rowUid,
+          email: rowEmail,
+          name: row.name,
+          reason: `Student UID '${rowUid}' already exists in database`,
+        });
+        continue;
+      }
+
+      if (existingEmailSet.has(rowEmail)) {
+        skippedDuplicates.push({
+          rowNumber: row.rowNumber,
+          uid: rowUid,
+          email: rowEmail,
+          name: row.name,
+          reason: `Email '${rowEmail}' already exists in database`,
+        });
+        continue;
+      }
+
+      if (seenBatchUids.has(rowUid) || seenBatchEmails.has(rowEmail)) {
+        skippedDuplicates.push({
+          rowNumber: row.rowNumber,
+          uid: rowUid,
+          email: rowEmail,
+          name: row.name,
+          reason: `Duplicate UID or Email within import payload`,
+        });
+        continue;
+      }
+
+      seenBatchUids.add(rowUid);
+      seenBatchEmails.add(rowEmail);
+      rowsToInsert.push(row);
     }
 
     const salt = await bcrypt.genSalt(10);
     const usersToInsert: User[] = [];
     const emailJobsToInsert: EmailJob[] = [];
 
-    for (const row of validRows) {
+    for (const row of rowsToInsert) {
       const rawPassword =
         row.password && String(row.password).trim()
           ? String(row.password).trim()
-          : crypto.randomBytes(9).toString('base64url');
+          : '12345678';
       const hashedPassword = await bcrypt.hash(rawPassword, salt);
 
+      const cleanMobile = row.mobile
+        ? String(row.mobile).replace(/[\s\-().]/g, '')
+        : '';
+
       const u = this.userRepository.create({
-        name: row.name,
-        email: row.email,
-        uid: row.uid,
+        name: String(row.name).trim(),
+        email: String(row.email).toLowerCase().trim(),
+        uid: String(row.uid).toUpperCase().trim(),
         password: hashedPassword,
         role: 'student',
         isAssessmentStudent: true,
@@ -628,22 +754,31 @@ export class StudentsService {
         isActive: true,
         authProvider: 'local',
         studentProfile: {
-          university: row.university || '',
-          department: row.department || '',
-          course: row.course || '',
-          semester: row.semester || 1,
-          section: row.section || '',
-          group: row.group || '',
-          batch: row.batch || '',
-          year: row.year || new Date().getFullYear(),
+          university:
+            row.university || defaultOptions?.defaultUniversity || '',
+          department:
+            row.department || defaultOptions?.defaultDepartment || '',
+          course: row.course || defaultOptions?.defaultCourse || '',
+          semester:
+            row.semester || defaultOptions?.defaultSemester || 1,
+          section: row.section || defaultOptions?.defaultSection || '',
+          group: row.group || defaultOptions?.defaultGroup || '',
+          batch: row.batch || defaultOptions?.defaultBatch || '',
+          year:
+            row.year ||
+            defaultOptions?.defaultYear ||
+            new Date().getFullYear(),
+          ...(cleanMobile
+            ? { mobile: cleanMobile, phone: cleanMobile }
+            : {}),
         },
       });
       usersToInsert.push(u);
 
       const job = this.emailJobRepo.create({
-        uid: row.uid,
-        email: row.email,
-        name: row.name,
+        uid: u.uid,
+        email: u.email,
+        name: u.name,
         temporaryPassword: rawPassword,
         status: 'pending',
         retryCount: 0,
@@ -652,15 +787,30 @@ export class StudentsService {
       emailJobsToInsert.push(job);
     }
 
-    const chunkSize = 500;
-    for (let i = 0; i < usersToInsert.length; i += chunkSize) {
-      const chunk = usersToInsert.slice(i, i + chunkSize);
-      await this.userRepository.save(chunk);
-    }
+    // Process inserts inside a database transaction for complete data integrity
+    if (usersToInsert.length > 0) {
+      await this.userRepository.manager.transaction(async (manager) => {
+        const chunkSize = 500;
+        const savedUsers: User[] = [];
+        for (let i = 0; i < usersToInsert.length; i += chunkSize) {
+          const chunk = usersToInsert.slice(i, i + chunkSize);
+          const savedChunk = await manager.save(chunk);
+          savedUsers.push(...savedChunk);
+        }
 
-    for (let i = 0; i < emailJobsToInsert.length; i += chunkSize) {
-      const chunk = emailJobsToInsert.slice(i, i + chunkSize);
-      await this.emailJobRepo.save(chunk);
+        // Link generated student IDs to their corresponding email jobs
+        for (let i = 0; i < emailJobsToInsert.length; i++) {
+          if (savedUsers[i]?.id) {
+            emailJobsToInsert[i].student_id = savedUsers[i].id;
+            emailJobsToInsert[i].student = savedUsers[i];
+          }
+        }
+
+        for (let i = 0; i < emailJobsToInsert.length; i += chunkSize) {
+          const chunk = emailJobsToInsert.slice(i, i + chunkSize);
+          await manager.save(chunk);
+        }
+      });
     }
 
     const audit = this.auditLogRepo.create({
@@ -671,16 +821,22 @@ export class StudentsService {
       ipAddress: ip,
       userAgent: userAgent,
       metadata: {
+        totalSubmitted: validRows.length,
         importedCount: usersToInsert.length,
+        skippedDuplicatesCount: skippedDuplicates.length,
         emailJobsCreated: emailJobsToInsert.length,
       },
     });
     await this.auditLogRepo.save(audit);
 
     return {
-      message: `Successfully imported ${usersToInsert.length} students.`,
+      success: true,
+      message: `Successfully imported ${usersToInsert.length} students. Skipped ${skippedDuplicates.length} existing duplicate records.`,
       importedCount: usersToInsert.length,
+      skippedCount: skippedDuplicates.length,
+      skippedDuplicates,
       emailJobsCreated: emailJobsToInsert.length,
+      totalSubmitted: validRows.length,
     };
   }
 
@@ -723,18 +879,32 @@ export class StudentsService {
   }
 
   async sendIndividualCredential(studentId: string, portalUrl?: string) {
-    const student = await this.userRepository.findOne({
-      where: [{ id: studentId }, { mongoId: studentId }],
+    if (!studentId || studentId === 'undefined') {
+      throw new BadRequestException('A valid student ID is required');
+    }
+    let student = await this.userRepository.findOne({
+      where: [{ id: studentId }, { mongoId: studentId }, { uid: studentId }],
     });
+    let emailJob: EmailJob | null = null;
+    if (!student) {
+      emailJob = await this.emailJobRepo.findOne({ where: { id: studentId } });
+      if (emailJob && emailJob.student_id) {
+        student = await this.userRepository.findOne({
+          where: { id: emailJob.student_id },
+        });
+      }
+    }
     if (!student) throw new NotFoundException('Student not found');
 
-    let emailJob = await this.emailJobRepo.findOne({
-      where: { uid: student.uid },
-      order: { createdAt: 'DESC' },
-    });
+    if (!emailJob) {
+      emailJob = await this.emailJobRepo.findOne({
+        where: { uid: student.uid },
+        order: { createdAt: 'DESC' },
+      });
+    }
 
     if (!emailJob || !emailJob.temporaryPassword) {
-      const tempPass = this.generateSecurePassword(10);
+      const tempPass = '12345678';
       const salt = await bcrypt.genSalt(10);
       student.password = await bcrypt.hash(tempPass, salt);
       student.forcePasswordChange = true;
@@ -742,6 +912,7 @@ export class StudentsService {
 
       emailJob = this.emailJobRepo.create({
         student: { id: student.id } as any,
+        student_id: student.id,
         uid: student.uid,
         email: student.email,
         name: student.name,
@@ -844,7 +1015,11 @@ export class StudentsService {
         failed,
         retrying,
       },
-      jobs: jobs.map((j) => ({ ...j, _id: j.id })),
+      jobs: jobs.map((j) => ({
+        ...j,
+        _id: j.id,
+        studentId: j.student_id,
+      })),
       pagination: {
         page,
         limit,

@@ -302,7 +302,7 @@ export default function BasicInfo() {
         </div>
 
         {/* Row 5: Author + Question ID + Solve Time + Points */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
           <div className="space-y-1.5">
             <label className={labelClass}>Author</label>
             <input
@@ -336,7 +336,7 @@ export default function BasicInfo() {
             </div>
           </div>
           <div className="space-y-1.5">
-            <label className={labelClass}>Points</label>
+            <label className={labelClass}>Marks / Points</label>
             <input
               type="number"
               value={metadata.points}
@@ -344,6 +344,19 @@ export default function BasicInfo() {
               min={0}
               className={inputClass}
             />
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelClass}>Negative Marks</label>
+            <input
+              type="number"
+              step="0.25"
+              value={metadata.negativeMarks ?? 0}
+              onChange={(e) => updateMetadata({ negativeMarks: Number(e.target.value) })}
+              min={0}
+              placeholder="0.25, 0.5, 1"
+              className={inputClass}
+            />
+            <span className="text-[10px] text-muted-foreground">Deducted on wrong answer</span>
           </div>
         </div>
       </div>

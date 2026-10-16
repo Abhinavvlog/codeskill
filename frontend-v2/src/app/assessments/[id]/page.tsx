@@ -14,12 +14,19 @@ import {
   Maximize2,
   Mic,
   Video,
+  Camera,
   RefreshCw,
   BarChart3
 } from "lucide-react";
 import { studentAssessmentsAPI } from "@/config/api";
 import { useAuth } from "@/context/AuthContext";
 import { handoffAssessmentStream, releaseAssessmentStream, setPreferredAssessmentCamera } from "@/lib/assessment-media-session";
+import {
+  clearAssessmentFaceReference,
+  createAssessmentFaceReference,
+  getAssessmentFaceReference,
+  setAssessmentFaceReference,
+} from "@/lib/assessment-face-verification";
 
 export default function AssessmentBriefingPage({
   params,
@@ -41,14 +48,23 @@ export default function AssessmentBriefingPage({
   const [isCheckingMedia, setIsCheckingMedia] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
+  const [selfiePreview, setSelfiePreview] = useState<string | null>(null);
+  const [isCapturingSelfie, setIsCapturingSelfie] = useState(false);
+  const [selfieError, setSelfieError] = useState<string | null>(null);
+  const [selfieCaptured, setSelfieCaptured] = useState(false);
   const cameraPreviewRef = useRef<HTMLVideoElement>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const streamHandedOffRef = useRef(false);
   const cameraRequestIdRef = useRef(0);
 
   useEffect(() => {
+    clearAssessmentFaceReference(id);
+  }, [id]);
+
+  useEffect(() => {
     if (cameraPreviewRef.current) cameraPreviewRef.current.srcObject = cameraStream;
   }, [cameraStream]);
+
 
   useEffect(() => () => {
     cameraRequestIdRef.current += 1;
@@ -131,7 +147,7 @@ export default function AssessmentBriefingPage({
   const assessment = data?.assessment;
 
   const handleStartExam = async () => {
-    if (!agreedToRules || !cameraStreamRef.current) return;
+    if (!agreedToRules || !cameraStreamRef.current || !getAssessmentFaceReference(id)) return;
     setIsStarting(true);
 
     try {
@@ -155,6 +171,36 @@ export default function AssessmentBriefingPage({
     }
 
     router.push(`/assessments/${id}/take?attempt=${attemptToken}`);
+  };
+
+
+  const captureSelfie = async () => {
+    const video = cameraPreviewRef.current;
+    if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      setSelfieError("Wait for the camera preview, then take your selfie.");
+      return;
+    }
+    setIsCapturingSelfie(true);
+    setSelfieError(null);
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("The camera image could not be processed. Please try again.");
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const reference = await createAssessmentFaceReference(canvas);
+      setAssessmentFaceReference(id, reference);
+      setSelfiePreview(canvas.toDataURL("image/jpeg", 0.86));
+      setSelfieCaptured(true);
+    } catch (error) {
+      clearAssessmentFaceReference(id);
+      setSelfiePreview(null);
+      setSelfieCaptured(false);
+      setSelfieError(error instanceof Error ? error.message : "Face verification could not be initialized. Check your connection and retry.");
+    } finally {
+      setIsCapturingSelfie(false);
+    }
   };
 
   if (isLoading) {
@@ -363,7 +409,7 @@ export default function AssessmentBriefingPage({
               </div>
               <div className="space-y-3">
                 {cameraDevices.length > 0 && <label className="block space-y-1.5 text-xs font-medium text-foreground">Choose camera
-                  <select aria-label="Choose camera" value={selectedCamera} disabled={isCheckingMedia} onChange={(event) => { setSelectedCamera(event.target.value); void enableCamera(event.target.value); }} className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm">
+                  <select aria-label="Choose camera" value={selectedCamera} disabled={isCheckingMedia} onChange={(event) => { clearAssessmentFaceReference(id); setSelfieCaptured(false); setSelfiePreview(null); setSelfieError(null); setSelectedCamera(event.target.value); void enableCamera(event.target.value); }} className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm">
                     {cameraDevices.map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `Camera ${index + 1}`}</option>)}
                   </select>
                 </label>}
@@ -371,12 +417,26 @@ export default function AssessmentBriefingPage({
                   <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-2 ${cameraStream?.getVideoTracks().some((track) => track.readyState === "live") ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-700" : "border-border text-muted-foreground"}`}><Video className="h-3.5 w-3.5" />Camera</span>
                   <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-2 ${cameraStream?.getAudioTracks().some((track) => track.readyState === "live") ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-700" : "border-border text-muted-foreground"}`}><Mic className="h-3.5 w-3.5" />Microphone</span>
                 </div>
+                {cameraStream && <div className="space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">Identity selfie required</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">Center your face alone in the frame. We’ll compare this selfie with your camera during the assessment.</p>
+                  </div>
+                  <button type="button" onClick={() => void captureSelfie()} disabled={isCapturingSelfie || isCheckingMedia} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60">
+                    {isCapturingSelfie ? <><RefreshCw className="h-4 w-4 animate-spin" /> Preparing face check…</> : selfieCaptured ? <><CheckCircle2 className="h-4 w-4" /> Retake identity selfie</> : <><Camera className="h-4 w-4" /> Take identity selfie</>}
+                  </button>
+                  {selfiePreview && <div className="flex items-center gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2">
+                    <img src={selfiePreview} alt="Captured identity selfie" className="h-14 w-14 rounded-md object-cover" />
+                    <div className="text-xs"><p className="font-semibold text-emerald-700">Selfie captured</p><p className="mt-0.5 text-muted-foreground">Face matching will stay on during your test.</p></div>
+                  </div>}
+                </div>}
                 {!cameraStream && <button type="button" onClick={() => void enableCamera()} disabled={isCheckingMedia} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-primary/30 px-3 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/5 disabled:opacity-60">
                   {isCheckingMedia ? <><RefreshCw className="h-4 w-4 animate-spin" /> Checking devices…</> : "Enable camera & microphone"}
                 </button>}
               </div>
             </div>
             {mediaError && <p role="alert" className="text-xs font-medium text-destructive">{mediaError}</p>}
+            {selfieError && <p role="alert" className="text-xs font-medium text-destructive">{selfieError}</p>}
             {startError && <p role="alert" className="text-xs font-medium text-destructive">{startError}</p>}
           </section>
 
@@ -390,7 +450,7 @@ export default function AssessmentBriefingPage({
                 className="mt-0.5 rounded border-border text-primary focus:ring-primary h-4 w-4"
               />
               <span className="text-xs text-foreground font-medium leading-relaxed">
-                I acknowledge that I am attempting this assessment independently without external assistance. I agree to camera/microphone proctoring and telemetry integrity monitoring.
+                I acknowledge that I am attempting this assessment independently without external assistance. I agree to camera/microphone proctoring and periodic snapshots of the assessment page.
               </span>
             </label>
           </div>
@@ -443,7 +503,7 @@ export default function AssessmentBriefingPage({
 
               <button
                 onClick={handleStartExam}
-                disabled={!agreedToRules || !cameraStream || isStarting || isCheckingMedia || assessment.isAvailable === false}
+                disabled={!agreedToRules || !cameraStream || !selfieCaptured || isStarting || isCheckingMedia || isCapturingSelfie || assessment.isAvailable === false}
                 className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary/90 active:bg-primary/80 text-white font-semibold rounded-md text-xs sm:text-sm uppercase tracking-wider transition-all shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Maximize2 className="w-4 h-4" />

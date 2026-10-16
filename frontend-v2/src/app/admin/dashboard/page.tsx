@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   Users,
   Code2,
@@ -54,6 +55,9 @@ interface RecentAssessment {
 }
 
 export default function AdminDashboardPage() {
+  const pathname = usePathname();
+  const isTeacher = pathname?.startsWith("/teacher") ?? false;
+  const portalBase = isTeacher ? "/teacher" : "/admin";
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalProblems: 0,
@@ -98,6 +102,10 @@ export default function AdminDashboardPage() {
   );
 
   const fetchStats = useCallback(async (isRefreshCall = false) => {
+    if (isTeacher) {
+      setLoading(false);
+      return;
+    }
     if (isRefreshCall) setIsRefreshing(true);
     else setLoading(true);
 
@@ -122,7 +130,7 @@ export default function AdminDashboardPage() {
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [isTeacher]);
 
   useEffect(() => {
     fetchStats();
@@ -134,7 +142,7 @@ export default function AdminDashboardPage() {
       value: stats.totalUsers || 0,
       sublabel: "Students & Portal Users",
       icon: GraduationCap,
-      href: "/admin/students",
+      href: `${portalBase}/students`,
       color: "text-blue-500",
       bg: "bg-blue-500/10",
       border: "hover:border-blue-500/40",
@@ -144,7 +152,7 @@ export default function AdminDashboardPage() {
       value: stats.totalAssessments || 0,
       sublabel: "Examination Drives",
       icon: ClipboardList,
-      href: "/admin/assessments",
+      href: `${portalBase}/assessments`,
       color: "text-rose-500",
       bg: "bg-rose-500/10",
       border: "hover:border-rose-500/40",
@@ -154,7 +162,7 @@ export default function AdminDashboardPage() {
       value: stats.totalQuestions || 0,
       sublabel: "Active Question Items",
       icon: Code2,
-      href: "/admin/questions",
+      href: `${portalBase}/questions`,
       color: "text-purple-500",
       bg: "bg-purple-500/10",
       border: "hover:border-purple-500/40",
@@ -164,7 +172,7 @@ export default function AdminDashboardPage() {
       value: stats.totalProblems || 0,
       sublabel: "Practice Challenges",
       icon: Terminal,
-      href: "/admin/problems",
+      href: `${portalBase}/problems`,
       color: "text-amber-500",
       bg: "bg-amber-500/10",
       border: "hover:border-amber-500/40",
@@ -174,7 +182,7 @@ export default function AdminDashboardPage() {
       value: stats.totalSubmissions || 0,
       sublabel: "Total Code Submissions",
       icon: BarChart3,
-      href: "/admin/candidates",
+      href: `${portalBase}/candidates`,
       color: "text-emerald-500",
       bg: "bg-emerald-500/10",
       border: "hover:border-emerald-500/40",
@@ -184,7 +192,7 @@ export default function AdminDashboardPage() {
       value: stats.activeToday ?? 0,
       sublabel: "Live Platform Activity",
       icon: Activity,
-      href: "/admin/students",
+      href: `${portalBase}/students`,
       color: "text-cyan-500",
       bg: "bg-cyan-500/10",
       border: "hover:border-cyan-500/40",
@@ -195,7 +203,7 @@ export default function AdminDashboardPage() {
     {
       title: "Create Assessment",
       description: "Set up proctored examination drives, timing windows, and question banks.",
-      href: "/admin/assessments/create",
+      href: `${portalBase}/assessments/create`,
       icon: Plus,
       cta: "New Assessment",
       accent: "from-rose-500/20 via-rose-500/5 to-transparent",
@@ -204,7 +212,7 @@ export default function AdminDashboardPage() {
     {
       title: "Question Bank",
       description: "Author algorithmic problems, MCQs, or bulk-import standard CSV datasets.",
-      href: "/admin/questions/create",
+      href: `${portalBase}/questions/create`,
       icon: Code2,
       cta: "Add Question",
       accent: "from-purple-500/20 via-purple-500/5 to-transparent",
@@ -213,7 +221,7 @@ export default function AdminDashboardPage() {
     {
       title: "Bulk Import Students",
       description: "Onboard student rosters, automatically assign roll numbers and send credentials.",
-      href: "/admin/students/import",
+      href: `${portalBase}/students/import`,
       icon: UploadCloud,
       cta: "Import Students",
       accent: "from-blue-500/20 via-blue-500/5 to-transparent",
@@ -222,7 +230,7 @@ export default function AdminDashboardPage() {
     {
       title: "Candidate Performance",
       description: "Inspect student scoring tables, percentiles, and generate official university PDFs.",
-      href: "/admin/candidates",
+      href: `${portalBase}/candidates`,
       icon: FileText,
       cta: "View Results",
       accent: "from-emerald-500/20 via-emerald-500/5 to-transparent",
@@ -249,7 +257,7 @@ export default function AdminDashboardPage() {
               </span>
             </div>
             <h1 className="text-3xl md:text-4xl font-bold font-heading text-foreground tracking-tight">
-              Admin <span className="text-transparent bg-clip-text bg-gradient-to-r from-foreground via-foreground/85 to-primary">Dashboard</span>
+              {isTeacher ? "Teacher" : "Admin"} <span className="text-transparent bg-clip-text bg-gradient-to-r from-foreground via-foreground/85 to-primary">Dashboard</span>
             </h1>
             <p className="text-sm md:text-base text-muted-foreground mt-0.5">
               Executive overview &amp; real-time telemetry for departmental examinations and candidate evaluations.
@@ -257,7 +265,7 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
+            {!isTeacher && <button
               onClick={() => fetchStats(true)}
               disabled={isRefreshing}
               className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl border border-border bg-card/60 hover:bg-card text-foreground transition-all shadow-xs hover:border-primary/40 disabled:opacity-50 cursor-pointer"
@@ -265,9 +273,9 @@ export default function AdminDashboardPage() {
             >
               <RefreshCw className={`w-3.5 h-3.5 text-muted-foreground ${isRefreshing ? "animate-spin text-primary" : ""}`} />
               <span>{isRefreshing ? "Refreshing..." : "Sync Telemetry"}</span>
-            </button>
+            </button>}
             <Link
-              href="/admin/assessments/create"
+              href={`${portalBase}/assessments/create`}
               className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md shadow-primary/20"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -300,7 +308,7 @@ export default function AdminDashboardPage() {
                     <Spinner className="w-5 h-5 animate-spin text-muted-foreground" />
                   ) : (
                     <p className="text-2xl md:text-3xl font-bold text-foreground font-heading tracking-tight">
-                      {kpi.value.toLocaleString()}
+                      {isTeacher ? "—" : kpi.value.toLocaleString()}
                     </p>
                   )}
                   <p className="text-[10px] text-muted-foreground/75 truncate mt-1">
@@ -317,7 +325,7 @@ export default function AdminDashboardPage() {
           <div className="flex items-center justify-between mb-3.5">
             <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
               <Cpu className="w-4 h-4 text-primary" />
-              Administrative Operations Hub
+              {isTeacher ? "Teaching Operations Hub" : "Administrative Operations Hub"}
             </h2>
           </div>
 
@@ -374,7 +382,7 @@ export default function AdminDashboardPage() {
               </div>
 
               <Link
-                href="/admin/students"
+                href={`${portalBase}/students`}
                 className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
               >
                 <span>View All</span>
