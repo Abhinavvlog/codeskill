@@ -83,6 +83,16 @@ const entities = [
           connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONN_TIMEOUT || '5000', 10),
         };
 
+        const rejectUnauthorized =
+          process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== undefined
+            ? process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'true'
+            : isProduction;
+        const ca = process.env.DATABASE_CA_CERT;
+        const sslOptions = {
+          rejectUnauthorized,
+          ...(ca ? { ca } : {}),
+        };
+
         const url = configService.get<string>('database.postgres.url');
         if (url) {
           const usesSsl =
@@ -92,7 +102,7 @@ const entities = [
           return {
             type: 'postgres',
             url,
-            ssl: usesSsl ? { rejectUnauthorized: false } : false,
+            ssl: usesSsl ? sslOptions : false,
             autoLoadEntities: true,
             synchronize: isSyncAllowed,
             extra: poolConfig,
@@ -109,7 +119,7 @@ const entities = [
           password: configService.get<string>('database.postgres.password'),
           database: configService.get<string>('database.postgres.database'),
           ssl: configService.get<boolean>('database.postgres.ssl')
-            ? { rejectUnauthorized: false }
+            ? sslOptions
             : false,
           autoLoadEntities: true,
           synchronize: isSyncAllowed,

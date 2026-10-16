@@ -1258,6 +1258,7 @@ export class AssessmentsService {
           id: q.id,
           questionIndex: index + 1,
           question: q.question,
+          description: q.problemStatement || q.description || '',
           questionType: q.questionType,
           topic: q.topic,
           subtopic: q.subtopic,
@@ -1596,9 +1597,18 @@ export class AssessmentsService {
     let totalSkipped = 0;
 
     const evaluatedResponses: any[] = [];
+    const seenQuestionIds = new Set<string>();
 
     for (const r of dto.responses || []) {
-      const q = questionMap.get(String(r.questionId));
+      const qId = String(r.questionId);
+      if (seenQuestionIds.has(qId)) {
+        throw new BadRequestException(
+          `Duplicate response for question ID ${qId} is not permitted.`,
+        );
+      }
+      seenQuestionIds.add(qId);
+
+      const q = questionMap.get(qId);
       if (!q) {
         evaluatedResponses.push({
           questionId: String(r.questionId),
@@ -1768,8 +1778,11 @@ export class AssessmentsService {
       });
     }
 
-    const finalScore = Math.max(0, Math.round(totalScore * 100) / 100);
     const maxScore = assessment.totalMarks || 1;
+    const finalScore = Math.min(
+      maxScore,
+      Math.max(0, Math.round(totalScore * 100) / 100),
+    );
     const percentage = Math.round((finalScore / maxScore) * 1000) / 10;
     const passed = finalScore >= (assessment.passingMarks || 0);
     const accuracy =

@@ -189,4 +189,44 @@ describe('Students Bulk Import & Validation', () => {
     expect(result.skippedCount).toBe(1);
     expect(result.skippedDuplicates[0].uid).toBe('CU_ALREADY_THERE');
   });
+
+  it('AUD-012: never uses static fallback "12345678" and generates cryptographically secure temporary passwords in bulk import', async () => {
+    const validRows = [
+      {
+        rowNumber: 2,
+        uid: 'STUDENT_NO_PWD',
+        email: 'nopwd@example.com',
+        name: 'No Password Student',
+        batch: '2026',
+      },
+    ];
+
+    let savedEmailJob: any = null;
+    emailJobRepo.create.mockImplementation((data: any) => {
+      savedEmailJob = data;
+      return { id: 'job-id', ...data };
+    });
+
+    const result = await service.confirmImport(validRows, admin);
+
+    expect(result.success).toBe(true);
+    expect(savedEmailJob).toBeDefined();
+    expect(savedEmailJob.temporaryPassword).not.toBe('12345678');
+    expect(savedEmailJob.temporaryPassword.length).toBeGreaterThanOrEqual(12);
+  });
+
+  it('AUD-012: generates secure random password on single createStudent when password is omitted', async () => {
+    const result = await service.create(
+      {
+        name: 'Auto Password Student',
+        email: 'autopass@example.com',
+        uid: 'UID_AUTO_100',
+      } as any,
+      admin,
+    );
+
+    expect(result.generatedPassword).toBeDefined();
+    expect(result.generatedPassword).not.toBe('12345678');
+    expect(result.generatedPassword.length).toBeGreaterThanOrEqual(12);
+  });
 });

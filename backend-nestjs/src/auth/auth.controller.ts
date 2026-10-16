@@ -186,10 +186,13 @@ export class AuthController {
   @UseInterceptors(
     FileInterceptor('avatar', {
       storage: memoryStorage(),
+      limits: {
+        fileSize: 2 * 1024 * 1024, // 2MB limit to prevent memory exhaustion
+      },
       fileFilter: (req, file, callback) => {
-        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif)$/)) {
+        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/i)) {
           return callback(
-            new BadRequestException('Only image files are allowed!'),
+            new BadRequestException('Only image files (jpg, jpeg, png, gif, webp) are allowed!'),
             false,
           );
         }

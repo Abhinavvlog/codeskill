@@ -163,6 +163,7 @@ interface DSAAssessmentEditorProps {
     _id: string;
     questionIndex: number;
     question: string;
+    description?: string;
     topic: string;
     subtopic?: string;
     difficulty: string;
@@ -470,6 +471,13 @@ export default function DSAAssessmentEditor({
               {question.subtopic && <span>• {question.subtopic}</span>}
             </div>
           </div>
+
+          {question.description?.trim() && (
+            <section aria-label="Problem description" className="space-y-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Problem description</h3>
+              <div className="whitespace-pre-wrap break-words text-sm leading-7 text-foreground/90">{question.description}</div>
+            </section>
+          )}
 
           {/* Constraints Card */}
           <div className="rounded-xl border border-border bg-muted/30 p-3.5 space-y-2">

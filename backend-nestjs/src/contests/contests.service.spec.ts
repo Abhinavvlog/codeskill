@@ -228,6 +228,15 @@ it('does not resume a completed session or trust client session identity', async
     { id, status: 'InProgress' },
   );
 });
+it('throws ServiceUnavailableException and prevents silent score wipeout when score query fails (AUD-010)', async () => {
+  const { service, attempts, builder } = setup();
+  attempts.query.mockRejectedValueOnce(new Error('Connection pool exhausted'));
+  await expect(
+    service.submitAttempt(id, userId, 'real-session'),
+  ).rejects.toThrow('Connection pool exhausted');
+  // Crucial: attempt update to 'Submitted' with 0 score must NEVER have executed
+  expect(builder.update).not.toHaveBeenCalled();
+});
 it('records violations only for the authenticated active session and applies configured thresholds', async () => {
   const { service, attempts } = setup();
   attempts.query.mockResolvedValueOnce([{ warnings: 3, status: 'Terminated' }]);

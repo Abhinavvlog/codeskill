@@ -7,14 +7,14 @@ permissions:
   contents: read
 jobs:
   compatibility:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validate AWS deployment configuration checks
         run: bash .github/scripts/test-aws-deployment-config.sh
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: '**/package-lock.json'
       - name: Install backend

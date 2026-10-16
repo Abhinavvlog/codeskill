@@ -562,6 +562,8 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
       if (normalizeVerdict(result.status) === 'accepted') {
         setCelebrationCount(count => count + 1);
       }
+      setActiveTestCase(0);
+      setActiveBottomTab("console");
     } catch (err: any) {
       if (err.response?.status === 401 || err.response?.status === 403) {
         setRunResult({
@@ -576,7 +578,8 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
         setRunResult({
           status: "error",
           results: [],
-          logs: [err.response?.data?.message || err.message || "Failed to connect to the backend."],
+          runtime: 0,
+          logs: [err.response?.data?.message || err.message || "Failed to retrieve submission verdict."],
           passedCount: 0,
           totalCount: 0,
         });

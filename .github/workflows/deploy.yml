@@ -44,15 +44,15 @@ jobs:
   # ============================================================================
   test:
     name: Run Automated Tests & Type Checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: |
             backend-nestjs/package-lock.json
@@ -78,12 +78,12 @@ jobs:
   build-and-push:
     name: Build & Push Immutable Docker Images
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       deployment_tag: ${{ steps.determine-tag.outputs.tag }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Determine Deployment Tag
         id: determine-tag
@@ -95,10 +95,10 @@ jobs:
           fi
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Configure AWS Credentials (OIDC / Access Keys)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -110,20 +110,20 @@ jobs:
 
       - name: Build and Push Backend Docker Image
         if: github.event.inputs.service == 'all' || github.event.inputs.service == 'backend' || github.event_name == 'push'
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./backend-nestjs
           file: ./backend-nestjs/Dockerfile
           push: true
           tags: |
-            ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.determine-tag.outputs.tag }}
+            ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ steps.determine-tag.outputs.tag }}
             ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Build and Push Frontend Docker Image
         if: github.event.inputs.service == 'all' || github.event.inputs.service == 'frontend' || github.event_name == 'push'
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend-v2
           file: ./frontend-v2/Dockerfile
@@ -140,10 +140,10 @@ jobs:
   rollout:
     name: Rolling Auto Scaling Rollout & Verification
     needs: build-and-push
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

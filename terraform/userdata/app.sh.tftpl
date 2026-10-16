@@ -211,7 +211,8 @@ JWT_SECRET=${jwt_secret}
 JUDGE0_URL=${judge0_url}
 AWS_REGION=$AWS_REGION
 S3_BUCKET_NAME=${s3_bucket_name}
-CORS_ORIGIN=*
+CORS_ORIGIN=${app_public_url}
+FRONTEND_URL=${app_public_url}
 EOF
 
     cat << EOF > "$APP_DIR/frontend-v2/.env.local"
