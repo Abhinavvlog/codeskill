@@ -4,7 +4,7 @@
 # ==============================================================================
 
 # --- Stage 1: Build & Dependencies ---
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -15,8 +15,8 @@ COPY package*.json ./
 RUN npm ci --legacy-peer-deps
 
 COPY tsconfig*.json nest-cli.json ./
-COPY src/ ./src/
 COPY scripts/build.js ./scripts/build.js
+COPY src/ ./src/
 
 # Compile TypeScript
 RUN npm run build
@@ -25,7 +25,7 @@ RUN npm run build
 RUN npm prune --omit=dev --legacy-peer-deps
 
 # --- Stage 2: Production Runtime ---
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 
