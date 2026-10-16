@@ -96,13 +96,30 @@ describe('API Utils', () => {
         data: { id: 'user-1', name: 'Verified' },
       } as any);
 
-      await errorHandler(mockError);
+      // This test deliberately triggers a 401. Capture and assert its warning
+      // locally so Jest does not print an expected warning as a stack trace.
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const response = await errorHandler(mockError);
 
-      expect(localStorage.getItem('codeskill_token')).toBe('new-rotated-access-token');
-      expect(localStorage.getItem('codeskill_refresh_token')).toBe('new-rotated-refresh-token');
-
-      postSpy.mockRestore();
-      apiSpy.mockRestore();
+        expect(warnSpy).toHaveBeenCalledTimes(1);
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('[WARN] [APIClient]: API request failed: [401] /users/me'),
+          expect.objectContaining({ status: 401, url: '/users/me' }),
+        );
+        expect(response.data).toEqual({ id: 'user-1', name: 'Verified' });
+        expect(apiSpy).toHaveBeenCalledWith(expect.objectContaining({
+          url: '/users/me',
+          headers: { Authorization: 'Bearer new-rotated-access-token' },
+          _retry: true,
+        }));
+        expect(localStorage.getItem('codeskill_token')).toBe('new-rotated-access-token');
+        expect(localStorage.getItem('codeskill_refresh_token')).toBe('new-rotated-refresh-token');
+      } finally {
+        warnSpy.mockRestore();
+        postSpy.mockRestore();
+        apiSpy.mockRestore();
+      }
     });
   });
 });
