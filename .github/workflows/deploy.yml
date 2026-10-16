@@ -97,7 +97,23 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Configure AWS Credentials (OIDC / Access Keys)
+      - name: Validate AWS deployment authentication
+        id: aws-auth-config
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: bash .github/scripts/check-aws-deployment-config.sh
+
+      - name: Configure AWS Credentials with OIDC
+        if: steps.aws-auth-config.outputs.auth_mode == 'oidc'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS Credentials with access keys
+        if: steps.aws-auth-config.outputs.auth_mode == 'access_keys'
         uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -142,7 +158,23 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-24.04
     steps:
-      - name: Configure AWS Credentials
+      - name: Validate AWS deployment authentication
+        id: aws-auth-config
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: bash .github/scripts/check-aws-deployment-config.sh
+
+      - name: Configure AWS Credentials with OIDC
+        if: steps.aws-auth-config.outputs.auth_mode == 'oidc'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS Credentials with access keys
+        if: steps.aws-auth-config.outputs.auth_mode == 'access_keys'
         uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -153,25 +185,33 @@ jobs:
         id: refresh-frontend
         if: github.event.inputs.service == 'all' || github.event.inputs.service == 'frontend' || github.event_name == 'push'
         run: |
-          echo "Initiating rolling instance refresh for ${{ env.FRONTEND_ASG }}..."
-          REFRESH_ID=$(aws autoscaling start-instance-refresh \
-            --auto-scaling-group-name ${{ env.FRONTEND_ASG }} \
-            --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 180, "SkipMatching": false, "AutoRollback": true}' \
-            --region ${{ env.AWS_REGION }} \
-            --query 'InstanceRefreshId' --output text)
-          echo "refresh_id=$REFRESH_ID" >> "$GITHUB_OUTPUT"
+          set -Eeuo pipefail
+          asg="${{ env.FRONTEND_ASG }}"
+          refresh_id=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$asg" --region "$AWS_REGION" --query 'InstanceRefreshes[?Status==`Pending` || Status==`InProgress`].InstanceRefreshId | [0]' --output text)
+          if [[ -z "$refresh_id" || "$refresh_id" == "None" ]]; then
+            read -r lt_id lt_version < <(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$asg" --region "$AWS_REGION" --query 'AutoScalingGroups[0].LaunchTemplate.[LaunchTemplateId,Version]' --output text)
+            [[ -n "$lt_id" && -n "$lt_version" && "$lt_version" != "None" ]] || { echo "No launch template found for $asg" >&2; exit 1; }
+            desired=$(jq -cn --arg id "$lt_id" --arg version "$lt_version" '{LaunchTemplate:{LaunchTemplateId:$id,Version:$version}}')
+            refresh_id=$(aws autoscaling start-instance-refresh --auto-scaling-group-name "$asg" --desired-configuration "$desired" --preferences '{"MinHealthyPercentage":75,"MaxHealthyPercentage":125,"InstanceWarmup":180,"SkipMatching":false,"AutoRollback":true}' --region "$AWS_REGION" --query InstanceRefreshId --output text)
+          fi
+          echo "Monitoring ${asg} refresh ${refresh_id}"
+          echo "refresh_id=$refresh_id" >> "$GITHUB_OUTPUT"
 
       - name: Trigger Backend Auto Scaling Rolling Refresh
         id: refresh-backend
         if: github.event.inputs.service == 'all' || github.event.inputs.service == 'backend' || github.event_name == 'push'
         run: |
-          echo "Initiating rolling instance refresh for ${{ env.BACKEND_ASG }}..."
-          REFRESH_ID=$(aws autoscaling start-instance-refresh \
-            --auto-scaling-group-name ${{ env.BACKEND_ASG }} \
-            --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 180, "SkipMatching": false, "AutoRollback": true}' \
-            --region ${{ env.AWS_REGION }} \
-            --query 'InstanceRefreshId' --output text)
-          echo "refresh_id=$REFRESH_ID" >> "$GITHUB_OUTPUT"
+          set -Eeuo pipefail
+          asg="${{ env.BACKEND_ASG }}"
+          refresh_id=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$asg" --region "$AWS_REGION" --query 'InstanceRefreshes[?Status==`Pending` || Status==`InProgress`].InstanceRefreshId | [0]' --output text)
+          if [[ -z "$refresh_id" || "$refresh_id" == "None" ]]; then
+            read -r lt_id lt_version < <(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$asg" --region "$AWS_REGION" --query 'AutoScalingGroups[0].LaunchTemplate.[LaunchTemplateId,Version]' --output text)
+            [[ -n "$lt_id" && -n "$lt_version" && "$lt_version" != "None" ]] || { echo "No launch template found for $asg" >&2; exit 1; }
+            desired=$(jq -cn --arg id "$lt_id" --arg version "$lt_version" '{LaunchTemplate:{LaunchTemplateId:$id,Version:$version}}')
+            refresh_id=$(aws autoscaling start-instance-refresh --auto-scaling-group-name "$asg" --desired-configuration "$desired" --preferences '{"MinHealthyPercentage":75,"MaxHealthyPercentage":125,"InstanceWarmup":180,"SkipMatching":false,"AutoRollback":true}' --region "$AWS_REGION" --query InstanceRefreshId --output text)
+          fi
+          echo "Monitoring ${asg} refresh ${refresh_id}"
+          echo "refresh_id=$refresh_id" >> "$GITHUB_OUTPUT"
 
       - name: Wait for Auto Scaling refreshes to finish
         env:
@@ -216,12 +256,19 @@ jobs:
 
       - name: Verify Live Production Readiness Checks
         run: |
-          echo "Polling production domain readiness endpoints..."
+          set -Eeuo pipefail
+          check_endpoint() {
+            local name="$1" url="$2" status
+            status=$(curl -sS --connect-timeout 5 --max-time 15 -o /dev/null -w '%{http_code}' "$url") || {
+              echo "${name} readiness request failed" >&2
+              return 1
+            }
+            echo "${name} readiness HTTP ${status}"
+            [[ "$status" == "200" ]]
+          }
           for i in {1..20}; do
-            STATUS_FE=$(curl -s -o /dev/null -w "%{http_code}" https://codeskill.novaserve.cloud/health/ready || echo "000")
-            STATUS_BE=$(curl -s -o /dev/null -w "%{http_code}" https://codeskill.novaserve.cloud/api/health/ready || echo "000")
-            echo "Attempt $i: Frontend Readiness HTTP $STATUS_FE, Backend Readiness HTTP $STATUS_BE"
-            if [ "$STATUS_FE" = "200" ] && [ "$STATUS_BE" = "200" ]; then
+            echo "Readiness attempt ${i}/20"
+            if check_endpoint frontend "https://codeskill.novaserve.cloud/" && check_endpoint backend "https://codeskill.novaserve.cloud/api/health/ready"; then
               echo "Both Frontend and Backend passed live readiness verification."
               exit 0
             fi
