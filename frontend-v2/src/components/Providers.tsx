@@ -12,7 +12,27 @@ export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    // MediaPipe's WASM runtime writes this informational initialization message
+    // to console.error in some Chromium builds. Suppress only that exact line;
+    // it is not a face-detection failure and Next's dev overlay mislabels it.
+    const originalConsoleError = console.error;
+    const filteredConsoleError = (...args: unknown[]) => {
+      if (args.some((arg) => (typeof arg === "string" && arg.includes("Created TensorFlow Lite XNNPACK delegate for CPU.")) || (arg instanceof Error && arg.message.includes("Created TensorFlow Lite XNNPACK delegate for CPU.")))) return;
+      originalConsoleError.apply(console, args);
+    };
+    console.error = filteredConsoleError;
+
     const handleError = (event: ErrorEvent) => {
+      // Chromium can dispatch this benign layout diagnostic during resize-heavy
+      // exam pages. It does not represent an application exception.
+      if (event.message?.includes("ResizeObserver loop")) {
+        event.preventDefault();
+        return;
+      }
+      if (event.message?.includes("Created TensorFlow Lite XNNPACK delegate for CPU.")) {
+        event.preventDefault();
+        return;
+      }
       logger.error(
         `Uncaught client error: ${event.message}`,
         {
@@ -45,6 +65,7 @@ export function Providers({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener("error", handleError);
       window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+      if (console.error === filteredConsoleError) console.error = originalConsoleError;
     };
   }, []);
 

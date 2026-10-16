@@ -4,6 +4,7 @@ import axios from "axios";
 import { getBrowserApiBaseURL } from "@/lib/api-base-url";
 import { normalizeProblemQuery } from "@/lib/public-problems";
 import { logger } from "@/lib/logger";
+import { notifyMutationFailure, notifyMutationSuccess } from "@/lib/api-mutation-notifications";
 
 // Dynamically determine the correct API base URL
 const getDynamicBaseURL = (): string => {
@@ -73,6 +74,7 @@ api.interceptors.response.use(
     if (res.data) {
       normalizeIds(res.data);
     }
+    notifyMutationSuccess(res.config.url || "", res.config.method || "");
     return res;
   },
   (error) => {
@@ -82,6 +84,8 @@ api.interceptors.response.use(
       "unknown";
     const status = error.response?.status;
     const reqUrl = error.config?.url || "";
+
+    notifyMutationFailure(reqUrl, error.config?.method || "", error);
 
     if (status && status >= 400) {
       logger.warn(
@@ -115,6 +119,7 @@ api.interceptors.response.use(
       // Only clear token and redirect if NOT on an auth page, NOT during an auth request, and NOT on public pages
       if (!isAuthPage && !isAuthRequest) {
         localStorage.removeItem("codeskill_token");
+        window.dispatchEvent(new Event("codeskill:session-expired"));
         const isPublicPage = pathname === "/" || pathname === "/problems" || pathname.startsWith("/problems/");
         if (!isPublicPage) {
           window.location.href = "/login";

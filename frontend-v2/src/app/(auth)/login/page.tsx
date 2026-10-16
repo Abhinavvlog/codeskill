@@ -89,7 +89,7 @@ export default function AppLoginPage() {
       } else if (res?.user?.isAdmin) {
         window.location.href = "/admin/dashboard";
       } else if (res?.user?.isAssessmentStudent) {
-        window.location.href = "/assessments";
+        window.location.href = "/dashboard";
       } else {
         window.location.href = "/dashboard";
       }

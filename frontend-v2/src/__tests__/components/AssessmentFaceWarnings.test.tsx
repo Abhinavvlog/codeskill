@@ -1,6 +1,6 @@
 import React from "react";
 import "@testing-library/jest-dom";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import Page from "@/app/assessments/[id]/take/page";
 import { studentAssessmentsAPI } from "@/config/api";
 import { clearAssessmentFaceReference, setAssessmentFaceReference } from "@/lib/assessment-face-verification";
@@ -15,6 +15,7 @@ let mockFaceTick: (() => void) | null = null;
 jest.mock("react", () => ({ ...jest.requireActual("react"), use: () => ({ id: "exam" }) }));
 jest.mock("next/navigation", () => ({ useRouter: () => mockRouter }));
 jest.mock("@/config/api", () => ({ studentAssessmentsAPI: {
+  getOverview: jest.fn().mockResolvedValue({ data: { assessment: { proctoring: {} } } }),
   startAttempt: jest.fn(), submitAttempt: jest.fn(), saveProgress: jest.fn().mockResolvedValue({}),
 } }));
 jest.mock("@/lib/assessment-face-verification", () => ({
@@ -47,7 +48,7 @@ it("allows four face warnings and stops media and submits all responses exactly 
     startedAt: new Date().toISOString(), durationMinutes: 60,
     questions: [{ _id: "q1", question: "Choose an answer", questionType: "MCQ", options: ["Alpha", "Beta"] }],
   } });
-  jest.mocked(studentAssessmentsAPI.submitAttempt).mockImplementation(() => new Promise(() => {}));
+  jest.mocked(studentAssessmentsAPI.submitAttempt).mockResolvedValue({ data: {} } as any);
   render(<Page params={Promise.resolve({ id: "exam" })} />);
   fireEvent.click(screen.getByRole("button", { name: "Enter Fullscreen" }));
   expect(await screen.findByText("Choose an answer")).toBeInTheDocument();
@@ -66,10 +67,10 @@ it("allows four face warnings and stops media and submits all responses exactly 
   await sample("multiple-faces");
   await sample("multiple-faces");
   expect(studentAssessmentsAPI.submitAttempt).toHaveBeenCalledTimes(1);
-  expect(mockStopCamera).toHaveBeenCalledTimes(1);
   expect(studentAssessmentsAPI.submitAttempt).toHaveBeenCalledWith("exam", expect.objectContaining({
     violations: expect.arrayContaining([expect.objectContaining({ type: "multiple_faces" })]),
     responses: expect.arrayContaining([expect.objectContaining({ questionId: "q1" })]),
   }));
+  await waitFor(() => expect(mockStopCamera).toHaveBeenCalledTimes(1));
   expect(studentAssessmentsAPI.submitAttempt).toHaveBeenCalledTimes(1);
 });

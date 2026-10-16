@@ -39,7 +39,23 @@ async function getFaceLandmarker() {
 
 async function countFaces(snapshot: HTMLCanvasElement) {
   const landmarker = await getFaceLandmarker();
-  const result = landmarker.detect(snapshot);
+  // The MediaPipe CPU wasm runtime reports XNNPACK initialization as an
+  // error-level console message in some browsers. Next's dev overlay treats
+  // it as a fatal client error, so filter only this known informational log
+  // during the synchronous inference call.
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => {
+    if (args.some((arg) => typeof arg === "string" && arg.includes("Created TensorFlow Lite XNNPACK delegate for CPU."))) {
+      return;
+    }
+    originalConsoleError.apply(console, args);
+  };
+  let result;
+  try {
+    result = landmarker.detect(snapshot);
+  } finally {
+    console.error = originalConsoleError;
+  }
   return (result.faceLandmarks || []).length as number;
 }
 
@@ -49,7 +65,7 @@ async function getHuman() {
     // alone cannot establish whether two faces belong to the same person.
     // Import the ESM browser bundle explicitly: the package's default Node
     // entry depends on @tensorflow/tfjs-node, which is not a browser runtime.
-    humanPromise = import("../../node_modules/@vladmandic/human/dist/human.esm.js").then(async (humanModule) => {
+    humanPromise = import("@vladmandic/human").then(async (humanModule) => {
       const Human = (humanModule as unknown as { default: new (config: any) => any }).default;
       const human = new Human({
         modelBasePath: HUMAN_MODELS,

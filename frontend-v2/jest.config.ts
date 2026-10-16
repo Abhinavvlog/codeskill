@@ -15,6 +15,8 @@ const config: Config = {
   moduleNameMapper: {
     // Handle module aliases (this will be automatically configured for you soon)
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^prismjs/components/(.*)$': '<rootDir>/node_modules/prismjs/components/$1',
+    '^prismjs$': '<rootDir>/node_modules/prismjs/prism.js',
   },
 }
  

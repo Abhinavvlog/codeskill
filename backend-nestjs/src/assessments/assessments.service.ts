@@ -421,6 +421,7 @@ export class AssessmentsService {
       allowedAttempts:
         dto.allowedAttempts !== undefined ? Number(dto.allowedAttempts) : 1,
       proctoring: dto.proctoring || {
+        useCamera: true,
         enforceFullscreen: true,
         blockCopyPaste: true,
         detectTabSwitch: true,
@@ -500,25 +501,37 @@ export class AssessmentsService {
       throw new NotFoundException('Assessment not found');
     }
 
-    // Populate question details
-    let questionsList: Question[] = [];
-    if (assessment.questions && assessment.questions.length > 0) {
-      questionsList = await this.questionRepo.find({
-        where: [
-          { id: In(assessment.questions) },
-          { mongoId: In(assessment.questions) },
-        ],
-      });
-    }
+    // Resolve question details from both legacy top-level IDs and section references.
+    const questionIds = Array.from(new Set([
+      ...(assessment.questions || []).map(String),
+      ...(assessment.sections || []).flatMap((section) =>
+        (section.questions || []).map((question) => String(question.questionId)),
+      ),
+    ]));
+    const questionsList: Question[] = questionIds.length
+      ? await this.questionRepo.find({
+          where: [{ id: In(questionIds) }, { mongoId: In(questionIds) }],
+        })
+      : [];
 
-    const qMap = new Map(questionsList.map((q) => [q.id, { ...q, _id: q.id }]));
+    const qMap = new Map<string, Question & { _id: string }>();
+    questionsList.forEach((question) => {
+      const populated = { ...question, _id: question.id };
+      qMap.set(question.id, populated);
+      if (question.mongoId) qMap.set(question.mongoId, populated);
+    });
+    const orderedQuestions = questionIds
+      .map((questionId) => qMap.get(questionId))
+      .filter((question): question is Question & { _id: string } => Boolean(question))
+      .filter((question, index, questions) =>
+        questions.findIndex((item) => item.id === question.id) === index,
+      );
 
-    // Populate questions in sections if present
-    const sections = (assessment.sections || []).map((sec) => ({
-      ...sec,
-      questions: sec.questions.map((q) => ({
-        ...q,
-        questionId: qMap.get(String(q.questionId)) || q.questionId,
+    const sections = (assessment.sections || []).map((section) => ({
+      ...section,
+      questions: (section.questions || []).map((question) => ({
+        ...question,
+        questionId: qMap.get(String(question.questionId)) || question.questionId,
       })),
     }));
 
@@ -556,6 +569,7 @@ export class AssessmentsService {
     if (dto.title !== undefined) assessment.title = dto.title;
     if (dto.code !== undefined) assessment.code = dto.code.toUpperCase().trim();
     if (dto.description !== undefined) assessment.description = dto.description;
+    if (dto.instructions !== undefined) assessment.instructions = dto.instructions;
     if (dto.category !== undefined) assessment.category = dto.category;
     if (dto.durationMinutes !== undefined)
       assessment.durationMinutes = dto.durationMinutes;

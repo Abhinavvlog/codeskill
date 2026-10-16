@@ -186,6 +186,7 @@ interface DSAAssessmentEditorProps {
   onSave: (code: string, language: string, testCasesPassed: number, totalTestCases: number) => void | Promise<void>;
   onNext?: () => void;
   isLastQuestion?: boolean;
+  blockCopyPaste?: boolean;
 }
 
 export default function DSAAssessmentEditor({
@@ -197,6 +198,7 @@ export default function DSAAssessmentEditor({
   onDraftChange,
   onNext,
   isLastQuestion = false,
+  blockCopyPaste = true,
 }: DSAAssessmentEditorProps) {
   const { resolvedTheme } = useTheme();
   const initialLang = savedResponse?.language || question.language || "python";
@@ -578,14 +580,16 @@ export default function DSAAssessmentEditor({
               <span>Reset Boilerplate</span>
             </button>
 
-            <button
-              type="button"
-              onClick={handleCopyCode}
-              className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors"
-              title="Copy code"
-            >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-            </button>
+            {!blockCopyPaste && (
+              <button
+                type="button"
+                onClick={handleCopyCode}
+                className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors"
+                title="Copy code"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            )}
           </div>
         </div>
 

@@ -127,6 +127,7 @@ export class Assessment {
 
   @Column({ type: 'jsonb', default: {} })
   proctoring: {
+    useCamera?: boolean;
     enforceFullscreen?: boolean;
     blockCopyPaste?: boolean;
     detectTabSwitch?: boolean;

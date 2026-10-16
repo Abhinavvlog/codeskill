@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+set -euo pipefail
+exec > >(tee -a /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+echo "=========================================================="
+echo " Starting CodeSkill Judge0 Bootstrap (Cloud Map Discovery)"
+echo " Architecture: $(uname -m), Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "=========================================================="
+
+REGION="${aws_region}"
+CLOUD_MAP_SERVICE_ID="${judge0_service_id}"
+
+# 1. Install Docker & AWS CLI
+if command -v dnf &>/dev/null; then
+  dnf install -y --allowerasing docker aws-cli jq
+  systemctl enable --now docker
+elif command -v apt-get &>/dev/null; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -y
+  apt-get install -y docker.io awscli curl jq
+  systemctl enable --now docker
+fi
+
+systemctl enable --now amazon-ssm-agent || true
+
+# 2. Get Private IP and Instance ID via IMDSv2
+TOKEN=$(curl -s -S -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+INSTANCE_ID=$(curl -s -S -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+PRIVATE_IP=$(curl -s -S -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)
+
+echo "Instance ID: $INSTANCE_ID, Private IP: $PRIVATE_IP"
+
+# 3. Pull and Launch Judge0 Container
+JUDGE0_IMAGE="${judge0_image}"
+if [ -n "$JUDGE0_IMAGE" ] && [ "$JUDGE0_IMAGE" != "none" ]; then
+  ECR_REGISTRY="${ecr_registry}"
+  aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY" || true
+  if ! docker pull "$JUDGE0_IMAGE"; then
+    echo "ECR pull failed, falling back to public judge0/judge0:latest"
+    JUDGE0_IMAGE="judge0/judge0:latest"
+    docker pull "$JUDGE0_IMAGE" || true
+  fi
+else
+  JUDGE0_IMAGE="judge0/judge0:latest"
+  docker pull "$JUDGE0_IMAGE" || true
+fi
+
+cat << EOF > /etc/systemd/system/codeskill-judge0.service
+[Unit]
+Description=CodeSkill Judge0 Online Judge Engine
+After=docker.service
+Requires=docker.service
+
+[Service]
+TimeoutStartSec=0
+Restart=always
+RestartSec=5
+ExecStartPre=-/usr/bin/docker stop codeskill-judge0
+ExecStartPre=-/usr/bin/docker rm codeskill-judge0
+ExecStart=/usr/bin/docker run --rm --name codeskill-judge0 \\
+  -p 2358:2358 \\
+  --privileged \\
+  $JUDGE0_IMAGE
+ExecStop=/usr/bin/docker stop -t 15 codeskill-judge0
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now codeskill-judge0.service || true
+
+# 4. Register with AWS Cloud Map Private DNS Service
+if [ -n "$CLOUD_MAP_SERVICE_ID" ]; then
+  echo "Registering $INSTANCE_ID ($PRIVATE_IP) with Cloud Map Service $CLOUD_MAP_SERVICE_ID..."
+  aws servicediscovery register-instance \
+    --service-id "$CLOUD_MAP_SERVICE_ID" \
+    --instance-id "$INSTANCE_ID" \
+    --attributes AWS_INSTANCE_IPV4="$PRIVATE_IP",AWS_INSTANCE_PORT=2358 \
+    --region "$REGION" || true
+fi
+
+echo "CodeSkill Judge0 bootstrap complete at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"

@@ -22,6 +22,7 @@ export type AssessmentSection = {
 };
 
 export type ProctoringSettings = {
+  useCamera: boolean;
   enforceFullscreen: boolean;
   blockCopyPaste: boolean;
   detectTabSwitch: boolean;
@@ -65,6 +66,7 @@ interface AssessmentStore {
 }
 
 const defaultProctoring: ProctoringSettings = {
+  useCamera: true,
   enforceFullscreen: true,
   blockCopyPaste: true,
   detectTabSwitch: true,

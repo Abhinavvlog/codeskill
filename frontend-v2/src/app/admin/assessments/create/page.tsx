@@ -512,7 +512,11 @@ function AssessmentBuilder() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 pt-2">
+            <label className="flex items-center gap-3 p-3 rounded-xl border border-border bg-background cursor-pointer">
+              <input type="checkbox" checked={store.proctoring.useCamera} onChange={e => store.setProctoring({ useCamera: e.target.checked })} className="rounded text-primary focus:ring-primary w-4 h-4" />
+              <span className="text-sm font-semibold">Use Camera &amp; Microphone</span>
+            </label>
             <label className="flex items-center gap-3 p-3 rounded-xl border border-border bg-background cursor-pointer">
               <input type="checkbox" checked={store.proctoring.enforceFullscreen} onChange={e => store.setProctoring({ enforceFullscreen: e.target.checked })} className="rounded text-primary focus:ring-primary w-4 h-4" />
               <span className="text-sm font-semibold">Enforce Fullscreen</span>

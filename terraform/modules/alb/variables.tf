@@ -31,10 +31,16 @@ variable "ssl_policy" {
   default     = "ELBSecurityPolicy-TLS13-1-2-2021-06"
 }
 
-variable "health_check_path" {
-  description = "Health check path for application target group"
+variable "frontend_health_check_path" {
+  description = "Health check path for frontend readiness target group"
   type        = string
-  default     = "/healthz"
+  default     = "/health/ready"
+}
+
+variable "backend_health_check_path" {
+  description = "Health check path for backend readiness target group"
+  type        = string
+  default     = "/api/health/ready"
 }
 
 variable "health_check_matcher" {
@@ -62,7 +68,7 @@ variable "enable_deletion_protection" {
 }
 
 variable "target_group_name" {
-  description = "Custom name for the application target group. If empty, defaults to name_prefix-tg"
+  description = "Custom name for the application target group. If empty, defaults to name_prefix-fe-tg"
   type        = string
   default     = ""
 }
@@ -72,4 +78,3 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
-
