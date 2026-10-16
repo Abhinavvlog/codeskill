@@ -40,12 +40,11 @@ export function useAntiCheatMaster(
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:5001");
     const newSocket = io(wsUrl, {
       path: "/socket.io",
-      auth: () => ({ token: `Bearer ${localStorage.getItem("codeskill_token") || ""}` }),
-      withCredentials: true,
       auth: {
-        token: token ? `Bearer ${token}` : undefined,
+        token: token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : undefined,
       },
-      extraHeaders: token ? { Authorization: `Bearer ${token}` } : {},
+      withCredentials: true,
+      extraHeaders: token ? { Authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}` } : {},
     });
 
     newSocket.on("connect", () => {

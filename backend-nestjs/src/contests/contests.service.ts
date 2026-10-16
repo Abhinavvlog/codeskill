@@ -297,6 +297,15 @@ export class ContestsService {
     return contest;
   }
 
+  /** Return only the sanitized data needed to render the start gate. */
+  async getStartContext(id: string, userId: string) {
+    const contest = await this.eligibleContest(id, userId);
+    return {
+      contest: this.safeContest(contest),
+      antiCheatConfig: contest.antiCheatConfig as Record<string, unknown>,
+    };
+  }
+
   async startAttempt(id: string, userId: string) {
     const contest = await this.eligibleContest(id, userId);
     const now = Date.now();
