@@ -6,7 +6,7 @@ import { MetricsService } from './metrics.service';
 
 @ApiTags('Observability & Metrics')
 @SkipThrottle()
-@Controller('api/metrics')
+@Controller(['metrics', 'api/metrics'])
 export class MetricsController {
   constructor(private readonly metricsService: MetricsService) {}
 

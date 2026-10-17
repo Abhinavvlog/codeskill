@@ -89,6 +89,12 @@ function EditQuestionContent() {
 
         const rawType = data.questionType || (Array.isArray(data.options) && data.options.length ? "MCQ" : "DSA");
         const qType = normalizeQuestionType(rawType, "DSA");
+        const isMcq = ["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE", "single_choice", "multiple_choice", "true_false"].includes(qType);
+        const savedSlug = data.url_slug || data.slug;
+        const slugFromTitle = String(data.title || data.question || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/(^-|-$)/g, "");
         const storedVisibility = String(data.visibility || data.metadata?.visibility || "").trim().toLowerCase();
         const visibility = ["public", "published"].includes(storedVisibility) ? "Published" : storedVisibility === "private" ? "Private" : "Draft";
         const contestOnly = typeof data.contestOnly === "boolean" ? data.contestOnly : data.metadata?.contestOnly === true;
@@ -103,7 +109,7 @@ function EditQuestionContent() {
         const mappedState: any = {
           metadata: {
             title: data.title || data.question || "",
-            slug: data.slug || "",
+            slug: savedSlug || (isMcq ? slugFromTitle : ""),
             difficulty: (data.difficulty ? data.difficulty.charAt(0).toUpperCase() + data.difficulty.slice(1).toLowerCase() : "Easy"),
             categories: getTopicCategories(data),
             tags: data.tags || [],
@@ -126,7 +132,9 @@ function EditQuestionContent() {
             keywords: data.keywords || [],
           },
           statement: {
-            description: data.problemStatement || data.statement?.description || data.question || "",
+            description: ["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE", "single_choice", "multiple_choice", "true_false"].includes(qType)
+              ? data.question || data.title || ""
+              : data.problemStatement || data.statement?.description || data.question || "",
             inputFormat: data.inputFormat || data.statement?.inputFormat || "",
             outputFormat: data.outputFormat || data.statement?.outputFormat || "",
             constraints: constraintsString,
@@ -247,8 +255,9 @@ function EditQuestionContent() {
   };
 
   const handleValidate = () => {
-    if (!store.metadata.title.trim() || !store.metadata.slug.trim()) {
-      addToast("error", "Validation Failed", "Question Title and URL Slug are required.");
+    const isMcq = ["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType);
+    if (!store.metadata.title.trim() || !store.metadata.slug.trim() || (isMcq && !store.statement.description.trim())) {
+      addToast("error", "Validation Failed", isMcq ? "Title, URL Slug, and Question are required." : "Question Title and URL Slug are required.");
       scrollToSection("basic-info");
       return false;
     }
@@ -288,9 +297,10 @@ function EditQuestionContent() {
       const formattedConstraints = formatConstraints(store.statement.constraints);
 
       const payload: any = {
-        question: store.metadata.title,
+        question: ["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType) ? store.statement.description : store.metadata.title,
         title: store.metadata.title,
         slug: store.metadata.slug,
+        ...(["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType) ? { url_slug: store.metadata.slug } : {}),
         visibility,
         contestOnly: store.publishing.contestOnly,
         topic: store.metadata.categories[0] || "General",

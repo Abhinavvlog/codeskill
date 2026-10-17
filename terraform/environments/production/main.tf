@@ -327,7 +327,7 @@ module "frontend_asg" {
   health_check_type         = "ELB"
   health_check_grace_period = 180
   min_healthy_percentage    = 50
-  instance_warmup           = 180
+  instance_warmup           = var.asg_instance_warmup
 
   user_data = templatefile("${path.module}/userdata/frontend.sh.tftpl", {
     aws_region            = var.aws_region
@@ -363,7 +363,7 @@ module "backend_asg" {
   health_check_type         = "ELB"
   health_check_grace_period = 180
   min_healthy_percentage    = 50
-  instance_warmup           = 180
+  instance_warmup           = var.asg_instance_warmup
 
   user_data = templatefile("${path.module}/userdata/backend.sh.tftpl", {
     aws_region                 = var.aws_region

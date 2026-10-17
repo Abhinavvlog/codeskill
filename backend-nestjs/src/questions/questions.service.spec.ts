@@ -3,6 +3,7 @@ jest.mock('@nestjs/typeorm', () => ({
 }));
 
 import { BadRequestException } from '@nestjs/common';
+import * as XLSX from 'xlsx';
 import { QuestionsService } from './questions.service';
 
 describe('QuestionsService - True/False Questions Handling', () => {
@@ -18,6 +19,7 @@ describe('QuestionsService - True/False Questions Handling', () => {
       create: jest.fn((dto) => ({ id: 'question-uuid-1', ...dto })),
       save: jest.fn(async (entity) => ({ id: 'question-uuid-1', ...entity })),
       findOne: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
       count: jest.fn().mockResolvedValue(0),
       createQueryBuilder: jest.fn(),
       query: jest.fn(),
@@ -267,6 +269,148 @@ describe('QuestionsService - True/False Questions Handling', () => {
   });
 
   describe('Preserve Multiple Choice Questions', () => {
+    it('returns the persisted MCQ slug alias and options from the detail lookup', async () => {
+      mockQuestionRepo.findOne.mockResolvedValue({
+        id: '11111111-1111-1111-1111-111111111111',
+        title: 'Java Inheritance',
+        slug: 'java-inheritance',
+        question: 'Which statement describes inheritance?',
+        questionType: 'MCQ',
+        options: ['A class inherits members', 'Inheritance prevents reuse'],
+        correctAnswer: 0,
+      });
+
+      const result = await service.findById('11111111-1111-1111-1111-111111111111');
+      expect(result).toEqual(expect.objectContaining({
+        url_slug: 'java-inheritance',
+        options: ['A class inherits members', 'Inheritance prevents reuse'],
+        correctAnswer: 0,
+      }));
+    });
+
+    it('imports MCQ slug and options through validation and persistence', async () => {
+      const sheet = XLSX.utils.json_to_sheet([{
+        title: 'Java Inheritance',
+        url_slug: 'java-inheritance',
+        question: 'Which statement correctly describes inheritance in Java?',
+        question_type: 'single_choice',
+        topic: 'Java',
+        option_a: 'A class inherits members from another class',
+        option_b: 'Inheritance prevents code reuse',
+        option_c: 'Java classes inherit from multiple classes directly',
+        option_d: 'Inheritance applies only to interfaces',
+        correct_answer: 'A',
+      }]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, sheet, 'MCQs');
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+      const preview = await service.parseAndValidateQuestionsImport(buffer);
+
+      expect(preview.validRows).toHaveLength(1);
+      expect(preview.validRows[0]).toEqual(expect.objectContaining({
+        title: 'Java Inheritance',
+        slug: 'java-inheritance',
+        url_slug: 'java-inheritance',
+        question: 'Which statement correctly describes inheritance in Java?',
+        options: [
+          expect.objectContaining({ text: 'A class inherits members from another class', isCorrect: true }),
+          expect.objectContaining({ text: 'Inheritance prevents code reuse', isCorrect: false }),
+          expect.objectContaining({ text: 'Java classes inherit from multiple classes directly', isCorrect: false }),
+          expect.objectContaining({ text: 'Inheritance applies only to interfaces', isCorrect: false }),
+        ],
+      }));
+
+      const saved: any[] = [];
+      const manager = {
+        findOne: jest.fn().mockResolvedValue(null),
+        create: jest.fn((_entity, value) => value),
+        save: jest.fn(async (value) => { saved.push(value); return value; }),
+      };
+      mockQuestionRepo.manager = { transaction: (callback) => callback(manager) };
+      await service.confirmQuestionsImport(preview.validRows, mockAdminUser);
+      expect(saved[0]).toEqual(expect.objectContaining({
+        title: 'Java Inheritance',
+        slug: 'java-inheritance',
+        question: 'Which statement correctly describes inheritance in Java?',
+        options: [
+          'A class inherits members from another class',
+          'Inheritance prevents code reuse',
+          'Java classes inherit from multiple classes directly',
+          'Inheritance applies only to interfaces',
+        ],
+        correctAnswer: 0,
+      }));
+    });
+
+    it('generates a lowercase hyphenated MCQ slug when the CSV omits one', async () => {
+      const collision = {
+        id: 'existing-question',
+        question: 'A different question',
+        questionType: 'MCQ',
+        topic: 'Java',
+        slug: 'java-inheritance-basics',
+        options: [],
+      };
+      mockQuestionRepo.find.mockResolvedValueOnce([collision]).mockResolvedValueOnce([collision]);
+      const sheet = XLSX.utils.json_to_sheet([{
+        title: 'Java Inheritance Basics',
+        question: 'What is inheritance?',
+        question_type: 'single_choice',
+        topic: 'Java', option_a: 'A', option_b: 'B', correct_answer: 'A',
+      }]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, sheet, 'MCQs');
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+      const preview = await service.parseAndValidateQuestionsImport(buffer);
+      expect(preview.validRows[0].slug).toBe('java-inheritance-basics-2');
+    });
+
+    it('persists an MCQ title and slug separately from its student-facing question', async () => {
+      const result = await service.create({
+        title: 'BST Search Complexity',
+        url_slug: 'bst-search-complexity',
+        question: 'What is the worst-case search time in a balanced BST?',
+        topic: 'Data Structures',
+        questionType: 'MCQ',
+        options: [
+          { text: 'O(1)', isCorrect: false },
+          { text: 'O(log n)', isCorrect: true },
+        ],
+      } as any, mockAdminUser);
+
+      expect(result).toEqual(expect.objectContaining({
+        title: 'BST Search Complexity',
+        slug: 'bst-search-complexity',
+        url_slug: 'bst-search-complexity',
+        question: 'What is the worst-case search time in a balanced BST?',
+      }));
+    });
+
+    it('updates an MCQ title and url_slug without replacing an omitted statement', async () => {
+      mockQuestionRepo.findOne.mockResolvedValue({
+        id: 'question-uuid-1',
+        title: 'Java Inheritance',
+        slug: 'java-inheritance',
+        question: 'Which statement correctly describes inheritance in Java?',
+        questionType: 'MCQ',
+        topic: 'Java',
+        options: ['A', 'B'],
+        metadata: {},
+      });
+
+      await service.update('question-uuid-1', {
+        title: 'Java Class Inheritance',
+        url_slug: 'java-class-inheritance',
+      } as any, mockAdminUser);
+
+      expect(mockQuestionRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Java Class Inheritance',
+        slug: 'java-class-inheritance',
+        question: 'Which statement correctly describes inheritance in Java?',
+        url_slug: 'java-class-inheritance',
+      }));
+    });
+
     it('should allow multiple choice question with 4 configurable options', async () => {
       const dto: any = {
         question: 'Which of the following are sorting algorithms?',
@@ -304,6 +448,19 @@ describe('QuestionsService - True/False Questions Handling', () => {
       mockQuestionRepo.findOne.mockResolvedValue({ id: 'question-uuid-1', question: 'Task', questionType: 'DSA', topic: 'Arrays', options: [], metadata: { categories: ['Arrays'], imported: true } });
       await service.update('question-uuid-1', { categories: ['Trees', 'Graphs'], questionType: 'CODE_OUTPUT' }, mockAdminUser);
       expect(mockQuestionRepo.save).toHaveBeenCalledWith(expect.objectContaining({ questionType: 'CODE_OUTPUT', topic: 'Trees', metadata: { categories: ['Trees', 'Graphs'], imported: true } }));
+    });
+
+    it('preserves existing coding title/slug update behavior', async () => {
+      mockQuestionRepo.findOne.mockResolvedValue({
+        id: 'question-uuid-1', question: 'Original coding prompt', questionType: 'DSA',
+        title: 'Original coding title', slug: 'original-coding-slug', options: [],
+      });
+      await service.update('question-uuid-1', {
+        title: 'Changed title', slug: 'changed-title', questionType: 'DSA',
+      } as any, mockAdminUser);
+      expect(mockQuestionRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        question: 'Changed title', title: 'Changed title', slug: 'changed-title',
+      }));
     });
 
     it('keeps legacy topic-only creates compatible', async () => {

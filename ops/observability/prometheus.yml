@@ -20,8 +20,9 @@ scrape_configs:
     metrics_path: '/api/metrics'
     static_configs:
       - targets:
-          - 'host.docker.internal:5001'
+          - '127.0.0.1:5001'
           - 'localhost:5001'
+          - 'host.docker.internal:5001'
           - 'backend.codeskill.internal:5001'
 
   - job_name: 'postgres-exporter'

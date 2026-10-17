@@ -688,7 +688,9 @@ export class ExecutionService {
       }
     });
     await Promise.all(workers);
-    if (failure) throw failure;
+    if (failure) {
+      throw failure as Error;
+    }
     // Compilation is independent of stdin. Keep every case accounted for, but
     // do not execute the remaining cases or invent runtime/memory measurements.
     const recordedCompileError = compileError as TestCaseResult | null;

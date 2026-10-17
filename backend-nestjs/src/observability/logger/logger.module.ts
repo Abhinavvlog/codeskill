@@ -17,8 +17,16 @@ import { RequestContextService } from '../context/request-context.service';
 
         // Enable Axiom Free Tier transport only when token is configured
         if (process.env.AXIOM_TOKEN && process.env.AXIOM_DATASET) {
+          const axiomTarget = (() => {
+            try {
+              return require.resolve('@axiomhq/pino');
+            } catch {
+              return '@axiomhq/pino';
+            }
+          })();
+
           targets.push({
-            target: '@axiomhq/pino',
+            target: axiomTarget,
             level: process.env.LOG_LEVEL || 'info',
             options: {
               dataset: process.env.AXIOM_DATASET,

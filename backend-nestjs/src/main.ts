@@ -26,31 +26,49 @@ async function bootstrap() {
     winston.format.json(),
   );
 
+  const winstonTransports: winston.transport[] = [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.timestamp({ format: 'HH:mm:ss' }),
+        winston.format.printf(({ timestamp, level, message, context, stack }) => {
+          return `[${timestamp}] [${level}] ${context ? `[${context}] ` : ''}${message}${stack ? `\n${stack}` : ''}`;
+        }),
+      ),
+    }),
+    new winston.transports.File({
+      filename: path.join(logDir, 'error.log'),
+      level: 'error',
+      format: fileFormat,
+      maxsize: 10 * 1024 * 1024, // 10MB
+      maxFiles: 5,
+    }),
+    new winston.transports.File({
+      filename: path.join(logDir, 'combined.log'),
+      format: fileFormat,
+      maxsize: 20 * 1024 * 1024, // 20MB
+      maxFiles: 5,
+    }),
+  ];
+
+  if (process.env.AXIOM_TOKEN && process.env.AXIOM_DATASET) {
+    try {
+      const { AxiomWinstonTransport } = require('./observability/logger/axiom.winston-transport');
+      winstonTransports.push(
+        new AxiomWinstonTransport({
+          dataset: process.env.AXIOM_DATASET,
+          token: process.env.AXIOM_TOKEN,
+          edgeUrl: process.env.AXIOM_EDGE_URL || 'https://eu-central-1.aws.edge.axiom.co',
+          service: 'codeskill-backend',
+        }),
+      );
+    } catch {
+      // Fail-open if transport cannot be loaded
+    }
+  }
+
   const logger = WinstonModule.createLogger({
-    transports: [
-      new winston.transports.Console({
-        format: winston.format.combine(
-          winston.format.colorize(),
-          winston.format.timestamp({ format: 'HH:mm:ss' }),
-          winston.format.printf(({ timestamp, level, message, context, stack }) => {
-            return `[${timestamp}] [${level}] ${context ? `[${context}] ` : ''}${message}${stack ? `\n${stack}` : ''}`;
-          }),
-        ),
-      }),
-      new winston.transports.File({
-        filename: path.join(logDir, 'error.log'),
-        level: 'error',
-        format: fileFormat,
-        maxsize: 10 * 1024 * 1024, // 10MB
-        maxFiles: 5,
-      }),
-      new winston.transports.File({
-        filename: path.join(logDir, 'combined.log'),
-        format: fileFormat,
-        maxsize: 20 * 1024 * 1024, // 20MB
-        maxFiles: 5,
-      }),
-    ],
+    transports: winstonTransports,
   });
 
   process.on('unhandledRejection', (reason: any) => {

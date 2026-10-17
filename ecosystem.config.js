@@ -1,6 +1,14 @@
 const fs = require('fs');
 const path = require('path');
 
+// Ensure root logs directory exists so PM2 log files never fail to attach
+const logsDir = path.join(__dirname, 'logs');
+if (!fs.existsSync(logsDir)) {
+  try {
+    fs.mkdirSync(logsDir, { recursive: true });
+  } catch {}
+}
+
 const backendScript = fs.existsSync(path.join(__dirname, 'backend-nestjs/dist/src/main.js')) && !fs.existsSync(path.join(__dirname, 'backend-nestjs/dist/main.js'))
   ? 'dist/src/main.js'
   : 'dist/main.js';
@@ -16,6 +24,9 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: "1G",
+      kill_timeout: 5000,
+      min_uptime: "5s",
+      max_restarts: 10,
       env: {
         NODE_ENV: "production",
         PORT: 5001,
@@ -37,6 +48,9 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: "768M",
+      kill_timeout: 8000,
+      min_uptime: "5s",
+      max_restarts: 10,
       env: {
         NODE_ENV: "production",
         PROCESS_ROLE: "judge",
@@ -59,6 +73,9 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: "1G",
+      kill_timeout: 5000,
+      min_uptime: "5s",
+      max_restarts: 10,
       env: {
         NODE_ENV: "production",
         PORT: 3000,

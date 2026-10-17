@@ -19,7 +19,8 @@ const inputClass =
 const labelClass = "text-[13px] font-medium text-gray-700 dark:text-slate-300";
 
 export default function BasicInfo({ practice = false }: { practice?: boolean }) {
-  const { metadata, updateMetadata, updatePublishing } = useQuestionEditorStore();
+  const { metadata, statement, updateMetadata, updateStatement, updatePublishing } = useQuestionEditorStore();
+  const isMcq = ["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(metadata.questionType);
   const [tagInput, setTagInput] = useState("");
   const [showCategories, setShowCategories] = useState(false);
 
@@ -70,11 +71,11 @@ export default function BasicInfo({ practice = false }: { practice?: boolean }) 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div className="space-y-1.5">
             <label className={labelClass}>
-              Question Title <span className="text-red-500">*</span>
+              {isMcq ? "Title" : "Question Title"} <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
-              aria-label="Question Title"
+              aria-label={isMcq ? "Title" : "Question Title"}
               value={metadata.title}
               onChange={handleTitleChange}
               placeholder="e.g. Two Sum"
@@ -103,6 +104,19 @@ export default function BasicInfo({ practice = false }: { practice?: boolean }) 
             )}
           </div>
         </div>
+
+        {isMcq && (
+          <div className="space-y-1.5">
+            <label className={labelClass}>Question <span className="text-red-500">*</span></label>
+            <textarea
+              value={statement.description}
+              onChange={(e) => updateStatement({ description: e.target.value })}
+              placeholder="Enter the question shown to students"
+              rows={4}
+              className={inputClass}
+            />
+          </div>
+        )}
 
         {/* Row 2: Type, Difficulty + Visibility */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
