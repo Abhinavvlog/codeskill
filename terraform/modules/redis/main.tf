@@ -87,6 +87,6 @@ resource "aws_elasticache_replication_group" "main" {
   )
 
   lifecycle {
-    ignore_changes = [num_node_groups]
+    ignore_changes = [num_node_groups, auth_token, auth_token_update_strategy]
   }
 }

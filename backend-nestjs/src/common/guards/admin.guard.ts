@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 
-const ADMIN_ROLES = [
+export const ADMIN_ROLES = [
   'admin',
   'super_admin',
   'student_admin',

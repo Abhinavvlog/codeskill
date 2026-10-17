@@ -153,25 +153,141 @@ jobs:
         id: refresh-frontend
         if: github.event.inputs.service == 'all' || github.event.inputs.service == 'frontend' || github.event_name == 'push'
         run: |
-          echo "Initiating rolling instance refresh for ${{ env.FRONTEND_ASG }}..."
-          REFRESH_ID=$(aws autoscaling start-instance-refresh \
-            --auto-scaling-group-name ${{ env.FRONTEND_ASG }} \
-            --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 180, "SkipMatching": false, "AutoRollback": true}' \
-            --region ${{ env.AWS_REGION }} \
-            --query 'InstanceRefreshId' --output text)
-          echo "refresh_id=$REFRESH_ID" >> "$GITHUB_OUTPUT"
+          set -Eeuo pipefail
+          asg="${{ env.FRONTEND_ASG }}"
+          read -r latest_status latest_id < <(aws autoscaling describe-instance-refreshes \
+            --auto-scaling-group-name "$asg" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'InstanceRefreshes[0].[Status,InstanceRefreshId]' \
+            --output text || echo "None None")
+
+          case "$latest_status" in
+            Successful|Failed|Cancelled|RollbackSuccessful|RollbackFailed|None|"")
+              echo "No active instance refresh blocking ${asg} (latest: ${latest_status:-none})"
+              ;;
+            *)
+              echo "Found active instance refresh ${latest_id} for ${asg} (status: ${latest_status}). Cancelling to roll out latest build..."
+              aws autoscaling cancel-instance-refresh --auto-scaling-group-name "$asg" --region "${{ env.AWS_REGION }}" || true
+              for i in {1..30}; do
+                st=$(aws autoscaling describe-instance-refreshes \
+                  --auto-scaling-group-name "$asg" \
+                  --instance-refresh-ids "$latest_id" \
+                  --region "${{ env.AWS_REGION }}" \
+                  --query 'InstanceRefreshes[0].Status' --output text || echo "")
+                echo "Waiting for refresh ${latest_id} cancellation (status: $st)..."
+                case "$st" in
+                  Cancelled|Failed|Successful|RollbackSuccessful|RollbackFailed|"")
+                    break
+                    ;;
+                esac
+                sleep 5
+              done
+              ;;
+          esac
+
+          echo "Initiating rolling instance refresh for ${asg}..."
+          read -r lt_id lt_version < <(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$asg" --region "${{ env.AWS_REGION }}" --query 'AutoScalingGroups[0].LaunchTemplate.[LaunchTemplateId,Version]' --output text || true)
+          desired=""
+          if [[ -n "$lt_id" && -n "$lt_version" && "$lt_version" != "None" ]]; then
+            desired=$(jq -cn --arg id "$lt_id" --arg version "$lt_version" '{LaunchTemplate:{LaunchTemplateId:$id,Version:$version}}')
+          fi
+
+          refresh_id=""
+          for attempt in {1..12}; do
+            cmd=(aws autoscaling start-instance-refresh --auto-scaling-group-name "$asg" --region "${{ env.AWS_REGION }}" --query 'InstanceRefreshId' --output text)
+            if [[ -n "$desired" ]]; then
+              cmd+=(--desired-configuration "$desired" --preferences '{"MinHealthyPercentage": 0, "MaxHealthyPercentage": 100, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": true}')
+            else
+              cmd+=(--preferences '{"MinHealthyPercentage": 0, "MaxHealthyPercentage": 100, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": false}')
+            fi
+
+            out=$("${cmd[@]}" 2>&1) && { refresh_id="$out"; break; }
+            if echo "$out" | grep -qi "InstanceRefreshInProgress"; then
+              echo "Instance refresh state still settling, retrying in 5s (attempt $attempt/12)..."
+              sleep 5
+            else
+              echo "$out" >&2
+              exit 1
+            fi
+          done
+
+          if [[ -z "$refresh_id" ]]; then
+            echo "Failed to initiate instance refresh for ${asg}" >&2
+            exit 1
+          fi
+
+          echo "Initiated ${asg} refresh ${refresh_id}"
+          echo "refresh_id=$refresh_id" >> "$GITHUB_OUTPUT"
 
       - name: Trigger Backend Auto Scaling Rolling Refresh
         id: refresh-backend
         if: github.event.inputs.service == 'all' || github.event.inputs.service == 'backend' || github.event_name == 'push'
         run: |
-          echo "Initiating rolling instance refresh for ${{ env.BACKEND_ASG }}..."
-          REFRESH_ID=$(aws autoscaling start-instance-refresh \
-            --auto-scaling-group-name ${{ env.BACKEND_ASG }} \
-            --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 180, "SkipMatching": false, "AutoRollback": true}' \
-            --region ${{ env.AWS_REGION }} \
-            --query 'InstanceRefreshId' --output text)
-          echo "refresh_id=$REFRESH_ID" >> "$GITHUB_OUTPUT"
+          set -Eeuo pipefail
+          asg="${{ env.BACKEND_ASG }}"
+          read -r latest_status latest_id < <(aws autoscaling describe-instance-refreshes \
+            --auto-scaling-group-name "$asg" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'InstanceRefreshes[0].[Status,InstanceRefreshId]' \
+            --output text || echo "None None")
+
+          case "$latest_status" in
+            Successful|Failed|Cancelled|RollbackSuccessful|RollbackFailed|None|"")
+              echo "No active instance refresh blocking ${asg} (latest: ${latest_status:-none})"
+              ;;
+            *)
+              echo "Found active instance refresh ${latest_id} for ${asg} (status: ${latest_status}). Cancelling to roll out latest build..."
+              aws autoscaling cancel-instance-refresh --auto-scaling-group-name "$asg" --region "${{ env.AWS_REGION }}" || true
+              for i in {1..30}; do
+                st=$(aws autoscaling describe-instance-refreshes \
+                  --auto-scaling-group-name "$asg" \
+                  --instance-refresh-ids "$latest_id" \
+                  --region "${{ env.AWS_REGION }}" \
+                  --query 'InstanceRefreshes[0].Status' --output text || echo "")
+                echo "Waiting for refresh ${latest_id} cancellation (status: $st)..."
+                case "$st" in
+                  Cancelled|Failed|Successful|RollbackSuccessful|RollbackFailed|"")
+                    break
+                    ;;
+                esac
+                sleep 5
+              done
+              ;;
+          esac
+
+          echo "Initiating rolling instance refresh for ${asg}..."
+          read -r lt_id lt_version < <(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$asg" --region "${{ env.AWS_REGION }}" --query 'AutoScalingGroups[0].LaunchTemplate.[LaunchTemplateId,Version]' --output text || true)
+          desired=""
+          if [[ -n "$lt_id" && -n "$lt_version" && "$lt_version" != "None" ]]; then
+            desired=$(jq -cn --arg id "$lt_id" --arg version "$lt_version" '{LaunchTemplate:{LaunchTemplateId:$id,Version:$version}}')
+          fi
+
+          refresh_id=""
+          for attempt in {1..12}; do
+            cmd=(aws autoscaling start-instance-refresh --auto-scaling-group-name "$asg" --region "${{ env.AWS_REGION }}" --query 'InstanceRefreshId' --output text)
+            if [[ -n "$desired" ]]; then
+              cmd+=(--desired-configuration "$desired" --preferences '{"MinHealthyPercentage": 0, "MaxHealthyPercentage": 100, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": true}')
+            else
+              cmd+=(--preferences '{"MinHealthyPercentage": 0, "MaxHealthyPercentage": 100, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": false}')
+            fi
+
+            out=$("${cmd[@]}" 2>&1) && { refresh_id="$out"; break; }
+            if echo "$out" | grep -qi "InstanceRefreshInProgress"; then
+              echo "Instance refresh state still settling, retrying in 5s (attempt $attempt/12)..."
+              sleep 5
+            else
+              echo "$out" >&2
+              exit 1
+            fi
+          done
+
+          if [[ -z "$refresh_id" ]]; then
+            echo "Failed to initiate instance refresh for ${asg}" >&2
+            exit 1
+          fi
+
+          echo "Initiated ${asg} refresh ${refresh_id}"
+          echo "refresh_id=$refresh_id" >> "$GITHUB_OUTPUT"
 
       - name: Wait for Auto Scaling refreshes to finish
         env:
@@ -187,28 +303,30 @@ jobs:
             refreshes+=("${{ env.BACKEND_ASG }}:$BACKEND_REFRESH_ID")
           fi
 
-          for attempt in {1..80}; do
+          for attempt in {1..160}; do
             pending=0
             for refresh in "${refreshes[@]}"; do
               asg="${refresh%%:*}"
               refresh_id="${refresh#*:}"
-              status=$(aws autoscaling describe-instance-refreshes \
+              info=$(aws autoscaling describe-instance-refreshes \
                 --auto-scaling-group-name "$asg" \
                 --instance-refresh-ids "$refresh_id" \
                 --region "${{ env.AWS_REGION }}" \
-                --query 'InstanceRefreshes[0].Status' --output text)
-              echo "$asg refresh $refresh_id status: $status"
+                --query 'InstanceRefreshes[0].[Status,PercentageComplete,StatusReason]' --output text || echo "Unknown 0 Unknown")
+              read -r status pct reason <<< "$info"
+              echo "[Attempt $attempt/160] $asg ($refresh_id): status=$status, progress=${pct:-0}%, reason=${reason:-none}"
               case "$status" in
                 Successful) ;;
                 Pending|InProgress|Baking|CheckpointDelay) pending=1 ;;
-                *) echo "$asg instance refresh did not succeed (status: $status)" >&2; exit 1 ;;
+                *) echo "$asg instance refresh did not succeed (status: $status, reason: $reason)" >&2; exit 1 ;;
               esac
             done
             if [ "$pending" -eq 0 ]; then
+              echo "All Auto Scaling instance refreshes completed successfully."
               break
             fi
-            if [ "$attempt" -eq 80 ]; then
-              echo "Timed out waiting for Auto Scaling instance refreshes." >&2
+            if [ "$attempt" -eq 160 ]; then
+              echo "Timed out waiting for Auto Scaling instance refreshes after 40 minutes." >&2
               exit 1
             fi
             sleep 15

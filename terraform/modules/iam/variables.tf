@@ -10,6 +10,12 @@ variable "s3_bucket_arn" {
   default     = ""
 }
 
+variable "enable_s3" {
+  description = "Enable S3 access policies and role attachments"
+  type        = bool
+  default     = false
+}
+
 variable "secrets_arn_prefix" {
   description = "ARN prefix for Secrets Manager secrets accessible by application"
   type        = string

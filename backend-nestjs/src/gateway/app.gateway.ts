@@ -285,16 +285,29 @@ export class AppGateway
       this.server.to(roomName).emit(event, data);
     }
     if (this.redisService) {
-      this.redisService.publish(
-        'codeskill:ws:events',
-        JSON.stringify({
-          nodeId: this.nodeId,
-          target: 'user',
-          targetId: userId,
-          event,
-          data,
-        }),
-      );
+      const client = typeof (this.redisService as any).getClient === 'function'
+        ? (this.redisService as any).getClient()
+        : null;
+
+      if (client && typeof client.publish === 'function') {
+        client.publish(
+          'codeskill:gateway:events',
+          JSON.stringify({ room: roomName, event, data }),
+        );
+      }
+
+      if (typeof this.redisService.publish === 'function') {
+        this.redisService.publish(
+          'codeskill:ws:events',
+          JSON.stringify({
+            nodeId: this.nodeId,
+            target: 'user',
+            targetId: userId,
+            event,
+            data,
+          }),
+        );
+      }
     }
   }
 }

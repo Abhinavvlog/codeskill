@@ -41,13 +41,20 @@ mkdir -p /opt/codeskill
 PM2_PARAMETER="${pm2_io_parameter_name}"
 printf '' > /opt/codeskill/pm2.env
 if [ -n "$PM2_PARAMETER" ]; then
-  PM2_JSON=$(aws ssm get-parameter --name "$PM2_PARAMETER" --region "$REGION" --with-decryption --query Parameter.Value --output text)
-  printf '%s' "$PM2_JSON" | jq -er '
-    select((.PM2_SECRET_KEY | type == "string") and (.PM2_PUBLIC_KEY | type == "string")) |
-    select((.PM2_SECRET_KEY | test("^[A-Za-z0-9_-]+$")) and (.PM2_PUBLIC_KEY | test("^[A-Za-z0-9_-]+$"))) |
-    "PM2_SECRET_KEY=\(.PM2_SECRET_KEY)\nPM2_PUBLIC_KEY=\(.PM2_PUBLIC_KEY)"
-  ' > /opt/codeskill/pm2.env
-  unset PM2_JSON
+  if PM2_JSON=$(aws ssm get-parameter --name "$PM2_PARAMETER" --region "$REGION" --with-decryption --query Parameter.Value --output text 2>/dev/null); then
+    if PM2_ENV=$(printf '%s' "$PM2_JSON" | jq -er '
+      select((.PM2_SECRET_KEY | type == "string") and (.PM2_PUBLIC_KEY | type == "string")) |
+      select((.PM2_SECRET_KEY | test("^[A-Za-z0-9_-]+$")) and (.PM2_PUBLIC_KEY | test("^[A-Za-z0-9_-]+$"))) |
+      "PM2_SECRET_KEY=\(.PM2_SECRET_KEY)\nPM2_PUBLIC_KEY=\(.PM2_PUBLIC_KEY)"
+    ' 2>/dev/null); then
+      printf '%s\n' "$PM2_ENV" > /opt/codeskill/pm2.env
+    else
+      echo "Warning: invalid optional PM2 monitoring configuration; continuing without PM2.io credentials." >&2
+    fi
+  else
+    echo "Warning: optional PM2 monitoring parameter unavailable; continuing without PM2.io credentials." >&2
+  fi
+  unset PM2_JSON PM2_ENV
 fi
 printf 'PM2_MACHINE_NAME=codeskill-frontend-%s\n' "$(hostname)" >> /opt/codeskill/pm2.env
 chmod 600 /opt/codeskill/pm2.env

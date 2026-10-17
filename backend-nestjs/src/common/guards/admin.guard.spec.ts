@@ -31,8 +31,8 @@ describe('AdminGuard & TeacherGuard (AUD-025)', () => {
 
   it.each(['teacher', 'faculty', 'instructor'])('limits %s to teacher access (AUD-025)', (role) => {
     const ctx = createMockContext({ id: 'u-3', role });
-    expect(() => adminGuard.canActivate(ctx)).toThrow(ForbiddenException);
     expect(teacherGuard.canActivate(ctx)).toBe(true);
+    expect(() => adminGuard.canActivate(ctx)).toThrow(ForbiddenException);
   });
 
   it('rejects student or unauthorized user', () => {

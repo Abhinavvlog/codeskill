@@ -87,7 +87,11 @@ const entities = [
           process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== undefined
             ? process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'true'
             : isProduction;
-        const ca = process.env.DATABASE_CA_CERT;
+        const ca =
+          process.env.DATABASE_CA_CERT ||
+          (process.env.DATABASE_SSL_CA
+            ? process.env.DATABASE_SSL_CA.replace(/\\n/g, '\n')
+            : undefined);
         const sslOptions = {
           rejectUnauthorized,
           ...(ca ? { ca } : {}),
