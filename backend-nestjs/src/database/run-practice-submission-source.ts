@@ -12,6 +12,7 @@ import { validateShardingState } from './sharding/sharding-state';
 import { applyContestSecurityReattemptMigration } from './migrations/contest-security-reattempt';
 import { applyAssessmentAudienceTargetingMigration } from './migrations/assessment-audience-targeting';
 import { applyAssessmentProctorCapturesMigration } from './migrations/assessment-proctor-captures';
+import { applyAssessmentProctoringModesMigration } from './migrations/assessment-proctoring-modes';
 
 export function practiceSubmissionMigrationOptions(): DataSourceOptions {
   const postgres = databaseConfig().postgres;
@@ -60,6 +61,7 @@ export async function runPracticeSubmissionSourceMigration(): Promise<void> {
         await applyContestSecurityReattemptMigration(queryRunner);
         await applyAssessmentAudienceTargetingMigration(queryRunner);
         await applyAssessmentProctorCapturesMigration(queryRunner);
+        await applyAssessmentProctoringModesMigration(queryRunner);
         await queryRunner.commitTransaction();
       } catch (error) {
         await queryRunner.rollbackTransaction();
