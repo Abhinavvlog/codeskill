@@ -14,6 +14,16 @@ export class UpdateQuestionDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  timeComplexity?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  spaceComplexity?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   question?: string;
 
   @ApiPropertyOptional()

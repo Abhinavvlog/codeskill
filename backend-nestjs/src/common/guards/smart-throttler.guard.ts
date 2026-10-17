@@ -29,7 +29,7 @@ import { JwtSettings } from '../../config/jwt.config';
  */
 @Injectable()
 export class SmartThrottlerGuard extends ThrottlerGuard {
-  private readonly logger = new Logger(SmartThrottlerGuard.name);
+  protected readonly logger = new Logger(SmartThrottlerGuard.name);
   private readonly jwtSettings?: JwtSettings;
   private readonly examCenterSecret?: string;
 

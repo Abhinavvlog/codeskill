@@ -556,7 +556,7 @@ export class QuestionsService {
       dto.question = dto.title;
     }
 
-    const { categories, visibility, contestOnly, ...updates } = dto;
+    const { categories, visibility, contestOnly, timeComplexity, spaceComplexity, ...updates } = dto;
     const existingCategories: unknown = question.metadata?.categories;
     if (categories !== undefined) {
       const topics = this.normalizeCategories(categories);
@@ -584,6 +584,13 @@ export class QuestionsService {
     }
     if (contestOnly !== undefined) {
       question.metadata = { ...question.metadata, contestOnly };
+    }
+    if (timeComplexity !== undefined || spaceComplexity !== undefined) {
+      question.metadata = {
+        ...question.metadata,
+        ...(timeComplexity !== undefined ? { timeComplexity } : {}),
+        ...(spaceComplexity !== undefined ? { spaceComplexity } : {}),
+      };
     }
     Object.assign(question, updates);
     await this.questionRepository.save(question);
@@ -916,6 +923,9 @@ export class QuestionsService {
       return '';
     };
 
+    const isEnabled = (value: string) =>
+      ['1', 'true', 'yes', 'y', 'on'].includes(value.toLowerCase());
+
     const parsedRows: any[] = [];
     const fileHashMap = new Map<string, number>();
 
@@ -1030,6 +1040,41 @@ export class QuestionsService {
             .filter(Boolean)
         : [];
 
+      const visibility = findField(row, ['visibility']) || 'Published';
+      const inputFormat = findField(row, ['input_format']);
+      const outputFormat = findField(row, ['output_format']);
+      const timeComplexity = findField(row, ['time_complexity']);
+      const spaceComplexity = findField(row, ['space_complexity']);
+      const solutionExplanation = findField(row, ['solution_explanation']);
+      const hasCodingTemplateColumns = Object.keys(row).some((key) =>
+        ['language_cpp', 'language_java', 'language_python', 'reference_solution_cpp']
+          .some((header) => normalizeHeader(key) === normalizeHeader(header)),
+      );
+      const codingLanguages = [
+        { id: 'cpp', selected: findField(row, ['language_cpp']), starter: findField(row, ['starter_code_cpp']), reference: findField(row, ['reference_solution_cpp']) },
+        { id: 'java', selected: findField(row, ['language_java']), starter: findField(row, ['starter_code_java']), reference: findField(row, ['reference_solution_java']) },
+        { id: 'python3', selected: findField(row, ['language_python', 'language_python3']), starter: findField(row, ['starter_code_python', 'starter_code_python3']), reference: findField(row, ['reference_solution_python', 'reference_solution_python3']) },
+      ];
+      const supportedLanguages = codingLanguages
+        .filter((item) => isEnabled(item.selected))
+        .map((item) => item.id);
+      const starterCode = codingLanguages
+        .filter((item) => supportedLanguages.includes(item.id) && item.starter)
+        .map((item) => ({ language: item.id, code: item.starter }));
+      const referenceSolutions = codingLanguages
+        .filter((item) => supportedLanguages.includes(item.id) && item.reference)
+        .map((item) => ({ language: item.id, sourceCode: item.reference }));
+      const examples = [1, 2].map((index) => ({
+        input: findField(row, [`sample_input_${index}`]),
+        output: findField(row, [`sample_output_${index}`]),
+        explanation: findField(row, [`sample_explanation_${index}`]),
+      })).filter((example) => example.input || example.output);
+      const defaultLanguage = supportedLanguages.includes(language)
+        ? language
+        : supportedLanguages.includes('python3')
+          ? 'python3'
+          : supportedLanguages[0] || language;
+
       // Algorithmic / Coding specific columns
       const constraints = findField(row, [
         'constraints',
@@ -1061,6 +1106,7 @@ export class QuestionsService {
         output: string;
         isHidden?: boolean;
         explanation?: string;
+        weight?: number;
       }> = [];
       for (let tcIdx = 1; tcIdx <= 10; tcIdx++) {
         const inp = findField(row, [
@@ -1070,6 +1116,7 @@ export class QuestionsService {
           `in_${tcIdx}`,
         ]);
         const out = findField(row, [
+          `test_expected_output_${tcIdx}`,
           `test_output_${tcIdx}`,
           `testoutput${tcIdx}`,
           `output_${tcIdx}`,
@@ -1079,7 +1126,10 @@ export class QuestionsService {
           testCases.push({
             input: inp,
             output: out,
-            isHidden: tcIdx > 2,
+            isHidden: isEnabled(findField(row, [`test_hidden_${tcIdx}`])) ||
+              (findField(row, [`test_hidden_${tcIdx}`]) === '' && tcIdx > 2),
+            explanation: findField(row, [`test_explanation_${tcIdx}`]),
+            weight: Number(findField(row, [`test_weight_${tcIdx}`])) || 1,
           });
         }
       }
@@ -1136,9 +1186,9 @@ export class QuestionsService {
       // MCQ rows carry a separate title and student-facing question statement.
       const title = !isCoding ? explicitTitle || questionText : explicitTitle;
       if (!isCoding) question = questionText || explicitTitle;
-      const slug = !isCoding
-        ? explicitSlug || (title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-        : undefined;
+      const slug = isCoding
+        ? explicitSlug
+        : explicitSlug || (title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
       const contentHash = this.calculateContentHash(
         question,
@@ -1175,12 +1225,23 @@ export class QuestionsService {
         correctAnswerRaw,
         explanation,
         codeSnippet,
-        language,
+        language: defaultLanguage,
         tags,
         constraints,
         timeLimit,
         memoryLimit,
         testCases,
+        visibility,
+        inputFormat,
+        outputFormat,
+        timeComplexity,
+        spaceComplexity,
+        solutionExplanation,
+        hasCodingTemplateColumns,
+        supportedLanguages,
+        starterCode,
+        referenceSolutions,
+        examples,
         isCoding,
         contentHash,
       });
@@ -1300,6 +1361,27 @@ export class QuestionsService {
           rowErrors.push(
             'Coding questions require at least one test case with expected output',
           );
+        }
+        if (row.hasCodingTemplateColumns) {
+          if (!row.slug) rowErrors.push('URL slug is required for coding questions');
+          if (row.supportedLanguages.length !== 3) {
+            rowErrors.push('C++, Java and Python must all be selected');
+          }
+          for (const language of row.supportedLanguages) {
+            if (!row.starterCode.some((code: any) => code.language === language)) {
+              rowErrors.push(`Starter code is required for ${language}`);
+            }
+            if (!row.referenceSolutions.some((code: any) => code.language === language)) {
+              rowErrors.push(`Reference solution is required for ${language}`);
+            }
+          }
+          if (row.examples.length < 2 || row.examples.some((example: any) => !example.input || !example.output)) {
+            rowErrors.push('Two complete sample examples are required');
+          }
+          if (usable.length < 2) rowErrors.push('Two test cases with expected output are required');
+          if (!row.solutionExplanation || !row.timeComplexity || !row.spaceComplexity) {
+            rowErrors.push('Solution explanation, time complexity and space complexity are required');
+          }
         }
       }
 
@@ -1445,7 +1527,7 @@ export class QuestionsService {
         marks: row.marks,
         negativeMarks: row.negativeMarks,
         options: isChoice ? formattedOptions : undefined,
-        explanation: row.explanation || undefined,
+        explanation: row.solutionExplanation || row.explanation || undefined,
         codeSnippet: row.codeSnippet || undefined,
         language: row.language !== 'general' ? row.language : undefined,
         tags: row.tags,
@@ -1453,6 +1535,17 @@ export class QuestionsService {
         timeLimit: row.timeLimit,
         memoryLimit: row.memoryLimit,
         testCases: row.testCases,
+        slug: row.slug || undefined,
+        visibility: row.visibility,
+        inputFormat: row.inputFormat,
+        outputFormat: row.outputFormat,
+        timeComplexity: row.timeComplexity,
+        spaceComplexity: row.spaceComplexity,
+        solutionExplanation: row.solutionExplanation,
+        supportedLanguages: row.supportedLanguages,
+        starterCode: row.starterCode,
+        referenceSolutions: row.referenceSolutions,
+        examples: row.examples,
         contentHash: row.contentHash,
         matchStatus,
         conflictReason: conflictReason || undefined,
@@ -1518,6 +1611,7 @@ export class QuestionsService {
           expectedOutput: String(t.expectedOutput ?? t.output ?? ''),
           isHidden: t.isHidden ?? idx >= 2,
           weight: Number(t.weight) > 0 ? Number(t.weight) : 1,
+          ...(t.explanation ? { explanation: String(t.explanation) } : {}),
         }))
         .filter((t: any) => t.expectedOutput.trim());
       const constraintList = Array.isArray(r.constraints)
@@ -1547,16 +1641,30 @@ export class QuestionsService {
         codeSnippet: r.codeSnippet || '',
         language: r.language || 'general',
         tags: r.tags || [],
-        status: 'approved',
+        status: isCodingRow && ['draft', 'private'].includes(String(r.visibility || '').toLowerCase())
+          ? 'draft'
+          : 'approved',
         createdBy_id: adminUser?.id || adminUser?._id,
-        approvedBy_id: adminUser?.id || adminUser?._id,
-        approvedAt: new Date(),
+        approvedBy_id: isCodingRow && ['draft', 'private'].includes(String(r.visibility || '').toLowerCase())
+          ? undefined
+          : adminUser?.id || adminUser?._id,
+        approvedAt: isCodingRow && ['draft', 'private'].includes(String(r.visibility || '').toLowerCase())
+          ? undefined
+          : new Date(),
         contentHash,
         existingQuestionId: r.existingQuestionId,
         matchStatus: r.matchStatus || 'new',
         ...(isCodingRow
           ? {
               problemStatement: r.problemStatement || r.question,
+              title: r.question,
+              slug: r.slug || undefined,
+              inputFormat: r.inputFormat || '',
+              outputFormat: r.outputFormat || '',
+              examples: r.examples || [],
+              starterCode: r.starterCode || [],
+              referenceSolutions: r.referenceSolutions || [],
+              supportedLanguages: r.supportedLanguages || [],
               constraints: constraintList,
               timeLimit: r.timeLimit || 2000,
               memoryLimit: r.memoryLimit || 256,
@@ -1567,6 +1675,12 @@ export class QuestionsService {
           importedVia: 'bulk_csv',
           originalRow: r.rowNumber,
           contentHash,
+          ...(isCodingRow ? {
+            visibility: r.visibility || 'Published',
+            timeComplexity: r.timeComplexity || '',
+            spaceComplexity: r.spaceComplexity || '',
+            solutionExplanation: r.solutionExplanation || '',
+          } : {}),
         },
       };
     });
@@ -1617,6 +1731,7 @@ export class QuestionsService {
             existing.codeSnippet = doc.codeSnippet || existing.codeSnippet;
             existing.language = doc.language || existing.language;
             existing.tags = [...new Set([...(existing.tags || []), ...(doc.tags || [])])];
+            if (doc.questionType === 'coding') existing.status = doc.status;
             existing.metadata = {
               ...(existing.metadata || {}),
               ...doc.metadata,
@@ -1626,6 +1741,14 @@ export class QuestionsService {
             if (doc.problemStatement) existing.problemStatement = doc.problemStatement;
             if (doc.constraints) existing.constraints = doc.constraints;
             if (doc.testCases && doc.testCases.length > 0) existing.testCases = doc.testCases;
+            if (doc.slug) existing.slug = doc.slug;
+            if (doc.title) existing.title = doc.title;
+            if (doc.inputFormat) existing.inputFormat = doc.inputFormat;
+            if (doc.outputFormat) existing.outputFormat = doc.outputFormat;
+            if (doc.examples?.length) existing.examples = doc.examples;
+            if (doc.starterCode?.length) existing.starterCode = doc.starterCode;
+            if (doc.referenceSolutions?.length) existing.referenceSolutions = doc.referenceSolutions;
+            if (doc.supportedLanguages?.length) existing.supportedLanguages = doc.supportedLanguages;
 
             await manager.save(existing);
             totalUpdated++;
@@ -1639,6 +1762,14 @@ export class QuestionsService {
             if ((!existing.testCases || existing.testCases.length === 0) && doc.testCases) {
               existing.testCases = doc.testCases;
             }
+            if (!existing.slug && doc.slug) existing.slug = doc.slug;
+            if (!existing.problemStatement && doc.problemStatement) existing.problemStatement = doc.problemStatement;
+            if (!existing.inputFormat && doc.inputFormat) existing.inputFormat = doc.inputFormat;
+            if (!existing.outputFormat && doc.outputFormat) existing.outputFormat = doc.outputFormat;
+            if ((!existing.examples || existing.examples.length === 0) && doc.examples?.length) existing.examples = doc.examples;
+            if ((!existing.starterCode || existing.starterCode.length === 0) && doc.starterCode?.length) existing.starterCode = doc.starterCode;
+            if ((!existing.referenceSolutions || existing.referenceSolutions.length === 0) && doc.referenceSolutions?.length) existing.referenceSolutions = doc.referenceSolutions;
+            if ((!existing.supportedLanguages || existing.supportedLanguages.length === 0) && doc.supportedLanguages?.length) existing.supportedLanguages = doc.supportedLanguages;
             existing.metadata = {
               ...(existing.metadata || {}),
               ...doc.metadata,

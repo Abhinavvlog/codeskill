@@ -1,0 +1,94 @@
+title,slug,question_type,topic,subtopic,difficulty,marks,negative_marks,language_cpp,language_java,language_python,problem_statement,constraints,input_format,output_format,time_limit_ms,memory_limit_mb,solution_explanation,time_complexity,space_complexity,tags,visibility,sample_input_1,sample_output_1,sample_explanation_1,sample_input_2,sample_output_2,sample_explanation_2,test_input_1,test_expected_output_1,test_explanation_1,test_hidden_1,test_weight_1,test_input_2,test_expected_output_2,test_explanation_2,test_hidden_2,test_weight_2,starter_code_cpp,starter_code_java,starter_code_python,reference_solution_cpp,reference_solution_java,reference_solution_python
+Valid Parentheses,valid-parentheses,coding,Data Structures,Stack,easy,5,0,true,true,true,"Given a string s containing only the characters '(', ')', '{', '}', '[' and ']', determine whether the bracket sequence is valid. A sequence is valid when every opening bracket is closed by the same type of bracket and pairs close in the correct order. Return true when the sequence is valid; otherwise, return false.","1 <= s.length <= 10^4
+s contains only ()[]{}",A string s containing bracket characters.,Print true if the brackets are valid; otherwise print false.,2000,256,"Scan the string once. Push each opening bracket onto a stack. For a closing bracket, check that the stack is not empty and that its top is the matching opening bracket. The string is valid only if every check succeeds and the stack is empty at the end.",O(n),O(n),"stack, strings, dsa",Published,()[]{},true,Every closing bracket matches the most recent unmatched opening bracket.,(],false,The closing square bracket does not match the opening parenthesis.,([)],false,The bracket types are mismatched and close in the wrong order.,false,1,{[]},true,The nested square brackets close before the enclosing braces.,false,1,"#include <bits/stdc++.h>
+using namespace std;
+
+bool isValid(const string& s) {
+    // TODO: implement the stack-based check
+    return false;
+}
+
+int main() {
+    string s;
+    cin >> s;
+    cout << boolalpha << isValid(s) << '\n';
+    return 0;
+}","import java.util.*;
+
+public class Main {
+    static boolean isValid(String s) {
+        // TODO: implement the stack-based check
+        return false;
+    }
+
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        System.out.println(isValid(scanner.next()));
+    }
+}","def is_valid(s: str) -> bool:
+    # TODO: implement the stack-based check
+    return False
+
+
+if __name__ == ""__main__"":
+    print(str(is_valid(input().strip())).lower())","#include <bits/stdc++.h>
+using namespace std;
+
+bool isValid(const string& s) {
+    stack<char> st;
+    for (char ch : s) {
+        if (ch == '(' || ch == '[' || ch == '{') {
+            st.push(ch);
+        } else {
+            if (st.empty()) return false;
+            char open = st.top();
+            st.pop();
+            if ((ch == ')' && open != '(') ||
+                (ch == ']' && open != '[') ||
+                (ch == '}' && open != '{')) return false;
+        }
+    }
+    return st.empty();
+}
+
+int main() {
+    string s;
+    cin >> s;
+    cout << boolalpha << isValid(s) << '\n';
+    return 0;
+}","import java.util.*;
+
+public class Main {
+    static boolean isValid(String s) {
+        Deque<Character> stack = new ArrayDeque<>();
+        for (char ch : s.toCharArray()) {
+            if (ch == '(' || ch == '[' || ch == '{') {
+                stack.push(ch);
+            } else {
+                if (stack.isEmpty()) return false;
+                char open = stack.pop();
+                if ((ch == ')' && open != '(') ||
+                    (ch == ']' && open != '[') ||
+                    (ch == '}' && open != '{')) return false;
+            }
+        }
+        return stack.isEmpty();
+    }
+
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        System.out.println(isValid(scanner.next()));
+    }
+}","def is_valid(s: str) -> bool:
+    pairs = {')': '(', ']': '[', '}': '{'}
+    stack = []
+    for ch in s:
+        if ch in '([{':
+            stack.append(ch)
+        elif not stack or stack.pop() != pairs[ch]:
+            return False
+    return not stack
+
+
+if __name__ == ""__main__"":
+    print(str(is_valid(input().strip())).lower())"
