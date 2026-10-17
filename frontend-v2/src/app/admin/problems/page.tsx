@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Search, Loader2, ArrowRight, Code2 } from "lucide-react";
+import { Plus, Search, Loader2, ArrowRight, Code2, BookOpen } from "lucide-react";
 import Link from "next/link";
 import { loadPracticeProblems, filterPracticeProblems, type PracticeRow } from "@/lib/practice-problems";
 
@@ -32,6 +32,10 @@ export default function AdminProblemsPage() {
             Manage practice problems and coding questions from the Question Bank.
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        <Link href="/admin/problems/import" className="inline-flex items-center gap-2 border border-border bg-card px-4 py-2 rounded-xl text-sm font-semibold hover:bg-muted transition-all">
+          <BookOpen className="w-4 h-4" /> Import from Question Bank
+        </Link>
         <Link
           href="/admin/problems/create"
           className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-semibold hover:bg-primary/90 transition-all shadow-sm"
@@ -39,6 +43,7 @@ export default function AdminProblemsPage() {
           <Plus className="w-4 h-4" />
           Create Problem
         </Link>
+        </div>
       </div>
 
       <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden flex flex-col">
@@ -142,6 +147,7 @@ export default function AdminProblemsPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
+                        {problem.source === "question-bank" && <Link href={`/admin/problems/create?fromQuestion=${encodeURIComponent(probId)}`} aria-label={`Import ${problem.title} into practice`} className="mr-2 inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"><BookOpen className="h-3.5 w-3.5" /> Import & edit</Link>}
                         <Link
                           href={problem.editHref}
                           aria-label={`Edit ${problem.title}`}

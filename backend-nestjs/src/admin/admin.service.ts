@@ -891,6 +891,7 @@ export class AdminService {
   }
 
   async createProblem(payload: any, userId?: string) {
+    await this.ensurePracticeSlugAvailable(payload.metadata?.slug);
     const {
       metadata,
       languages,
@@ -986,6 +987,11 @@ export class AdminService {
     });
     if (!problem) throw new NotFoundException('Problem not found');
 
+    const previousSlug = problem.slug;
+    if (metadata?.slug && metadata.slug !== problem.slug) {
+      await this.ensurePracticeSlugAvailable(metadata.slug, problem.id);
+    }
+
     const visibility =
       publishing?.visibility ||
       metadata?.visibility ||
@@ -1021,6 +1027,7 @@ export class AdminService {
       execution ||
       starterCode ||
       referenceSolution ||
+      payload.defaultLanguage !== undefined ||
       customChecker
     ) {
       let conf = await this.configModel.findOne({
@@ -1030,6 +1037,8 @@ export class AdminService {
         conf = this.configModel.create({ metadata_id: problem.id });
       }
       if (languages) conf.supportedLanguages = languages;
+      if (payload.defaultLanguage !== undefined)
+        conf.defaultLanguage = payload.defaultLanguage;
       if (execution?.timeLimit) conf.timeLimit = execution.timeLimit;
       if (execution?.memoryLimit) conf.memoryLimit = execution.memoryLimit;
       if (execution?.cpuLimit) conf.cpuLimit = execution.cpuLimit;
@@ -1059,11 +1068,25 @@ export class AdminService {
     }
 
     await this.cacheService.invalidatePrefix('problems:');
+    if (previousSlug && previousSlug !== problem.slug) {
+      await this.cacheService.invalidatePrefix(`problem:${previousSlug}`);
+    }
     if (problem.slug) {
       await this.cacheService.invalidatePrefix(`problem:${problem.slug}`);
     }
 
     return { success: true, problem: { ...problem, _id: problem.id } };
+  }
+
+  private async ensurePracticeSlugAvailable(slug: string, currentId?: string) {
+    if (!slug?.trim())
+      throw new BadRequestException('Problem URL slug is required');
+    const existing = await this.problemModel.findOne({ where: { slug } });
+    if (existing && existing.id !== currentId) {
+      throw new ConflictException(
+        'A practice problem already uses this URL slug. Choose a different slug for this copy.',
+      );
+    }
   }
 
   // --- Companies ---

@@ -42,6 +42,8 @@ it("renders both existing records and eligible bank questions with their own edi
   expect(screen.getByRole("link", { name: "Edit Legacy Two Sum" })).toHaveAttribute("href", "/admin/problems/practice-1/edit");
   expect(screen.getByRole("link", { name: "Edit Graph Paths" })).toHaveAttribute("href", "/admin/questions/bank-1/edit");
   expect(screen.getByRole("link", { name: "Create Problem" })).toHaveAttribute("href", "/admin/problems/create");
+  expect(screen.getByRole("link", { name: "Import from Question Bank" })).toHaveAttribute("href", "/admin/problems/import");
+  expect(screen.getByRole("link", { name: "Import Graph Paths into practice" })).toHaveAttribute("href", "/admin/problems/create?fromQuestion=bank-1");
   const row = within(graph.closest("tr")!);
   expect(row.getByText("Graphs")).toBeVisible();
   expect(row.getByText("Traversal")).toBeVisible();

@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useQuestionStore } from "../_store/useQuestionStore";
+import { useQuestionEditorStore } from "../_store/QuestionEditorProvider";
 import SectionCard from "./SectionCard";
 import Editor from "@monaco-editor/react";
 import { FileText, Eye, Edit3, Bold, Italic, Heading, Code, Table, Image, Link, List } from "lucide-react";
 
 export default function ProblemStatement() {
-  const { statement, updateStatement, isDarkMode } = useQuestionStore();
+  const { statement, updateStatement, isDarkMode } = useQuestionEditorStore();
   const [mode, setMode] = useState<"write" | "preview">("write");
 
   const insertMarkdown = (prefix: string, suffix: string = "") => {

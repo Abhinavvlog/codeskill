@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuestionStore } from "../_store/useQuestionStore";
+import { useQuestionEditorStore } from "../_store/QuestionEditorProvider";
 import { getQuestionTypeLabel, type QuestionType } from "@/lib/question-types";
 import SectionCard from "./SectionCard";
 import { FileText, X, Plus, Lock, Globe, Link as LinkIcon } from "lucide-react";
@@ -18,8 +18,8 @@ const inputClass =
 
 const labelClass = "text-[13px] font-medium text-gray-700 dark:text-slate-300";
 
-export default function BasicInfo() {
-  const { metadata, updateMetadata } = useQuestionStore();
+export default function BasicInfo({ practice = false }: { practice?: boolean }) {
+  const { metadata, updateMetadata, updatePublishing } = useQuestionEditorStore();
   const [tagInput, setTagInput] = useState("");
   const [showCategories, setShowCategories] = useState(false);
 
@@ -74,6 +74,7 @@ export default function BasicInfo() {
             </label>
             <input
               type="text"
+              aria-label="Question Title"
               value={metadata.title}
               onChange={handleTitleChange}
               placeholder="e.g. Two Sum"
@@ -89,6 +90,7 @@ export default function BasicInfo() {
             </label>
             <input
               type="text"
+              aria-label="URL Slug"
               value={metadata.slug}
               onChange={(e) => updateMetadata({ slug: e.target.value })}
               placeholder="e.g. two-sum"
@@ -110,6 +112,7 @@ export default function BasicInfo() {
             </label>
             <select
               aria-label="Question Type"
+              disabled={practice}
               value={metadata.questionType}
               onChange={(e) => updateMetadata({ questionType: e.target.value as QuestionType })}
               className={`${inputClass} appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%207l5%205%205-5%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_10px_center] pr-10`}
@@ -168,7 +171,7 @@ export default function BasicInfo() {
                 {metadata.visibility === "Draft" && <Lock className="w-4 h-4 text-muted-foreground" />}
                 {metadata.visibility === "Published" && <Globe className="w-4 h-4 text-emerald-500" />}
                 {metadata.visibility === "Private" && <LinkIcon className="w-4 h-4 text-primary" />}
-                {metadata.visibility === "Draft" ? "Draft (Hidden)" : metadata.visibility === "Published" ? "Published (Public)" : "Private (Link Only)"}
+                {metadata.visibility === "Draft" ? "Draft (Hidden)" : metadata.visibility === "Published" ? "Published (Public)" : practice ? "Private (Hidden)" : "Private (Link Only)"}
               </span>
               <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
@@ -177,14 +180,13 @@ export default function BasicInfo() {
               {[
                 { value: "Draft", label: "Draft (Hidden)", icon: Lock, iconColor: "text-muted-foreground" },
                 { value: "Published", label: "Published (Public)", icon: Globe, iconColor: "text-emerald-500" },
-                { value: "Private", label: "Private (Link Only)", icon: LinkIcon, iconColor: "text-primary" }
-              ].map((opt) => (
+                { value: "Private", label: practice ? "Private (Hidden)" : "Private (Link Only)", icon: LinkIcon, iconColor: "text-primary" }
+              ].filter(opt => !practice || opt.value !== "Private" || metadata.visibility === "Private").map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
                   onClick={() => {
                     updateMetadata({ visibility: opt.value as any });
-                    const { updatePublishing } = useQuestionStore.getState();
                     if (opt.value === "Published") {
                       updatePublishing({ publishImmediately: true, saveAsDraft: false });
                     } else if (opt.value === "Draft") {
@@ -302,7 +304,7 @@ export default function BasicInfo() {
         </div>
 
         {/* Row 5: Author + Question ID + Solve Time + Points */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
+        {!practice && <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
           <div className="space-y-1.5">
             <label className={labelClass}>Author</label>
             <input
@@ -358,7 +360,7 @@ export default function BasicInfo() {
             />
             <span className="text-[10px] text-muted-foreground">Deducted on wrong answer</span>
           </div>
-        </div>
+        </div>}
       </div>
     </SectionCard>
   );
