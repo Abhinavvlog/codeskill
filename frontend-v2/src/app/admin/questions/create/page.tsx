@@ -267,7 +267,9 @@ function UnifiedQuestionForm() {
         payload.starterCode = Object.entries(store.starterCode).map(
           ([language, code]) => ({ language, code }),
         );
-        payload.referenceSolutions = store.referenceSolution;
+        payload.referenceSolutions = Object.entries(store.referenceSolution)
+          .filter(([, sourceCode]) => sourceCode.trim())
+          .map(([language, sourceCode]) => ({ language, sourceCode }));
         payload.testCases = store.testCases.map((tc) => ({
           ...tc,
           // The backend persists test case outputs as expectedOutput.

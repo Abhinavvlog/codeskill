@@ -32,6 +32,49 @@ import AnalyticsSection from "../../create/_components/AnalyticsSection";
 import PublishingSection from "../../create/_components/PublishingSection";
 import { Spinner } from "@/components/ui/spinner";
 
+function normalizeLanguageCodeMap(value: unknown): Record<string, string> {
+  const result: Record<string, string> = {};
+
+  const normalizeLanguage = (language: string) => {
+    const raw = language.trim().toLowerCase();
+    if (["c++", "cpp", "cxx", "g++"].includes(raw)) return "cpp";
+    const key = raw.replace(/[\s_+.-]/g, "");
+    if (["cpp", "cxx", "gpp"].includes(key)) return "cpp";
+    if (["py", "python3"].includes(key)) return "python3";
+    if (["js", "node", "nodejs"].includes(key)) return "javascript";
+    return key;
+  };
+
+  const addEntry = (language: unknown, value: unknown) => {
+    if (typeof language !== "string" || !language.trim()) return;
+    const code =
+      typeof value === "string"
+        ? value
+        : value && typeof value === "object"
+        ? ["code", "sourceCode", "solution", "content"]
+            .map((field) => (value as Record<string, unknown>)[field])
+            .find((candidate): candidate is string => typeof candidate === "string")
+        : undefined;
+    if (typeof code === "string") {
+      result[normalizeLanguage(language)] = code;
+    }
+  };
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      if (!entry || typeof entry !== "object") return;
+      const record = entry as Record<string, unknown>;
+      addEntry(record.language ?? record.languageId ?? record.lang, record);
+    });
+  } else if (value && typeof value === "object") {
+    Object.entries(value as Record<string, unknown>).forEach(([language, code]) => {
+      addEntry(language, code);
+    });
+  }
+
+  return result;
+}
+
 function EditQuestionContent() {
   const router = useRouter();
   const params = useParams();
@@ -141,8 +184,8 @@ function EditQuestionContent() {
           },
           solutionExplanation: {
             content: data.explanation || "",
-            timeComplexity: "",
-            spaceComplexity: "",
+            timeComplexity: data.metadata?.timeComplexity || "",
+            spaceComplexity: data.metadata?.spaceComplexity || "",
           },
           sampleExamples: data.examples || data.statement?.samples || [],
           languages: {
@@ -156,12 +199,8 @@ function EditQuestionContent() {
             cpuLimit: data.config?.cpuLimit || 1,
             maxSourceCodeSize: data.config?.maxSourceCodeSize || 1048576,
           },
-          starterCode: (data.starterCode && typeof data.starterCode === "object") ? data.starterCode : {},
-          referenceSolution: (data.referenceSolutions && typeof data.referenceSolutions === "object")
-            ? data.referenceSolutions
-            : (data.referenceSolution && typeof data.referenceSolution === "object")
-            ? data.referenceSolution
-            : {},
+          starterCode: normalizeLanguageCodeMap(data.starterCode),
+          referenceSolution: normalizeLanguageCodeMap(data.referenceSolutions ?? data.referenceSolution),
           customChecker: {
             enabled: data.config?.hasCustomChecker || false,
             language: data.config?.customCheckerCode?.language || "cpp",
@@ -327,7 +366,9 @@ function EditQuestionContent() {
         starterCode: Object.entries(store.starterCode).map(
           ([language, code]) => ({ language, code }),
         ),
-        referenceSolutions: store.referenceSolution,
+        referenceSolutions: Object.entries(store.referenceSolution)
+          .filter(([, sourceCode]) => sourceCode.trim())
+          .map(([language, sourceCode]) => ({ language, sourceCode })),
         testCases: store.testCases.map((tc) => ({
           ...tc,
           // The backend persists test case outputs as expectedOutput.
@@ -337,6 +378,8 @@ function EditQuestionContent() {
         memoryLimit: store.execution.memoryLimit,
         supportedLanguages: store.languages.supported,
         language: store.languages.default,
+        timeComplexity: store.solutionExplanation?.timeComplexity || "",
+        spaceComplexity: store.solutionExplanation?.spaceComplexity || "",
         // Legacy problem structure compatibility
         metadata: {
           ...store.metadata,

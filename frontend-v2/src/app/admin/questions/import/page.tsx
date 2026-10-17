@@ -116,7 +116,7 @@ export default function ImportQuestionsPage() {
     } catch (err: any) {
       setErrorMessage(
         err.response?.data?.message ||
-          "Failed to automatically upload and push questions in one attempt. Please check CSV format."
+          "Failed to automatically upload and push questions in one attempt. Please check the CSV or Excel format."
       );
     } finally {
       setIsValidating(false);
@@ -166,27 +166,15 @@ export default function ImportQuestionsPage() {
     }
   };
 
-  const handleDownloadSampleTemplate = (type: "mcq" | "coding" = "mcq") => {
-    let content: string;
-    let filename: string;
-    if (type === "coding") {
-      content = [
-        "title,question,question_type,topic,subtopic,difficulty,marks,negative_marks,constraints,time_limit,memory_limit,starter_code,test_input_1,test_output_1,test_input_2,test_output_2,explanation,language,tags",
-        '"Reverse Array","Given an integer array nums, reverse the array in-place.",coding,Algorithms,Arrays,easy,5,0,"1 <= N <= 10^5",2000,256,"def reverse_array(nums):\n    pass","5\n1 2 3 4 5","5 4 3 2 1","3\n10 20 30","30 20 10","Use two pointers to swap elements from both ends.",python,"arrays,two-pointers,dsa"',
-        '"Two Sum","Given an array of integers nums and an integer target, return indices of the two numbers that add up to target.",coding,Data Structures,Hash Table,easy,5,0,"2 <= nums.length <= 10^4",2000,256,"def two_sum(nums, target):\n    pass","4\n2 7 11 15\n9","0 1","3\n3 2 4\n6","1 2","Use a hash map for O(n) lookup.",python,"hash-table,arrays,leetcode"',
-        '"Valid Parentheses","Given a string containing just (, ), {, }, [, ], determine if the input string is valid.",coding,Data Structures,Stack,easy,5,0,"1 <= s.length <= 10^4",2000,256,"def is_valid(s):\n    pass","()[]{}","true","(]","false","Use a stack to match brackets.",python,"stack,strings"',
-      ].join("\n");
-      filename = "chandigarh_university_coding_questions_template.csv";
-    } else {
-      content = [
+  const handleDownloadSampleTemplate = () => {
+    const content = [
         "title,url_slug,question,question_type,topic,subtopic,difficulty,marks,negative_marks,option_a,option_b,option_c,option_d,correct_answer,explanation,code_snippet,language,tags",
         '"Balanced BST Search Complexity",balanced-bst-search-complexity,"What is the worst-case time complexity of searching for an element in a balanced Binary Search Tree (AVL Tree)?",single_choice,Data Structures,Trees,easy,1,0.25,"O(1)","O(log n)","O(n)","O(n log n)",B,"In a balanced Binary Search Tree like an AVL tree, the height is strictly bounded by O(log n), ensuring worst-case search time of O(log n).",,general,"trees,bst,time-complexity"',
         '"In-Place Sorting",in-place-sorting,"Which of the following sorting algorithms is NOT an in-place sorting algorithm?",single_choice,Algorithms,Sorting,medium,1,0.25,"Quick Sort","Heap Sort","Merge Sort","Insertion Sort",C,"Standard Merge Sort requires O(n) auxiliary space to merge sub-arrays, making it not an in-place sorting algorithm.",,general,"algorithms,sorting,space-complexity"',
         '"Deadlock Conditions",deadlock-conditions,"Which condition(s) must hold simultaneously for a deadlock to occur in an operating system?",multiple_choice,Operating Systems,Deadlocks,medium,2,0.5,"Mutual Exclusion","Hold and Wait","No Preemption","Circular Wait","A,B,C,D","All four Coffman conditions must hold simultaneously for a deadlock to occur.",,general,"os,deadlock,coffman"',
         '"Generative AI Capability",generative-ai-capability,"What capability is an AI tool demonstrating when it turns a short product description into a complete product announcement?",single_choice,AI Foundations & Generative AI,Generative AI,easy,1,0.25,"Database indexing","Generating new content from learned patterns","Sorting existing records","Network monitoring",B,"The AI generates new text based on instructions and learned patterns.",,general,"ai,generative-ai,llm"',
       ].join("\n");
-      filename = "chandigarh_university_mcq_scenario_questions_template.csv";
-    }
+    const filename = "chandigarh_university_mcq_scenario_questions_template.csv";
     const csvContent = "data:text/csv;charset=utf-8," + encodeURIComponent(content);
     const link = document.createElement("a");
     link.setAttribute("href", csvContent);
@@ -276,22 +264,30 @@ export default function ImportQuestionsPage() {
             </span>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Import MCQs and coding questions with normalized stem hashing, option-aware conflict detection, and configurable merge strategies.
+            Import MCQs and complete coding questions. Coding rows need a URL slug, C++, Java and Python code, two sample examples, two test cases, and solution complexity.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleDownloadSampleTemplate("coding")}
+          <a
+            href="/templates/chandigarh_university_coding_questions_template.csv"
+            download
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-xs font-bold transition-colors shadow-sm"
           >
             <FileCode className="w-3.5 h-3.5" />
             Coding Questions (.CSV)
-          </button>
+          </a>
+          <a
+            href="/templates/chandigarh_university_coding_questions_template.xlsx"
+            download
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-xs font-bold transition-colors shadow-sm"
+          >
+            <FileCode className="w-3.5 h-3.5" />
+            Coding Questions (.XLSX)
+          </a>
           <button
             type="button"
-            onClick={() => handleDownloadSampleTemplate("mcq")}
+            onClick={handleDownloadSampleTemplate}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30 text-xs font-bold transition-colors shadow-sm"
           >
             <Download className="w-3.5 h-3.5" />
