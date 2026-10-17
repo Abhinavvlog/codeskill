@@ -110,6 +110,9 @@ export class QuestionsService {
       .getManyAndCount();
 
     questions.forEach((q) => {
+      if (['MCQ', 'single_choice', 'MULTIPLE_CHOICE', 'multiple_choice', 'TRUE_FALSE', 'true_false'].includes(q.questionType)) {
+        (q as any).url_slug = q.slug;
+      }
       if (q.questionType === 'TRUE_FALSE') {
         let isFalse = q.correctAnswer === 1;
         if (Array.isArray(q.options) && q.correctAnswer !== undefined) {
@@ -171,6 +174,10 @@ export class QuestionsService {
       question.correctAnswers = [question.correctAnswer];
     }
 
+    if (['MCQ', 'single_choice', 'MULTIPLE_CHOICE', 'multiple_choice', 'TRUE_FALSE', 'true_false'].includes(question.questionType)) {
+      (question as any).url_slug = question.slug;
+    }
+
     // Question Leakage Prevention: NEVER send answers or hidden data to students
     if (isStudent) {
       const {
@@ -206,6 +213,7 @@ export class QuestionsService {
       categories,
       visibility,
       contestOnly,
+      url_slug,
       ...rest
     } = dto;
     const type = String(dto.questionType || 'single_choice');
@@ -324,7 +332,7 @@ export class QuestionsService {
       }
     }
 
-    if (!(dto.question || dto.title)) {
+    if (!(dto.question || (!isChoice && dto.title))) {
       throw new BadRequestException('Question text is required');
     }
     if (dto.marks !== undefined && dto.marks <= 0) {
@@ -342,13 +350,14 @@ export class QuestionsService {
     const isApproved = ['approved', 'active', 'published'].includes(status);
     const newQuestion = this.questionRepository.create({
       ...rest,
+      ...(isChoice && (url_slug || dto.slug) ? { slug: url_slug || dto.slug } : {}),
       ...(categories !== undefined
         ? {
             topic: this.normalizeCategories(categories)[0] || 'General',
           }
         : {}),
       ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-      question: dto.question || dto.title,
+      question: dto.question || (!isChoice ? dto.title : undefined),
       options,
       correctAnswer,
       correctAnswers,
@@ -363,6 +372,7 @@ export class QuestionsService {
     } as any) as unknown as QuestionEntity;
 
     const question = await this.questionRepository.save(newQuestion);
+    if (isChoice) (question as any).url_slug = question.slug;
     await this.cacheService.invalidatePrefix('problems:');
 
     const auditLog = this.auditLogRepository.create({
@@ -396,6 +406,7 @@ export class QuestionsService {
     }
 
     const type = String(dto.questionType || question.questionType || 'single_choice');
+    const isMcqTitleType = ['single_choice', 'multiple_choice', 'MCQ', 'MULTIPLE_CHOICE', 'TRUE_FALSE', 'true_false'].includes(type);
     const isChoice = [
       'single_choice',
       'multiple_choice',
@@ -536,7 +547,12 @@ export class QuestionsService {
       }
     }
 
-    if (dto.title && !dto.question) {
+    const isMcqQuestion = isMcqTitleType;
+    if (isMcqQuestion && dto.url_slug !== undefined && dto.slug === undefined) {
+      dto.slug = dto.url_slug;
+    }
+    delete (dto as any).url_slug;
+    if (!isMcqQuestion && dto.title && !dto.question) {
       dto.question = dto.title;
     }
 
@@ -571,6 +587,7 @@ export class QuestionsService {
     }
     Object.assign(question, updates);
     await this.questionRepository.save(question);
+    if (isMcqQuestion) (question as any).url_slug = question.slug;
     await this.cacheService.invalidatePrefix('problems:');
 
     const auditLog = this.auditLogRepository.create({
@@ -919,7 +936,8 @@ export class QuestionsService {
         'problem_statement',
         'problem',
       ]);
-      const question = explicitTitle || questionText;
+      let question = explicitTitle || questionText;
+      const explicitSlug = findField(row, ['url_slug', 'slug']);
       const problemStatement =
         findField(row, [
           'problem_statement',
@@ -1114,6 +1132,14 @@ export class QuestionsService {
           ? 'single_choice'
           : mappedType || typeKey;
 
+      // The coding CSV contract keeps title as its imported question text.
+      // MCQ rows carry a separate title and student-facing question statement.
+      const title = !isCoding ? explicitTitle || questionText : explicitTitle;
+      if (!isCoding) question = questionText || explicitTitle;
+      const slug = !isCoding
+        ? explicitSlug || (title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+        : undefined;
+
       const contentHash = this.calculateContentHash(
         question,
         questionType,
@@ -1123,6 +1149,10 @@ export class QuestionsService {
       parsedRows.push({
         rowNumber: i + 2,
         question,
+        title,
+        slug,
+        slugProvided: Boolean(explicitSlug),
+        slugCollision: false,
         problemStatement,
         questionType,
         unknownType,
@@ -1164,6 +1194,7 @@ export class QuestionsService {
           select: {
             id: true,
             question: true,
+            slug: true,
             questionType: true,
             topic: true,
             options: true,
@@ -1176,6 +1207,9 @@ export class QuestionsService {
           },
         })
       : [];
+    const existingSlugRows = await this.questionRepository.find({
+      select: { slug: true },
+    });
 
     // Map existing questions by content hash and normalized stem for fast lookups
     const dbHashToQuestion = new Map<string, QuestionEntity>();
@@ -1192,6 +1226,34 @@ export class QuestionsService {
       dbStemToQuestions.get(normStemKey)!.push(eq);
     }
 
+    // Slugs share the database's unique constraint across question types.
+    // Reserve existing slugs before generating MCQ import slugs so CSV rows
+    // cannot collide with each other or with a stored question.
+    const usedSlugs = new Set(
+      existingSlugRows.map((question) => question.slug).filter(Boolean),
+    );
+    for (const row of parsedRows) {
+      if (row.isCoding) continue;
+      const key = `${row.topic.toLowerCase()}:::${this.normalizeQuestionStem(row.question)}`;
+      const existingMatch = (dbStemToQuestions.get(key) || []).find((candidate) =>
+        ['MCQ', 'single_choice', 'MULTIPLE_CHOICE', 'multiple_choice', 'TRUE_FALSE', 'true_false'].includes(candidate.questionType),
+      );
+      if (!row.slugProvided) {
+        if (existingMatch?.slug) {
+          row.slug = existingMatch.slug;
+        } else {
+          const base = row.slug || 'mcq';
+          let candidate = base;
+          let suffix = 2;
+          while (usedSlugs.has(candidate)) candidate = `${base}-${suffix++}`;
+          row.slug = candidate;
+        }
+      } else if (usedSlugs.has(row.slug) && existingMatch?.slug !== row.slug) {
+        row.slugCollision = true;
+      }
+      if (row.slug) usedSlugs.add(row.slug);
+    }
+
     const errors: { row: number; question?: string; error: string; isDuplicate?: boolean }[] = [];
     const validRows: any[] = [];
     let duplicatesInFile = 0;
@@ -1206,6 +1268,9 @@ export class QuestionsService {
       if (!row.question) {
         rowErrors.push('Question statement is missing');
       }
+      if (!row.isCoding && !row.title) rowErrors.push('Title is required for MCQs');
+      if (!row.isCoding && !row.slug) rowErrors.push('URL slug is required for MCQs');
+      if (row.slugCollision) rowErrors.push('URL slug is already in use');
 
       if (!row.topic) {
         rowErrors.push('Topic is required');
@@ -1371,6 +1436,7 @@ export class QuestionsService {
       validRows.push({
         rowNumber: row.rowNumber,
         question: row.question,
+        ...(!row.isCoding ? { title: row.title, slug: row.slug, url_slug: row.slug } : {}),
         problemStatement: row.problemStatement,
         questionType: row.questionType,
         topic: row.topic,
@@ -1467,6 +1533,7 @@ export class QuestionsService {
 
       return {
         question: r.question,
+        ...(!isCodingRow ? { title: r.title, slug: r.slug ?? r.url_slug, url_slug: r.url_slug ?? r.slug } : {}),
         questionType: r.questionType || 'single_choice',
         topic: r.topic,
         subtopic: r.subtopic || '',
@@ -1533,6 +1600,10 @@ export class QuestionsService {
           if (mergeStrategy === 'update') {
             // Update question in place while strictly preserving question ID and assessment integrity
             existing.question = doc.question;
+            if (doc.questionType !== 'coding') {
+              existing.title = doc.title;
+              existing.slug = doc.slug;
+            }
             existing.questionType = doc.questionType;
             existing.topic = doc.topic;
             existing.subtopic = doc.subtopic;

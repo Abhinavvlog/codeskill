@@ -357,6 +357,8 @@ export function VTable3({
                 const qId = q._id || q.id || "";
                 const shortId = qId ? qId.slice(-6).toUpperCase() : "QST";
                 const statusStr = (q.status || "active").replace("_", " ");
+                const isMcq = ["MCQ", "single_choice", "MULTIPLE_CHOICE", "multiple_choice", "TRUE_FALSE", "true_false"].includes(q.questionType);
+                const listTitle = isMcq ? (q.title || q.question || "Untitled MCQ") : (q.question || q.title || "Untitled question");
 
                 return (
                   <TableRow key={qId || Math.random()} className="question-row group hover:bg-muted/30 transition-colors opacity-100">
@@ -371,9 +373,10 @@ export function VTable3({
                     </TableCell>
                     <TableCell className="max-w-[300px]">
                       <div className="flex flex-col gap-1">
-                        <div className="font-semibold text-foreground text-sm truncate" title={q.question || q.title}>
-                          {q.question || q.title}
+                        <div className="font-semibold text-foreground text-sm truncate" title={listTitle}>
+                          {listTitle}
                         </div>
+                        {isMcq && q.question && q.title && q.question !== q.title && <div className="text-xs text-muted-foreground truncate" title={q.question}>{q.question}</div>}
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] text-muted-foreground font-mono">Q-{shortId}</span>
                           {q.codeSnippet && (

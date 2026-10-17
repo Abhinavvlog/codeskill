@@ -256,6 +256,11 @@ export class CreateQuestionDto {
   @IsString()
   slug?: string;
 
+  @ApiPropertyOptional({ description: 'MCQ URL slug alias; stored in slug' })
+  @IsOptional()
+  @IsString()
+  url_slug?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
