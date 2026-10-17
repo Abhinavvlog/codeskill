@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  # 1. Ships Piston & Judge0 container stdout/stderr directly to Axiom Free Tier
+  vector-log-agent:
+    image: timberio/vector:0.42.0-alpine
+    container_name: codeskill-sandbox-logs
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./vector-sandbox.yaml:/etc/vector/vector.yaml:ro
+    environment:
+      - AXIOM_TOKEN=${AXIOM_TOKEN}
+      - AXIOM_DATASET=${AXIOM_DATASET:-codeskill-prod-logs}
+      - HOSTNAME=${HOSTNAME:-sandbox-ec2-01}
+    mem_limit: 64m
+
+  # 2. Exposes Piston & Judge0 container CPU throttling, RAM spikes, and OOM kills to Prometheus
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: codeskill-sandbox-cadvisor
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    command:
+      - '--docker_only=true'
+      - '--housekeeping_interval=10s'
+      - '--disable_metrics=percpu,sched,tcp,udp,diskIO,hugetlb,referenced_memory'
+    mem_limit: 128m

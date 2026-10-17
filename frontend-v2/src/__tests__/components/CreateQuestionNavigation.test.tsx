@@ -37,7 +37,9 @@ function mount() {
 it("scrolls every DSA item in both orders and selects it immediately", () => {
   const { nav, container } = mount();
   const buttons = nav.getAllByRole("button");
-  expect(buttons).toHaveLength(12);
+  // Sample examples are part of the unified Test Cases section now.
+  expect(buttons).toHaveLength(11);
+  expect(nav.queryByRole("button", { name: "Sample Test Cases" })).toBeNull();
   for (const button of [...buttons, ...[...buttons].reverse()]) {
     fireEvent.click(button);
     const id = useQuestionStore.getState().activeSection;

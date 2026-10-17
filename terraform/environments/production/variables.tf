@@ -141,5 +141,5 @@ variable "exam_scale_down_cron" {
 variable "pm2_io_parameter_name" {
   description = "SSM SecureString JSON containing PM2_SECRET_KEY and PM2_PUBLIC_KEY; empty disables PM2.io linking"
   type        = string
-  default     = "/codeskill-prod/monitoring/pm2"
+  default     = ""
 }

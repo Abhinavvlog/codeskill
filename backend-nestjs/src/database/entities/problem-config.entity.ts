@@ -55,6 +55,9 @@ export class ProblemConfig {
   @Column({ default: false })
   enableFileUpload: boolean;
 
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  defaultLanguage?: string;
+
   @Column({ type: 'jsonb', nullable: true, default: {} })
   starterCode: Record<string, string>;
 
