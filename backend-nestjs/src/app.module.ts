@@ -51,6 +51,7 @@ import { ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ExamSecurityModule } from './exam-security/exam-security.module';
+import { ObservabilityModule } from './observability/observability.module';
 
 @Module({
   imports: [
@@ -140,6 +141,7 @@ import { ExamSecurityModule } from './exam-security/exam-security.module';
     QuestionsModule,
     AssessmentsModule,
     ExamSecurityModule,
+    ObservabilityModule,
     AnalyticsModule,
     ReportsModule,
     PetModule,

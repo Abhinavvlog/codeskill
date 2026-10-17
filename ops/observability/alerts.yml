@@ -1,0 +1,103 @@
+groups:
+  - name: codeskill_critical_p1
+    rules:
+      - alert: High5xxErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status_code=~"5.."}[2m]))
+            /
+            clamp_min(sum(rate(http_requests_total[2m])), 1)
+          ) > 0.02
+        for: 2m
+        labels:
+          severity: critical
+          tier: P1
+        annotations:
+          summary: "CodeSkill HTTP 5xx rate exceeded 2%"
+          description: "5xx error ratio is {{ $value | humanizePercentage }} over the last 2 minutes."
+
+      - alert: SubmissionQueueBacklog
+        expr: bullmq_queue_waiting_jobs{queue="submissions"} > 100
+        for: 3m
+        labels:
+          severity: critical
+          tier: P1
+        annotations:
+          summary: "BullMQ submission queue backlog > 100 jobs"
+          description: "{{ $value }} code submissions are waiting in Redis for > 3 minutes."
+
+      - alert: DatabasePoolExhaustion
+        expr: |
+          (pg_stat_activity_count / pg_settings_max_connections) > 0.85
+        for: 2m
+        labels:
+          severity: critical
+          tier: P1
+        annotations:
+          summary: "PostgreSQL active connections > 85% of max"
+
+  - name: codeskill_warning_p2
+    rules:
+      - alert: HighP95HttpLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 2.5
+        for: 5m
+        labels:
+          severity: warning
+          tier: P2
+        annotations:
+          summary: "CodeSkill P95 HTTP latency > 2.5s for 5 minutes"
+
+      - alert: JudgeSandboxSystemErrors
+        expr: rate(codeskill_judge_verdict_total{verdict="SV_ERR"}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          tier: P2
+        annotations:
+          summary: "Elevated Piston/Sandbox execution failures (SV_ERR)"
+
+  - name: codeskill_sandbox_engines
+    rules:
+      - alert: SandboxEngineExecutionFailures
+        expr: sum(rate(codeskill_sandbox_failure_total[2m])) by (engine, error_type) > 0.05
+        for: 1m
+        labels:
+          severity: critical
+          tier: P1
+        annotations:
+          summary: "{{ $labels.engine }} sandbox failing ({{ $labels.error_type }})"
+          description: "Outbound execution requests from NestJS to {{ $labels.engine }} are failing."
+
+      - alert: SlowCodeExecutionLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(codeskill_sandbox_http_duration_seconds_bucket[5m])) by (le, engine)) > 5
+        for: 3m
+        labels:
+          severity: warning
+          tier: P2
+        annotations:
+          summary: "High P95 code execution latency on {{ $labels.engine }} (> 5s)"
+
+      - alert: Judge0InternalWorkerSaturation
+        expr: codeskill_judge0_internal_queue_size > 50
+        for: 2m
+        labels:
+          severity: critical
+          tier: P1
+        annotations:
+          summary: "Judge0 internal Sidekiq/Resque queue > 50 submissions"
+
+      - alert: SandboxContainerHighMemory
+        expr: |
+          (
+            container_memory_working_set_bytes{name=~".*piston.*|.*judge0.*"}
+            /
+            container_spec_memory_limit_bytes{name=~".*piston.*|.*judge0.*"}
+          ) > 0.85
+        for: 2m
+        labels:
+          severity: warning
+          tier: P2
+        annotations:
+          summary: "Sandbox container {{ $labels.name }} memory usage > 85%"
