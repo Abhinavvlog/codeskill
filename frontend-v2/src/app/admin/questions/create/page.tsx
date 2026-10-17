@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef, Suspense } from "react";
+import { useEffect, useState, useMemo, useRef, useLayoutEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { adminProblemsAPI, adminQuestionsAPI } from "@/config/api";
 import { useQuestionStore } from "./_store/useQuestionStore";
@@ -63,29 +63,38 @@ export default function CreateQuestionContent() {
 
 function UnifiedQuestionForm() {
   const router = useRouter();
-  const searchParams = typeof useSearchParams === "function" ? useSearchParams() : null;
+  const searchParams = useSearchParams();
+  const typeParam = searchParams && typeof searchParams.get === "function"
+    ? searchParams.get("type")?.toLowerCase()
+    : typeof window !== "undefined" && window.location?.search
+      ? new URLSearchParams(window.location.search).get("type")?.toLowerCase()
+      : null;
   const formRef = useRef<HTMLFormElement>(null);
+  const mcqCreationInitialized = useRef(false);
   const [loading, setLoading] = useState(false);
   const { addToast } = useToast();
 
   const store = useQuestionStore();
-  const { lastSaved, markSaved, getProgress, activeSection, setActiveSection, updateMetadata } = store;
+  const { lastSaved, markSaved, getProgress, activeSection, setActiveSection, updateMetadata, resetStore } = store;
   const questionType = store.metadata.questionType;
 
-  // React to ?type=mcq or ?type=coding from URL
-  useEffect(() => {
-    let typeParam: string | null | undefined = null;
-    if (searchParams && typeof searchParams.get === "function") {
-      typeParam = searchParams.get("type")?.toLowerCase();
-    } else if (typeof window !== "undefined" && window.location?.search) {
-      typeParam = new URLSearchParams(window.location.search).get("type")?.toLowerCase();
-    }
-    if (typeParam === "mcq" || typeParam === "multiple_choice") {
+  // A new MCQ route must not inherit the edit form's persisted Zustand state.
+  // Run before paint and only once per create-page mount; subsequent edits to
+  // the form are left alone. Coding routes retain their existing initialization.
+  useLayoutEffect(() => {
+    const requestedMcq = typeParam === "mcq" || typeParam === "multiple_choice";
+    const requestedCoding = typeParam === "coding" || typeParam === "dsa";
+    const isMcqType = ["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType);
+    if ((requestedMcq || (!requestedCoding && isMcqType)) && !mcqCreationInitialized.current) {
+      resetStore();
+      mcqCreationInitialized.current = true;
+      updateMetadata({ questionType: requestedMcq ? "MCQ" : questionType });
+    } else if (requestedMcq) {
       updateMetadata({ questionType: "MCQ" });
     } else if (typeParam === "coding" || typeParam === "dsa") {
       updateMetadata({ questionType: "DSA" });
     }
-  }, [searchParams, updateMetadata]);
+  }, [typeParam, questionType, resetStore, updateMetadata]);
 
   // Dynamically compute nav items based on questionType
   const navItems = useMemo(() => {
@@ -155,8 +164,9 @@ function UnifiedQuestionForm() {
   };
 
   const handleValidate = () => {
-    if (!store.metadata.title.trim() || !store.metadata.slug.trim()) {
-      addToast("error", "Validation Failed", "Question Title and URL Slug are required.");
+    const isMcq = ["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType);
+    if (!store.metadata.title.trim() || !store.metadata.slug.trim() || (isMcq && !store.statement.description.trim())) {
+      addToast("error", "Validation Failed", isMcq ? "Title, URL Slug, and Question are required." : "Question Title and URL Slug are required.");
       scrollToSection("basic-info");
       return false;
     }
@@ -203,9 +213,10 @@ function UnifiedQuestionForm() {
       const status = visibility === "Published" ? "active" : "draft";
 
       let payload: any = {
-        question: store.metadata.title, // Map title to question for legacy compatibility
+        question: ["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType) ? store.statement.description : store.metadata.title,
         title: store.metadata.title,
         slug: store.metadata.slug,
+        ...(["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType) ? { url_slug: store.metadata.slug } : {}),
         visibility,
         contestOnly: store.publishing.contestOnly,
         topic: store.metadata.categories[0] || "General",

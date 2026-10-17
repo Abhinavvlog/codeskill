@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { adminQuestionsAPI, adminQuestionBanksAPI, adminProblemsAPI } from "@/config/api";
 import Link from "next/link";
 import { VTable3 } from "@/components/ui/v-table-3";
+import MCQQuestionDetails from "./_components/MCQQuestionDetails";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { useRef } from "react";
@@ -698,6 +699,12 @@ function QuestionsAdminContent() {
 
       {/* Question Details / Inspection Modal */}
       {inspectQuestion && (
+        (() => {
+          const type = String(inspectQuestion.questionType || "").toLowerCase();
+          const isMcq = ["mcq", "single_choice", "multiple_choice", "true_false"].includes(type);
+          const statement = inspectQuestion.question || (isMcq ? inspectQuestion.title : "") || "Question statement unavailable";
+          const options = Array.isArray(inspectQuestion.options) ? inspectQuestion.options : [];
+          return (
         <div className="modal-backdrop fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 overflow-y-auto transition-all">
           <div className="modal-box bg-white border border-slate-200 rounded-[20px] w-full max-w-[900px] shadow-2xl flex flex-col my-auto max-h-[90vh]">
             
@@ -715,6 +722,7 @@ function QuestionsAdminContent() {
                     <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 capitalize">Difficulty: {inspectQuestion.difficulty || 'Easy'}</span>
                     <span className="px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-700 font-semibold">Marks: +{inspectQuestion.marks || 1}</span>
                     <span className="px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-700 font-semibold">Negative: -{inspectQuestion.negativeMarks ?? 0}</span>
+                    {inspectQuestion.subtopic && <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700">Subtopic: {inspectQuestion.subtopic}</span>}
                   </div>
                 </div>
               </div>
@@ -757,10 +765,11 @@ function QuestionsAdminContent() {
 
               {/* Question Statement */}
               <section className="modal-question">
+                {isMcq ? <MCQQuestionDetails question={inspectQuestion} /> : <>
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 pl-1">Question</h4>
                 <div className="bg-white border border-slate-200 p-5 rounded-[12px] shadow-sm">
                   <div className="text-[15px] text-slate-800 leading-relaxed whitespace-pre-wrap font-medium">
-                    {inspectQuestion.question}
+                    {statement}
                   </div>
                   
                   {/* Code Snippet if present */}
@@ -773,14 +782,15 @@ function QuestionsAdminContent() {
                     </div>
                   )}
                 </div>
+                </>}
               </section>
 
               {/* Answer Options */}
-              {inspectQuestion.options && inspectQuestion.options.length > 0 && (
+              {!isMcq && options.length > 0 && (
                 <section>
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 pl-1">Answer Options</h4>
                   <div className="grid gap-3">
-                    {inspectQuestion.options.map((opt: any, idx: number) => {
+                    {options.map((opt: any, idx: number) => {
                       const optionText = typeof opt === "string" ? opt : opt?.text || "";
                       const optionExplanation = typeof opt === "object" ? opt?.explanation : null;
                       const isCorrect = typeof opt === "object" && opt?.isCorrect !== undefined
@@ -827,7 +837,7 @@ function QuestionsAdminContent() {
               )}
 
               {/* General Explanation */}
-              {inspectQuestion.explanation && (
+              {!isMcq && inspectQuestion.explanation && (
                 <section className="modal-explanation">
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 pl-1">Explanation & Reference</h4>
                   <div className="bg-slate-100/80 border border-slate-200 p-5 rounded-[12px]">
@@ -835,6 +845,12 @@ function QuestionsAdminContent() {
                       {inspectQuestion.explanation}
                     </div>
                   </div>
+                </section>
+              )}
+
+              {!isMcq && Array.isArray(inspectQuestion.tags) && inspectQuestion.tags.length > 0 && (
+                <section aria-label="Question tags" className="flex flex-wrap gap-2">
+                  {inspectQuestion.tags.map((tag: string) => <span key={tag} className="px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs text-slate-600">{tag}</span>)}
                 </section>
               )}
 
@@ -894,6 +910,8 @@ function QuestionsAdminContent() {
             
           </div>
         </div>
+          );
+        })()
       )}
 
       {/* Reject Reason Modal */}
