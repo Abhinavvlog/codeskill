@@ -132,7 +132,6 @@ export default function TakeAssessmentPage({
   const submissionRequestedRef = useRef(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isAutoSubmitting, setIsAutoSubmitting] = useState(false);
-  const [snapshotStatus, setSnapshotStatus] = useState("First snapshot is captured after 20 seconds; S3 storage is confirmed per capture");
   const [assessmentTitle, setAssessmentTitle] = useState("Proctored Assessment");
   const [assessmentCode, setAssessmentCode] = useState("");
   const [startError, setStartError] = useState<string | null>(null);
@@ -210,7 +209,7 @@ export default function TakeAssessmentPage({
 
   // Add a proctoring violation and sync telemetry
   const recordViolation = useCallback(
-    (type: string, details: string) => {
+    async (type: string, details: string) => {
       if (type === "tab_switch" && proctoring?.detectTabSwitch !== false) {
         setTabSwitches((count) => count + 1);
       }
@@ -256,27 +255,21 @@ export default function TakeAssessmentPage({
         });
       }
 
-      // Sync with server immediately
-      const formattedResponses = questions.map((q) => {
-        const r = responsesRef.current[q._id];
-        return {
-          questionId: q._id,
-          selectedAnswer: r ? r.selectedAnswer : -1,
-          code: r?.code || "",
-          language: r?.language || "python",
-          testCasesPassed: r?.testCasesPassed || 0,
-          totalTestCases: r?.totalTestCases || 0,
-          status: r ? r.status : "unvisited",
-        };
-      });
-
-      studentAssessmentsAPI.saveProgress(id, {
-        responses: formattedResponses,
-        timeSpentSeconds: Math.floor((Date.now() - startedAt.getTime()) / 1000),
-        violations: updated,
-      }).catch(() => {});
+      // The dedicated endpoint persists the warning and returns the server's
+      // cumulative face-warning decision. Keep local telemetry if it is offline.
+      try {
+        const response = await studentAssessmentsAPI.recordViolation(id, {
+          type,
+          details,
+          timestamp: newV.timestamp,
+        });
+        return response.data as { warnings?: number; warningLimit?: number; forceSubmit?: boolean };
+      } catch (error) {
+        console.warn("Assessment proctoring warning could not be synced:", error);
+        return null;
+      }
     },
-    [id, questions, startedAt, proctoring?.detectTabSwitch]
+    [id, proctoring?.detectTabSwitch]
   );
 
   // Start the attempt only after the candidate enters fullscreen from the secure gate.
@@ -370,12 +363,13 @@ export default function TakeAssessmentPage({
 
   // 3. Submit Attempt Handler
   const submitExam = useCallback(
-    async (isAuto = false) => {
+    async () => {
       if (isSubmitting || submissionRequestedRef.current || submitStartedRef.current) return;
       submissionRequestedRef.current = true;
       submitStartedRef.current = true;
       setSubmitError(null);
       setIsSubmitting(true);
+      const submissionStartedAt = Date.now();
 
       const formattedResponses = questions.map((q) => {
         const r = responsesRef.current[q._id];
@@ -425,8 +419,12 @@ export default function TakeAssessmentPage({
       // Release a preflight stream that was handed off but not adopted by the
       // exam media hook (for example, after a quick route transition).
       releaseAssessmentStream(id);
-      if (isAuto) {
-        await new Promise((resolve) => window.setTimeout(resolve, 2500));
+      // Keep the submission screen visible even when a short assessment (or a
+      // fast API response) finishes before the browser paints the pending state.
+      const minimumPendingMs = 3500;
+      const pendingTimeRemaining = minimumPendingMs - (Date.now() - submissionStartedAt);
+      if (pendingTimeRemaining > 0) {
+        await new Promise((resolve) => window.setTimeout(resolve, pendingTimeRemaining));
       }
       router.replace(`/assessments/${id}/result`);
     },
@@ -442,13 +440,18 @@ export default function TakeAssessmentPage({
     }
 
     let cancelled = false;
-    const reportFaceIssue = (issue: string, details: string) => {
+    const reportFaceIssue = async (issue: string, details: string) => {
       if (activeFaceIssueRef.current === issue) return;
       activeFaceIssueRef.current = issue;
       faceWarningsRef.current += 1;
       setFaceWarningCount(faceWarningsRef.current);
-      recordViolation(issue, details);
-      const warningNumber = faceWarningsRef.current;
+      const recorded = await recordViolation(issue, details);
+      const warningNumber = Math.max(
+        faceWarningsRef.current,
+        recorded?.warnings ?? 0
+      );
+      faceWarningsRef.current = warningNumber;
+      setFaceWarningCount(warningNumber);
       const isAutoSubmitMode =
         proctoring?.autoSubmitOnViolation !== false &&
         proctoring?.mode !== "partial_proctored";
@@ -464,7 +467,7 @@ export default function TakeAssessmentPage({
           type: warningNumber >= 4 ? "alert" : "warning",
         });
         setFaceMonitorStatus(details);
-        if (warningNumber >= 5) {
+        if (recorded?.forceSubmit || warningNumber >= MAX_FACE_WARNINGS) {
           setIsAutoSubmitting(true);
           setWarningToast({
             id: Date.now(),
@@ -472,7 +475,7 @@ export default function TakeAssessmentPage({
               "Five face-verification warnings reached. Your assessment is being submitted now.",
             type: "alert",
           });
-          void submitExam(true);
+          void submitExam();
         }
       } else {
         setFaceMonitorStatus(`${details} (Negative marks deducted)`);
@@ -584,9 +587,6 @@ export default function TakeAssessmentPage({
               throw new Error("The server did not confirm that this snapshot was saved to S3");
             }
             saved = true;
-            if (!cancelled) {
-              setSnapshotStatus(`Saved to S3 · ${new Date(result.timestamp || timestamp).toLocaleTimeString()} · ${result.objectKey}`);
-            }
             break;
           } catch (error) {
             lastError = error;
@@ -595,15 +595,9 @@ export default function TakeAssessmentPage({
             }
           }
         }
-        if (!saved && !cancelled) {
-          const serverMessage = (lastError as { response?: { data?: { message?: string | string[] } }; message?: string })?.response?.data?.message;
-          const message = Array.isArray(serverMessage) ? serverMessage.join(", ") : serverMessage;
-          const fallback = (lastError as { message?: string })?.message;
-          setSnapshotStatus(`S3 save failed · ${message || fallback || "Upload failed after 3 attempts"}`);
-        }
+        if (!saved && !cancelled) console.warn("Assessment snapshot upload failed after retries:", lastError);
       } catch (error) {
         console.warn("Assessment page snapshot could not be uploaded:", error);
-        if (!cancelled) setSnapshotStatus(`Snapshot capture failed · ${(error as { message?: string })?.message || "capture unavailable"}`);
       }
       if (!cancelled) timer = window.setTimeout(() => void capture(), 20_000);
     };
@@ -619,7 +613,7 @@ export default function TakeAssessmentPage({
   useEffect(() => {
     if (isLoading || isSubmitting) return;
     if (timeLeftSeconds <= 0) {
-      void submitExam(true);
+      void submitExam();
       return;
     }
 
@@ -627,7 +621,7 @@ export default function TakeAssessmentPage({
       setTimeLeftSeconds((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          submitExam(true);
+          submitExam();
           return 0;
         }
         return prev - 1;
@@ -910,7 +904,7 @@ export default function TakeAssessmentPage({
       autoSubmitOnViolation={proctoring?.mode !== 'partial_proctored' && proctoring?.autoSubmitOnViolation !== false}
       onFullscreenEntered={beginAssessmentAfterFullscreen}
       maxWarnings={proctoring?.maxTabSwitches ?? maxTabSwitches}
-      onTerminate={() => submitExam(true)}
+      onTerminate={() => submitExam()}
       onViolation={recordViolation}
     >
       <div ref={examPageRef} data-assessment-page-capture className={`h-dvh overflow-hidden bg-background text-foreground font-sans flex flex-col relative [touch-action:pan-x_pan-y_pinch-zoom] ${proctoring?.blockCopyPaste !== false ? "select-none" : ""}`}>
@@ -1022,7 +1016,7 @@ export default function TakeAssessmentPage({
         <div role="alert" className="fixed top-20 left-1/2 z-[60] w-[min(92vw,44rem)] -translate-x-1/2 rounded-xl border border-rose-300 bg-card p-4 text-sm text-foreground shadow-xl">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="min-w-0 flex-1">{submitError}</p>
-            <button type="button" onClick={() => { submissionRequestedRef.current = false; submitStartedRef.current = false; void submitExam(isAutoSubmitting); }} className="rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground">Retry submission</button>
+            <button type="button" onClick={() => { submissionRequestedRef.current = false; submitStartedRef.current = false; void submitExam(); }} className="rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground">Retry submission</button>
           </div>
         </div>
       )}
@@ -1257,11 +1251,9 @@ export default function TakeAssessmentPage({
               <span className="min-w-0 truncate">Face check: {faceMonitorStatus}</span>
               <span className="shrink-0 font-semibold">{faceWarningCount}/5 warnings</span>
             </div>
-            <p className="text-[10px] leading-relaxed text-muted-foreground">Exam snapshots: {snapshotStatus}</p>
-
             <div role="status" className={`rounded-lg border px-2 py-1.5 text-xs ${faceWarningCount > 0 ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300" : "border-border bg-muted/30 text-muted-foreground"}`}>
               <div className="flex items-center justify-between gap-2 font-semibold">
-                <span>Multiple-face warnings</span>
+                <span>Face verification warnings</span>
                 <span className="font-mono">{faceWarningCount} / {MAX_FACE_WARNINGS}</span>
               </div>
               <p className="mt-1 text-[10px] leading-relaxed">Warning 5 ends and submits your test.</p>
@@ -1406,7 +1398,7 @@ export default function TakeAssessmentPage({
               <button
                 type="button"
                 disabled={isSubmitting}
-                onClick={() => submitExam(false)}
+                onClick={() => submitExam()}
                 className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold rounded-xl transition-all shadow-md shadow-primary/20 disabled:opacity-50"
               >
                 {isSubmitting ? <Spinner className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

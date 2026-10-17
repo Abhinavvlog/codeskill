@@ -41,6 +41,16 @@ it("keeps both tracks active until the manual submission API resolves", async ()
   expect(videoStop).not.toHaveBeenCalled(); expect(audioStop).not.toHaveBeenCalled();
   expect(studentAssessmentsAPI.submitAttempt).toHaveBeenCalledTimes(1);
 });
+it("shows the submission screen before routing a one-question attempt to its result", async () => {
+  jest.mocked(studentAssessmentsAPI.submitAttempt).mockResolvedValueOnce({ data: { success: true } });
+  await renderAssessmentPage();
+  fireEvent.click(await screen.findByRole("button", { name: "Enter Fullscreen" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Submit Test" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Yes, Submit Now" }));
+
+  expect(await screen.findByRole("heading", { name: "Finalizing your assessment" })).toBeInTheDocument();
+  await waitFor(() => expect(replace).toHaveBeenCalledWith("/assessments/exam/result"), { timeout: 5000 });
+});
 it("keeps the attempt and media available when forced submission fails", async () => {
   jest.mocked(studentAssessmentsAPI.submitAttempt).mockRejectedValue(new Error("Network failure"));
   jest.spyOn(console, "error").mockImplementation(() => {});

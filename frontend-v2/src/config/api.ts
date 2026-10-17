@@ -637,6 +637,8 @@ export const studentAssessmentsAPI = {
   getMyAssessments: (signal?: AbortSignal) => api.get("/assessments/my-assessments", { signal }),
   getOverview: (id: string) => api.get(`/assessments/${id}/overview`),
   startAttempt: (id: string) => api.post(`/assessments/${id}/start`),
+  recordViolation: (id: string, data: { type: string; details: string; timestamp?: string }) =>
+    api.post(`/assessments/${id}/violations`, data),
   saveProgress: (id: string, data: any) => api.post(`/assessments/${id}/save-progress`, data),
   submitAttempt: (id: string, data: any) => api.post(`/assessments/${id}/submit`, data),
   getResult: (id: string) => api.get(`/assessments/${id}/result`),
