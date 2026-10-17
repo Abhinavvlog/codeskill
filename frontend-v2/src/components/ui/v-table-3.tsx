@@ -2,7 +2,7 @@
 
 import { getQuestionTypeLabel, getTopicCategories, QUESTION_TYPES } from "@/lib/question-types";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   Table,
   TableBody,
@@ -35,13 +35,41 @@ import {
   BookOpen,
   Plus,
   SlidersHorizontal,
-  Clock
 } from "lucide-react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
-import { useRef } from "react";
 import Link from "next/link";
 
+
+const questionFallbackKeyMap = new WeakMap<object, string>();
+let fallbackKeySequence = 0;
+
+/**
+ * Resolves a stable, deterministic React key for a question row.
+ * Priority:
+ * 1. Persistent primary key (`q._id`, `q.id`, or `q.mongoId`)
+ * 2. Stable human/URL slug (`slug-${q.slug}`)
+ * 3. WeakMap-cached fallback string assigned once per object reference (`question-fallback-${n}`)
+ */
+export function getQuestionRowKey(q: any): string {
+  if (!q || typeof q !== "object") {
+    return "";
+  }
+  const primaryId = q._id || q.id || q.mongoId;
+  if (primaryId) {
+    return String(primaryId);
+  }
+  if (q.slug) {
+    return `slug-${q.slug}`;
+  }
+  let fallback = questionFallbackKeyMap.get(q);
+  if (!fallback) {
+    fallbackKeySequence += 1;
+    fallback = `question-fallback-${fallbackKeySequence}`;
+    questionFallbackKeyMap.set(q, fallback);
+  }
+  return fallback;
+}
 
 interface VTable3Props {
   questions: any[];
@@ -127,12 +155,25 @@ export function VTable3({
           });
         }
       }
-    } catch (_) {}
+    } catch {
+      // Ignored for GSAP in test/unsupported environments
+    }
   }, { scope: containerRef, dependencies: [questions, loading] });
 
   const hasFilters = Boolean(search || selectedTopic || selectedDifficulty || selectedType || selectedStatus);
-  const visibleIds = questions.map((q) => String(q._id || q.id || "")).filter(Boolean);
+  const visibleIds = (questions || []).map((q) => String(q?._id || q?.id || q?.mongoId || getQuestionRowKey(q) || "")).filter(Boolean);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedQuestionIds.includes(id));
+
+  // Deduplicate and resolve deterministic row keys
+  const seenKeys = new Set<string>();
+  const renderedQuestions = (questions || []).map((q, index) => {
+    let rowKey = getQuestionRowKey(q);
+    if (!rowKey || seenKeys.has(rowKey)) {
+      rowKey = `${rowKey || "row"}-dup-${index}`;
+    }
+    seenKeys.add(rowKey);
+    return { q, rowKey };
+  });
 
   const getDifficultyColor = (diff: string) => {
     switch (diff?.toLowerCase()) {
@@ -368,15 +409,15 @@ export function VTable3({
                 </TableCell>
               </TableRow>
             ) : (
-              (questions || []).map((q) => {
-                const qId = q._id || q.id || "";
-                const shortId = qId ? qId.slice(-6).toUpperCase() : "QST";
+              renderedQuestions.map(({ q, rowKey }) => {
+                const qId = q._id || q.id || q.mongoId || rowKey;
+                const shortId = (q._id || q.id || q.mongoId) ? String(q._id || q.id || q.mongoId).slice(-6).toUpperCase() : "QST";
                 const statusStr = (q.status || "active").replace("_", " ");
                 const isMcq = ["MCQ", "single_choice", "MULTIPLE_CHOICE", "multiple_choice", "TRUE_FALSE", "true_false"].includes(q.questionType);
                 const listTitle = isMcq ? (q.title || q.question || "Untitled MCQ") : (q.question || q.title || "Untitled question");
 
                 return (
-                  <TableRow key={qId || Math.random()} className="question-row group hover:bg-muted/30 transition-colors opacity-100">
+                  <TableRow key={rowKey} className="question-row group hover:bg-muted/30 transition-colors opacity-100">
                     {selectionMode && <TableCell>
                       <input
                         type="checkbox"
