@@ -29,6 +29,7 @@ env:
   BACKEND_ASG: codeskill-backend-asg
   FRONTEND_TG: codeskill-prod-tg
   BACKEND_TG: codeskill-prod-be-tg
+  ASG_INSTANCE_WARMUP: 120
 
 permissions:
   id-token: write # Required for AWS OIDC authentication
@@ -40,10 +41,11 @@ concurrency:
 
 jobs:
   # ============================================================================
-  # 1. Validation & Automated Tests (Fail-Fast)
+  # 1. Parallel Validation & Automated Tests (Independent Runner Jobs)
   # ============================================================================
-  test:
-    name: Run Automated Tests & Type Checks
+  validate-backend:
+    name: Validate Backend (Lint, Build, Test)
+    if: github.event.inputs.service == 'all' || github.event.inputs.service == 'backend' || github.event_name == 'push'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Code
@@ -54,30 +56,58 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: |
-            backend-nestjs/package-lock.json
-            frontend-v2/package-lock.json
+          cache-dependency-path: backend-nestjs/package-lock.json
 
-      - name: Backend Tests & Build Verification
+      - name: Install Dependencies
         working-directory: ./backend-nestjs
-        run: |
-          npm ci --legacy-peer-deps
-          npm run build
-          npm test -- --maxWorkers=2
+        run: npm ci --legacy-peer-deps
 
-      - name: Frontend Tests & Build Verification
+      - name: Backend Lint Check
+        working-directory: ./backend-nestjs
+        run: npx eslint "{src,apps,libs,test}/**/*.ts"
+
+      - name: Backend Build & Type Check
+        working-directory: ./backend-nestjs
+        run: npm run build
+
+      - name: Backend Unit Tests
+        working-directory: ./backend-nestjs
+        run: npm test -- --maxWorkers=2
+
+  validate-frontend:
+    name: Validate Frontend (Lint & Tests)
+    if: github.event.inputs.service == 'all' || github.event.inputs.service == 'frontend' || github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend-v2/package-lock.json
+
+      - name: Install Dependencies
         working-directory: ./frontend-v2
-        run: |
-          npm ci --legacy-peer-deps
-          npm test -- --maxWorkers=2
-          npm run build
+        run: npm ci --legacy-peer-deps
+
+      - name: Frontend Lint Check
+        working-directory: ./frontend-v2
+        run: npm run lint
+
+      - name: Frontend Unit Tests
+        working-directory: ./frontend-v2
+        run: npm test -- --maxWorkers=2
 
   # ============================================================================
-  # 2. Build Immutable Docker Images & Push to Amazon ECR
+  # 2. Parallel Docker Image Builds (Independent Runner Jobs with Scoped Caches)
   # ============================================================================
-  build-and-push:
-    name: Build & Push Immutable Docker Images
-    needs: test
+  build-backend:
+    name: Build & Push Backend Docker Image
+    needs: validate-backend
+    if: github.event.inputs.service == 'all' || github.event.inputs.service == 'backend' || github.event_name == 'push'
     runs-on: ubuntu-24.04
     outputs:
       deployment_tag: ${{ steps.determine-tag.outputs.tag }}
@@ -105,11 +135,9 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Log in to Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and Push Backend Docker Image
-        if: github.event.inputs.service == 'all' || github.event.inputs.service == 'backend' || github.event_name == 'push'
         uses: docker/build-push-action@v7
         with:
           context: ./backend-nestjs
@@ -118,11 +146,43 @@ jobs:
           tags: |
             ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ steps.determine-tag.outputs.tag }}
             ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+  build-frontend:
+    name: Build & Push Frontend Docker Image
+    needs: validate-frontend
+    if: github.event.inputs.service == 'all' || github.event.inputs.service == 'frontend' || github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    outputs:
+      deployment_tag: ${{ steps.determine-tag.outputs.tag }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Determine Deployment Tag
+        id: determine-tag
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Configure AWS Credentials (OIDC / Access Keys)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and Push Frontend Docker Image
-        if: github.event.inputs.service == 'all' || github.event.inputs.service == 'frontend' || github.event_name == 'push'
         uses: docker/build-push-action@v7
         with:
           context: ./frontend-v2
@@ -131,17 +191,35 @@ jobs:
           tags: |
             ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.determine-tag.outputs.tag }}
             ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
   # ============================================================================
   # 3. Rolling Auto Scaling Instance Refresh with Health Verification
   # ============================================================================
   rollout:
     name: Rolling Auto Scaling Rollout & Verification
-    needs: build-and-push
+    needs: [build-backend, build-frontend]
+    if: |
+      always() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled') &&
+      (needs.build-backend.result == 'success' || needs.build-frontend.result == 'success')
     runs-on: ubuntu-24.04
     steps:
+      - name: Record Deployment Metadata
+        run: |
+          echo "### Deployment Execution Summary 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit SHA** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Event Trigger** | \`${{ github.event_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target Service** | \`${{ github.event.inputs.service || 'all' }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Backend Image Tag** | \`${{ needs.build-backend.outputs.deployment_tag || 'N/A' }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Frontend Image Tag** | \`${{ needs.build-frontend.outputs.deployment_tag || 'N/A' }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **ASG Warmup Period** | \`${{ env.ASG_INSTANCE_WARMUP }}s\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Timestamp** | \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\` |" >> $GITHUB_STEP_SUMMARY
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -196,9 +274,9 @@ jobs:
           for attempt in {1..12}; do
             cmd=(aws autoscaling start-instance-refresh --auto-scaling-group-name "$asg" --region "${{ env.AWS_REGION }}" --query 'InstanceRefreshId' --output text)
             if [[ -n "$desired" ]]; then
-              cmd+=(--desired-configuration "$desired" --preferences '{"MinHealthyPercentage": 0, "MaxHealthyPercentage": 100, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": true}')
+              cmd+=(--desired-configuration "$desired" --preferences "{\"MinHealthyPercentage\": 0, \"MaxHealthyPercentage\": 100, \"InstanceWarmup\": ${{ env.ASG_INSTANCE_WARMUP }}, \"SkipMatching\": false, \"AutoRollback\": true}")
             else
-              cmd+=(--preferences '{"MinHealthyPercentage": 0, "MaxHealthyPercentage": 100, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": false}')
+              cmd+=(--preferences "{\"MinHealthyPercentage\": 0, \"MaxHealthyPercentage\": 100, \"InstanceWarmup\": ${{ env.ASG_INSTANCE_WARMUP }}, \"SkipMatching\": false, \"AutoRollback\": false}")
             fi
 
             out=$("${cmd[@]}" 2>&1) && { refresh_id="$out"; break; }
@@ -266,9 +344,9 @@ jobs:
           for attempt in {1..12}; do
             cmd=(aws autoscaling start-instance-refresh --auto-scaling-group-name "$asg" --region "${{ env.AWS_REGION }}" --query 'InstanceRefreshId' --output text)
             if [[ -n "$desired" ]]; then
-              cmd+=(--desired-configuration "$desired" --preferences '{"MinHealthyPercentage": 0, "MaxHealthyPercentage": 100, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": true}')
+              cmd+=(--desired-configuration "$desired" --preferences "{\"MinHealthyPercentage\": 0, \"MaxHealthyPercentage\": 100, \"InstanceWarmup\": ${{ env.ASG_INSTANCE_WARMUP }}, \"SkipMatching\": false, \"AutoRollback\": true}")
             else
-              cmd+=(--preferences '{"MinHealthyPercentage": 0, "MaxHealthyPercentage": 100, "InstanceWarmup": 120, "SkipMatching": false, "AutoRollback": false}')
+              cmd+=(--preferences "{\"MinHealthyPercentage\": 0, \"MaxHealthyPercentage\": 100, \"InstanceWarmup\": ${{ env.ASG_INSTANCE_WARMUP }}, \"SkipMatching\": false, \"AutoRollback\": false}")
             fi
 
             out=$("${cmd[@]}" 2>&1) && { refresh_id="$out"; break; }

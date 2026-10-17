@@ -143,3 +143,9 @@ variable "pm2_io_parameter_name" {
   type        = string
   default     = ""
 }
+
+variable "asg_instance_warmup" {
+  description = "Instance warmup duration in seconds for Auto Scaling Group rolling refreshes"
+  type        = number
+  default     = 120
+}
