@@ -581,6 +581,7 @@ function QuestionsAdminContent() {
           selectedQuestionIds={selectedQuestionIds}
           onToggleQuestion={handleToggleQuestion}
           onTogglePage={handleTogglePage}
+          onClearSelection={() => setSelectedQuestionIds([])}
           onBulkDelete={handleBulkDelete}
           deletingQuestions={deletingQuestions}
           onBulkEdit={() => setBulkEditOpen(true)}
