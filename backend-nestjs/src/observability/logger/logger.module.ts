@@ -24,6 +24,9 @@ import { RequestContextService } from '../context/request-context.service';
               dataset: process.env.AXIOM_DATASET,
               token: process.env.AXIOM_TOKEN,
               orgId: process.env.AXIOM_ORG_ID,
+              edgeUrl:
+                process.env.AXIOM_EDGE_URL ||
+                'https://eu-central-1.aws.edge.axiom.co',
             },
           });
         }

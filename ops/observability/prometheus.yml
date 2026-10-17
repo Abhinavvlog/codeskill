@@ -8,12 +8,21 @@ global:
 rule_files:
   - 'alerts.yml'
 
+remote_write:
+  - url: https://prometheus-prod-43-prod-ap-south-1.grafana.net/api/prom/push
+    basic_auth:
+      username: '3666421'
+      password: '<GRAFANA_CLOUD_API_TOKEN>'
+
 scrape_configs:
   - job_name: 'codeskill-backend-api'
     scrape_interval: 10s
     metrics_path: '/api/metrics'
     static_configs:
-      - targets: ['backend.codeskill.internal:5001']
+      - targets:
+          - 'host.docker.internal:5001'
+          - 'localhost:5001'
+          - 'backend.codeskill.internal:5001'
 
   - job_name: 'postgres-exporter'
     scrape_interval: 15s

@@ -1,0 +1,26 @@
+// Grafana Alloy configuration for CodeSkill Observability
+// Scrapes NestJS backend metrics and pushes them to Grafana Cloud Hosted Prometheus
+
+prometheus.scrape "codeskill_backend" {
+  targets = [
+    {
+      "__address__" = "localhost:5001",
+    },
+    {
+      "__address__" = "host.docker.internal:5001",
+    },
+  ]
+  metrics_path = "/api/metrics"
+  scrape_interval = "15s"
+  forward_to = [prometheus.remote_write.grafanacloud.receiver]
+}
+
+prometheus.remote_write "grafanacloud" {
+  endpoint {
+    url = "https://prometheus-prod-43-prod-ap-south-1.grafana.net/api/prom/push"
+    basic_auth {
+      username = "3666421"
+      password = sys.env("GRAFANA_CLOUD_API_TOKEN")
+    }
+  }
+}
