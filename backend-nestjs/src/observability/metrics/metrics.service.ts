@@ -174,15 +174,17 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         });
 
         // Poll queue depth every 10s for Prometheus scrape
-        this.queuePollInterval = setInterval(async () => {
-          try {
-            if (!this.submissionsQueue) return;
-            const counts = await this.submissionsQueue.getJobCounts('waiting', 'active');
-            this.bullmqWaitingJobs.set({ queue: queueName }, counts.waiting || 0);
-            this.bullmqActiveJobs.set({ queue: queueName }, counts.active || 0);
-          } catch {
-            // Fail-open if Redis blips
-          }
+        this.queuePollInterval = setInterval(() => {
+          void (async () => {
+            try {
+              if (!this.submissionsQueue) return;
+              const counts = await this.submissionsQueue.getJobCounts('waiting', 'active');
+              this.bullmqWaitingJobs.set({ queue: queueName }, counts.waiting || 0);
+              this.bullmqActiveJobs.set({ queue: queueName }, counts.active || 0);
+            } catch {
+              // Fail-open if Redis blips
+            }
+          })();
         }, 10_000);
         this.queuePollInterval.unref();
       }

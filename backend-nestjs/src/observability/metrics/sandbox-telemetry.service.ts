@@ -38,6 +38,7 @@ export class SandboxTelemetryService implements OnModuleInit, OnModuleDestroy {
     this.originalHttpRequest = http.request;
     this.originalHttpsRequest = https.request;
 
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
 
     const wrapRequest = (originalRequest: typeof http.request) => {
@@ -186,28 +187,30 @@ export class SandboxTelemetryService implements OnModuleInit, OnModuleDestroy {
     const judge0BaseUrl = process.env.JUDGE0_URL || process.env.JUDGE0_BASE_URL;
     if (!judge0BaseUrl) return;
 
-    this.pollInterval = setInterval(async () => {
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 1500);
-        const res = await fetch(`${judge0BaseUrl.replace(/\/$/, '')}/workers`, {
-          signal: controller.signal,
-          headers: process.env.JUDGE0_AUTH_TOKEN
-            ? { 'X-Auth-Token': process.env.JUDGE0_AUTH_TOKEN }
-            : {},
-        });
-        clearTimeout(timer);
+    this.pollInterval = setInterval(() => {
+      void (async () => {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 1500);
+          const res = await fetch(`${judge0BaseUrl.replace(/\/$/, '')}/workers`, {
+            signal: controller.signal,
+            headers: process.env.JUDGE0_AUTH_TOKEN
+              ? { 'X-Auth-Token': process.env.JUDGE0_AUTH_TOKEN }
+              : {},
+          });
+          clearTimeout(timer);
 
-        if (res.ok) {
-          const workers: any = await res.json();
-          const totalQueued = Array.isArray(workers)
-            ? workers.reduce((acc, w) => acc + (Number(w.size) || 0), 0)
-            : 0;
-          this.metricsService.judge0InternalQueueSize.set(totalQueued);
+          if (res.ok) {
+            const workers: any = await res.json();
+            const totalQueued = Array.isArray(workers)
+              ? workers.reduce((acc, w) => acc + (Number(w.size) || 0), 0)
+              : 0;
+            this.metricsService.judge0InternalQueueSize.set(totalQueued);
+          }
+        } catch {
+          // Ignore poll blips
         }
-      } catch {
-        // Ignore poll blips
-      }
+      })();
     }, 15_000);
     this.pollInterval.unref();
   }
