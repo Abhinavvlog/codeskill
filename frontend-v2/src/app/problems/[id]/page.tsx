@@ -10,14 +10,15 @@ import {
   List, MessageSquare, Lightbulb, Sparkles, StickyNote, Tag, BarChart3,
   Trophy, Flame, Copy, RotateCcw, History, Eye, EyeOff, Plus, Trash2,
   ThumbsUp, ThumbsDown, ArrowLeft, Hash, Zap, Target, Award, TrendingUp,
-  Code2, FileText, User, Check, ArrowRight, Users
+  Code2, FileText, User, Check, ArrowRight, Users, Layers
 } from "lucide-react";
 import PracticePet from "@/components/pet/PracticePet";
 import ExecutionFeedback from "@/components/Result/ExecutionFeedback";
 import PracticeConfetti from "@/components/Result/PracticeConfetti";
 import SubmissionDetails from "@/components/Result/SubmissionDetails";
+import SampleTestCasesPanel, { hasSampleContent } from "@/components/problems/SampleTestCasesPanel";
 import { ExecutionFeedbackResult, normalizeVerdict } from "@/lib/submission-feedback";
-import { editorLanguages } from '@/lib/editor-languages';
+import { editorLanguages, canonicalEditorLanguage } from '@/lib/editor-languages';
 import { ProgrammingLanguageIcon } from "@/components/ui/ProgrammingLanguageIcon";
 import Link from "next/link";
 import { useState, useEffect, useCallback, use, useRef } from "react";
@@ -48,6 +49,7 @@ interface RunResult extends ExecutionFeedbackResult { logs: string[] }
 // ─── SIDEBAR TAB DEFINITIONS ─────────────────────────────────────────────────
 const SIDEBAR_TABS = [
   { id: "description", icon: FileText, label: "Description", shortcut: "⌘D" },
+  { id: "samples", icon: Layers, label: "Samples", shortcut: "⌘T" },
   { id: "editorial", icon: BookOpen, label: "Editorial", shortcut: "⌘E" },
   { id: "submissions", icon: History, label: "Submissions", shortcut: "⌘S" },
   { id: "hints", icon: Lightbulb, label: "Hints", shortcut: "⌘H" },
@@ -187,7 +189,23 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
         const next = res.data.data;
         const allowed = editorLanguages(LANGUAGES, next.config?.supportedLanguages);
         setProblem(next);
-        setLanguage(current => allowed.some(option => option.id === current) ? current : allowed[0]?.id || current);
+        // Language preference: user's saved choice wins, then the author's
+        // default language, then the first supported language.
+        const saved = typeof window !== "undefined"
+          ? localStorage.getItem(`codeskill_lang_${next.slug}`)
+          : null;
+        const authorDefault = canonicalEditorLanguage(
+          next.config?.defaultLanguage || "",
+        );
+        const preferred =
+          saved && allowed.some((option) => option.id === saved) ? saved
+            : authorDefault && allowed.some((option) => option.id === authorDefault)
+              ? authorDefault
+              : null;
+        setLanguage(current =>
+          preferred ??
+          (allowed.some(option => option.id === current) ? current : allowed[0]?.id || current),
+        );
       })
       .catch(() => setProblem(null))
       .finally(() => setLoading(false));
@@ -422,7 +440,10 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
     if (!problem || !problem.testCases || !problem.testCases.cases || problem.testCases.cases.length === 0) {
       return [];
     }
-    return problem.testCases.cases.map((tc: any, i: number) => ({ id: i + 1, input: tc.input, expected: tc.output }));
+    // Only public cases are shown and run in the terminal; hidden cases are judge-only.
+    return problem.testCases.cases
+      .filter((tc: any) => tc.isHidden !== true && hasSampleContent(tc))
+      .map((tc: any, i: number) => ({ id: i + 1, input: tc.input, expected: tc.output }));
   };
 
   const executeCode = async () => {
@@ -658,6 +679,12 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
     ? (appTheme === "dark" ? "vs-dark" : "codeskill-hackerrank")
     : editorThemeName;
   const testCases = getTestCases();
+  // Left-panel examples fall back to the public (non-hidden) test cases.
+  const displaySamples = problem.statement?.samples?.length
+    ? problem.statement.samples.filter(hasSampleContent)
+    : (problem.testCases?.cases || [])
+        .filter((tc: any) => tc.isHidden !== true && hasSampleContent(tc))
+        .map((tc: any) => ({ input: tc.input, output: tc.output, explanation: tc.explanation }));
   const difficultyClass = DIFFICULTY_COLORS[problem.difficulty] || DIFFICULTY_COLORS.Easy;
   const displayedStats = problemStats ?? problem.stats;
   const totalProblemSubmissions = displayedStats?.totalSubmissions ?? 0;
@@ -779,6 +806,7 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
                       aria-selected={language === lang.id}
                       onClick={() => {
                         localStorage.setItem(`codeskill_draft_${problem.slug}_${language}`, code);
+                        localStorage.setItem(`codeskill_lang_${problem.slug}`, lang.id);
                         setLanguage(lang.id);
                         setRunResult(null);
                         setShowLanguageDropdown(false);
@@ -965,10 +993,10 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
                         )}
 
                         {/* Sample Test Cases in Description */}
-                        {problem.statement?.samples?.length > 0 && (
+                        {displaySamples.length > 0 && (
                           <div className="mt-6 space-y-3">
                             <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Examples</h3>
-                            {problem.statement.samples.map((sample: any, i: number) => (
+                            {displaySamples.map((sample: any, i: number) => (
                               <div key={i} className="border border-border bg-secondary rounded-xl overflow-hidden">
                                 <div className="bg-muted/50 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                                   Example {i + 1}
@@ -997,6 +1025,25 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
                             ))}
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* ──────────── SAMPLES TAB ──────────── */}
+                    {activeSidebarTab === "samples" && (
+                      <div className="p-5">
+                        <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-3">
+                          Sample Test Cases
+                        </h3>
+                        <SampleTestCasesPanel
+                          samples={displaySamples}
+                          onLoad={(sample) => {
+                            const match = testCases.findIndex(
+                              (tc: any) => (tc.input || "") === (sample.input || ""),
+                            );
+                            setActiveTestCase(match >= 0 ? match : 0);
+                            setActiveBottomTab("testcases");
+                          }}
+                        />
                       </div>
                     )}
 

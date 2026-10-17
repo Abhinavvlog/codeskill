@@ -303,14 +303,35 @@ export class ProblemsService {
     );
   }
 
+  /**
+   * Left-panel examples. When no explicit examples were authored, the public
+   * (non-hidden) test cases become the sample examples shown to candidates.
+   */
+  private samplesOrPublicCases(examples: unknown, testCases: unknown) {
+    const authored = cases(examples).map(
+      ({ input, output, explanation }) => ({ input, output, explanation }),
+    );
+    if (authored.length > 0) return authored;
+    return cases(testCases)
+      .filter((test) => !test.isHidden)
+      .map(({ input, output, explanation }) => ({
+        input,
+        output,
+        explanation: explanation || '',
+      }));
+  }
+
   private bankConfig(question: Question) {
     const starters = Array.isArray(question.starterCode)
       ? question.starterCode
       : [];
+    const supported = strings(question.supportedLanguages);
+    const preferred = String(question.language || '').toLowerCase();
     return {
       timeLimit: question.timeLimit ?? 1000,
       memoryLimit: question.memoryLimit ?? 256,
-      supportedLanguages: strings(question.supportedLanguages),
+      supportedLanguages: supported,
+      defaultLanguage: supported.includes(preferred) ? preferred : undefined,
       starterCode: codeMap(
         Object.fromEntries(starters.map((item) => [item.language, item.code])),
       ),
@@ -326,8 +347,9 @@ export class ProblemsService {
         throw new NotFoundException('Problem not found');
       const statement = metadata.statement;
       const config = metadata.config;
-      const samples = cases(statement?.samples).map(
-        ({ input, output, explanation }) => ({ input, output, explanation }),
+      const samples = this.samplesOrPublicCases(
+        statement?.samples,
+        metadata.testCases?.cases,
       );
       return {
         data: {
@@ -344,6 +366,7 @@ export class ProblemsService {
             memoryLimit: config?.memoryLimit ?? 256,
             cpuLimit: config?.cpuLimit ?? 1,
             supportedLanguages: strings(config?.supportedLanguages),
+            defaultLanguage: config?.defaultLanguage || undefined,
             starterCode: codeMap(config?.starterCode),
             executionMode: config?.executionMode || 'standard',
             functionSignature: config?.functionSignature as unknown,
@@ -371,8 +394,9 @@ export class ProblemsService {
         (await this.hasMetadataCounterpart(question))
       )
         throw new NotFoundException('Problem not found');
-      const samples = cases(question.examples).map(
-        ({ input, output, explanation }) => ({ input, output, explanation }),
+      const samples = this.samplesOrPublicCases(
+        question.examples,
+        question.testCases,
       );
       return {
         data: {
@@ -418,8 +442,9 @@ export class ProblemsService {
       (await this.hasBankCounterpart(problem))
     )
       throw new NotFoundException('Problem not found');
-    const samples = cases(problem.examples).map(
-      ({ input, output, explanation }) => ({ input, output, explanation }),
+    const samples = this.samplesOrPublicCases(
+      problem.examples,
+      problem.testCases,
     );
     return {
       data: {

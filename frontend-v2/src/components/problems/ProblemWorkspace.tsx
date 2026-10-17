@@ -10,9 +10,10 @@ import {
   List, MessageSquare, Lightbulb, Sparkles, StickyNote, Tag, BarChart3,
   Trophy, Flame, Copy, RotateCcw, History, Eye, EyeOff, Plus, Trash2,
   ThumbsUp, ThumbsDown, ArrowLeft, Hash, Zap, Target, Award, TrendingUp,
-  Code2, FileText, Brain, User, SendHorizontal, Bot, Check, ArrowRight
+  Code2, FileText, Brain, User, SendHorizontal, Bot, Check, ArrowRight, Layers
 } from "lucide-react";
 import { ProgrammingLanguageIcon } from "@/components/ui/ProgrammingLanguageIcon";
+import SampleTestCasesPanel, { hasSampleContent } from "@/components/problems/SampleTestCasesPanel";
 import Link from "next/link";
 import { useState, useEffect, useCallback, use, useRef } from "react";
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
@@ -61,6 +62,7 @@ interface RunResult {
 // ─── SIDEBAR TAB DEFINITIONS ─────────────────────────────────────────────────
 const SIDEBAR_TABS = [
   { id: "description", icon: FileText, label: "Description", shortcut: "⌘D" },
+  { id: "samples", icon: Layers, label: "Samples", shortcut: "⌘T" },
   { id: "editorial", icon: BookOpen, label: "Editorial", shortcut: "⌘E" },
   { id: "submissions", icon: History, label: "Submissions", shortcut: "⌘S" },
   { id: "hints", icon: Lightbulb, label: "Hints", shortcut: "⌘H" },
@@ -92,7 +94,13 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
   
   // Editor State
   const executionRuntimes = useExecutionRuntimes();
-  const [language, setLanguage] = useState<string>("javascript");
+  const [language, setLanguage] = useState<string>(() => {
+    if (typeof window !== "undefined" && unwrappedParams?.id) {
+      const saved = localStorage.getItem(`codeskill_lang_p_${unwrappedParams.id}`);
+      if (saved) return saved;
+    }
+    return "javascript";
+  });
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [code, setCode] = useState<string>("");
 
@@ -309,7 +317,10 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
     if (!problem || !problem.testCases || !problem.testCases.cases || problem.testCases.cases.length === 0) {
       return [];
     }
-    return problem.testCases.cases.map((tc: any, i: number) => ({ id: i + 1, input: tc.input, expected: tc.output }));
+    // Only public cases are shown and run in the terminal; hidden cases are judge-only.
+    return problem.testCases.cases
+      .filter((tc: any) => tc.isHidden !== true && hasSampleContent(tc))
+      .map((tc: any, i: number) => ({ id: i + 1, input: tc.input, expected: tc.output }));
   };
 
   const executeCode = async () => {
@@ -564,6 +575,12 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
 
   const editorTheme = theme === "dark" ? "vs-dark" : "light";
   const testCases = getTestCases();
+  // Left-panel examples fall back to the public (non-hidden) test cases.
+  const displaySamples = problem.statement?.samples?.length
+    ? problem.statement.samples.filter(hasSampleContent)
+    : (problem.testCases?.cases || [])
+        .filter((tc: any) => tc.isHidden !== true && hasSampleContent(tc))
+        .map((tc: any) => ({ input: tc.input, output: tc.output, explanation: tc.explanation }));
   const difficultyClass = DIFFICULTY_COLORS[problem.difficulty] || DIFFICULTY_COLORS.Easy;
   const acceptanceRate = problem.stats?.totalSubmissions > 0
     ? ((problem.stats.acceptedSubmissions / problem.stats.totalSubmissions) * 100).toFixed(1)
@@ -661,6 +678,11 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
                       aria-selected={language === lang.id}
                       onClick={() => {
                         setLanguage(lang.id);
+                        try {
+                          if (unwrappedParams?.id) localStorage.setItem(`codeskill_lang_p_${unwrappedParams.id}`, lang.id);
+                        } catch {
+                          // Preference persistence must never block the language switch.
+                        }
                         setShowLanguageDropdown(false);
                       }}
                       className="flex w-full items-center justify-between px-3 py-2 text-sm text-[#E5E7EB] hover:bg-[#27272A] transition-colors text-left"
@@ -793,10 +815,10 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
                         )}
 
                         {/* Sample Test Cases in Description */}
-                        {problem.statement?.samples?.length > 0 && (
+                        {displaySamples.length > 0 && (
                           <div className="mt-6 space-y-3">
                             <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Examples</h3>
-                            {problem.statement.samples.map((sample: any, i: number) => (
+                            {displaySamples.map((sample: any, i: number) => (
                               <div key={i} className="border border-border bg-secondary rounded-xl overflow-hidden">
                                 <div className="bg-muted/50 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                                   Example {i + 1}
@@ -825,6 +847,25 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
                             ))}
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* ──────────── SAMPLES TAB ──────────── */}
+                    {activeSidebarTab === "samples" && (
+                      <div className="p-5">
+                        <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-3">
+                          Sample Test Cases
+                        </h3>
+                        <SampleTestCasesPanel
+                          samples={displaySamples}
+                          onLoad={(sample) => {
+                            const match = testCases.findIndex(
+                              (tc: any) => (tc.input || "") === (sample.input || ""),
+                            );
+                            setActiveTestCase(match >= 0 ? match : 0);
+                            setActiveBottomTab("testcases");
+                          }}
+                        />
                       </div>
                     )}
 

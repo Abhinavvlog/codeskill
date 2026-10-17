@@ -37,7 +37,6 @@ import ExecutionSettings from "./_components/ExecutionSettings";
 import ProblemStatement from "./_components/ProblemStatement";
 import Constraints from "./_components/Constraints";
 import InputOutputFormat from "./_components/InputOutputFormat";
-import SampleTestCases from "./_components/SampleTestCases";
 import StarterCode from "./_components/StarterCode";
 import ReferenceSolution from "./_components/ReferenceSolution";
 import TestCases from "./_components/TestCases";
@@ -105,7 +104,6 @@ function UnifiedQuestionForm() {
         { id: "statement", label: "Statement", icon: FileText },
         { id: "constraints", label: "Constraints", icon: AlertTriangle },
         { id: "io-format", label: "I/O Format", icon: ArrowRightLeft },
-        { id: "sample-test-cases", label: "Sample Cases", icon: Lightbulb },
         { id: "starter-code", label: "Starter Code", icon: LayoutTemplate },
         { id: "reference-solution", label: "Reference", icon: Shield },
         { id: "test-cases", label: "Test Cases", icon: Database },
@@ -247,13 +245,27 @@ function UnifiedQuestionForm() {
         payload.constraints = formatConstraints(store.statement.constraints);
         payload.inputFormat = store.statement.inputFormat;
         payload.outputFormat = store.statement.outputFormat;
-        payload.examples = store.sampleExamples;
-        payload.starterCode = store.starterCode;
+        // Public test cases double as the sample examples shown to candidates.
+        payload.examples = store.testCases
+          .filter((tc) => !tc.isHidden)
+          .map((tc) => ({
+            input: tc.input,
+            output: tc.output,
+            explanation: tc.explanation || "",
+          }));
+        payload.starterCode = Object.entries(store.starterCode).map(
+          ([language, code]) => ({ language, code }),
+        );
         payload.referenceSolutions = store.referenceSolution;
-        payload.testCases = store.testCases;
+        payload.testCases = store.testCases.map((tc) => ({
+          ...tc,
+          // The backend persists test case outputs as expectedOutput.
+          expectedOutput: tc.output,
+        }));
         payload.timeLimit = store.execution.timeLimit;
         payload.memoryLimit = store.execution.memoryLimit;
         payload.supportedLanguages = store.languages.supported;
+        payload.language = store.languages.default;
       }
 
       await adminQuestionsAPI.create(payload);
@@ -441,7 +453,6 @@ function UnifiedQuestionForm() {
                   <ProblemStatement />
                   <Constraints />
                   <InputOutputFormat />
-                  <SampleTestCases />
                   <StarterCode />
                   <ReferenceSolution />
                   <TestCases />

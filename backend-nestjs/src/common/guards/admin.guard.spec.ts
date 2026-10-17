@@ -24,25 +24,15 @@ describe('AdminGuard & TeacherGuard (AUD-025)', () => {
     expect(teacherGuard.canActivate(ctx)).toBe(true);
   });
 
-  it('allows user with admin or super_admin role', () => {
-    const ctx = createMockContext({ id: 'u-2', role: 'admin' });
+  it.each(['admin', 'super_admin', 'student_admin', 'assessment_admin'])('allows administrative role %s', (role) => {
+    const ctx = createMockContext({ id: 'u-2', role });
     expect(adminGuard.canActivate(ctx)).toBe(true);
-    expect(teacherGuard.canActivate(ctx)).toBe(true);
   });
 
-  it('allows teacher role in TeacherGuard but not AdminGuard (AUD-028)', () => {
-    const ctx = createMockContext({ id: 'u-3', role: 'teacher' });
+  it.each(['teacher', 'faculty', 'instructor'])('limits %s to teacher access (AUD-025)', (role) => {
+    const ctx = createMockContext({ id: 'u-3', role });
     expect(teacherGuard.canActivate(ctx)).toBe(true);
     expect(() => adminGuard.canActivate(ctx)).toThrow(ForbiddenException);
-  });
-
-  it('allows faculty and instructor roles in TeacherGuard but not AdminGuard (AUD-028)', () => {
-    const ctxFaculty = createMockContext({ id: 'u-4', role: 'faculty' });
-    const ctxInstructor = createMockContext({ id: 'u-5', role: 'instructor' });
-    expect(teacherGuard.canActivate(ctxFaculty)).toBe(true);
-    expect(teacherGuard.canActivate(ctxInstructor)).toBe(true);
-    expect(() => adminGuard.canActivate(ctxFaculty)).toThrow(ForbiddenException);
-    expect(() => adminGuard.canActivate(ctxInstructor)).toThrow(ForbiddenException);
   });
 
   it('rejects student or unauthorized user', () => {

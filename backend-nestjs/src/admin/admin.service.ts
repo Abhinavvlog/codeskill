@@ -935,6 +935,7 @@ export class AdminService {
       executionMode: execution?.executionMode || 'standard',
       functionSignature: execution?.functionSignature,
       exactOutput: execution?.exactOutput === true,
+      defaultLanguage: payload.defaultLanguage || null,
       starterCode: starterCode || {},
       referenceSolution: referenceSolution || {},
       hasCustomChecker: customChecker?.hasCustomChecker || false,
