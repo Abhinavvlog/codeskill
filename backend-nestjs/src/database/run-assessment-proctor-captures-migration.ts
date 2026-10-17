@@ -4,6 +4,7 @@ dotenv.config();
 import { DataSource } from 'typeorm';
 import { practiceSubmissionMigrationOptions } from './run-practice-submission-source';
 import { applyAssessmentProctorCapturesMigration } from './migrations/assessment-proctor-captures';
+import { applyAssessmentProctoringModesMigration } from './migrations/assessment-proctoring-modes';
 
 async function run(): Promise<void> {
   const dataSource = new DataSource(practiceSubmissionMigrationOptions());
@@ -12,7 +13,18 @@ async function run(): Promise<void> {
     const queryRunner = dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
-      await applyAssessmentProctorCapturesMigration(queryRunner);
+      await queryRunner.startTransaction();
+      try {
+        await queryRunner.query("SET LOCAL lock_timeout = '5s'");
+        await queryRunner.query("SET LOCAL statement_timeout = '30s'");
+        await queryRunner.query('SELECT pg_advisory_xact_lock(1902230159)');
+        await applyAssessmentProctorCapturesMigration(queryRunner);
+        await applyAssessmentProctoringModesMigration(queryRunner);
+        await queryRunner.commitTransaction();
+      } catch (error) {
+        await queryRunner.rollbackTransaction();
+        throw error;
+      }
     } finally {
       await queryRunner.release();
     }
@@ -22,8 +34,8 @@ async function run(): Promise<void> {
 }
 
 void run()
-  .then(() => console.log('Assessment proctor capture migration completed.'))
+  .then(() => console.log('Assessment proctoring schema migration completed.'))
   .catch((error) => {
-    console.error('Assessment proctor capture migration failed:', error instanceof Error ? error.message : error);
+    console.error('Assessment proctoring schema migration failed:', error instanceof Error ? error.message : error);
     process.exitCode = 1;
   });
