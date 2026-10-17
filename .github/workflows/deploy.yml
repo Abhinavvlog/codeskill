@@ -64,7 +64,7 @@ jobs:
 
       - name: Backend Lint Check
         working-directory: ./backend-nestjs
-        run: npx eslint "{src,apps,libs,test}/**/*.ts"
+        run: npx eslint --quiet "{src,apps,libs,test}/**/*.ts"
 
       - name: Backend Build & Type Check
         working-directory: ./backend-nestjs
@@ -95,7 +95,7 @@ jobs:
 
       - name: Frontend Lint Check
         working-directory: ./frontend-v2
-        run: npm run lint
+        run: npm run lint -- --quiet
 
       - name: Frontend Unit Tests
         working-directory: ./frontend-v2
