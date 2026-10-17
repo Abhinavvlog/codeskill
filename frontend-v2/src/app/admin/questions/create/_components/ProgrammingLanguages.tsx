@@ -1,6 +1,7 @@
 "use client";
 
-import { useQuestionStore, ALL_LANGUAGES, DEFAULT_COMPILER_VERSIONS } from "../_store/useQuestionStore";
+import { ALL_LANGUAGES, DEFAULT_COMPILER_VERSIONS } from "../_store/useQuestionStore";
+import { useQuestionEditorStore } from "../_store/QuestionEditorProvider";
 import SectionCard from "./SectionCard";
 import { Code2, Check } from "lucide-react";
 import { ProgrammingLanguageIcon } from "@/components/ui/ProgrammingLanguageIcon";
@@ -11,20 +12,19 @@ const PRESETS = [
   { label: "Competitive", langs: ["cpp", "java", "python3", "c"] },
 ] as const;
 
-export default function ProgrammingLanguages() {
-  const { languages, toggleLanguage, setCompilerVersion } = useQuestionStore();
+export default function ProgrammingLanguages({ showCompilerVersions = true }: { showCompilerVersions?: boolean }) {
+  const { languages, toggleLanguage, setCompilerVersion, updateLanguages } = useQuestionEditorStore();
 
   const applyPreset = (langs: readonly string[]) => {
     // We'll set exactly these languages
-    const store = useQuestionStore.getState();
-    store.updateLanguages({ supported: [...langs] });
+    updateLanguages({ supported: [...langs] });
   };
 
   return (
     <SectionCard
       id="languages"
       title="Programming Languages"
-      subtitle="Select supported languages and compiler/runtime versions."
+      subtitle={showCompilerVersions ? "Select supported languages and compiler/runtime versions." : "Choose supported languages and the default editor language."}
       icon={Code2}
       delay={0.05}
     >
@@ -89,8 +89,9 @@ export default function ProgrammingLanguages() {
               Default Language
             </h3>
             <select
+              aria-label="Default Language"
               value={languages.supported.includes(languages.default) ? languages.default : languages.supported[0]}
-              onChange={(e) => useQuestionStore.getState().updateLanguages({ default: e.target.value })}
+              onChange={(e) => updateLanguages({ default: e.target.value })}
               className="w-full sm:w-64 px-3 py-2 bg-muted/50 dark:bg-card border border-border dark:border-border rounded-lg text-sm text-foreground dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
             >
               {languages.supported.map((langId) => {
@@ -109,7 +110,7 @@ export default function ProgrammingLanguages() {
         )}
 
         {/* Compiler Versions */}
-        {languages.supported.length > 0 && (
+        {showCompilerVersions && languages.supported.length > 0 && (
           <div className="mt-4 pt-4 border-t border-gray-100 dark:border-white/[0.04]">
             <h3 className="text-[13px] font-semibold text-gray-700 dark:text-slate-300 mb-3">
               Compiler / Runtime Versions

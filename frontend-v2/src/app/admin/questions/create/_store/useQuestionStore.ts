@@ -373,7 +373,7 @@ export function normalizeTrueFalseOptions(existing?: any[], correctAnswer?: numb
   ];
 }
 
-export const useQuestionStore = create<QuestionState>((set, get) => ({
+export const createQuestionStore = () => create<QuestionState>((set, get) => ({
   ...initialState,
 
   updateMetadata: (updates) =>
@@ -590,3 +590,5 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
     };
   }),
 }));
+
+export const useQuestionStore = createQuestionStore();

@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useQuestionStore, ALL_LANGUAGES } from "../_store/useQuestionStore";
+import { ALL_LANGUAGES } from "../_store/useQuestionStore";
+import { useQuestionEditorStore } from "../_store/QuestionEditorProvider";
 import SectionCard from "./SectionCard";
 import Editor from "@monaco-editor/react";
 import { ShieldCheck } from "lucide-react";
 import { ProgrammingLanguageIcon } from "@/components/ui/ProgrammingLanguageIcon";
 
 export default function ReferenceSolution() {
-  const { languages, referenceSolution, setReferenceSolution, isDarkMode } = useQuestionStore();
+  const { languages, referenceSolution, setReferenceSolution, isDarkMode } = useQuestionEditorStore();
   const [activeTab, setActiveTab] = useState(languages.supported[0] || "javascript");
 
   const supportedLangs = ALL_LANGUAGES.filter((l) => languages.supported.includes(l.id));

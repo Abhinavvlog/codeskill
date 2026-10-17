@@ -1,12 +1,12 @@
 "use client";
 
-import { useQuestionStore } from "../_store/useQuestionStore";
+import { useQuestionEditorStore } from "../_store/QuestionEditorProvider";
 import SectionCard from "./SectionCard";
 import Editor from "@monaco-editor/react";
 import { ArrowRightLeft } from "lucide-react";
 
 export default function InputOutputFormat() {
-  const { statement, updateStatement, isDarkMode } = useQuestionStore();
+  const { statement, updateStatement, isDarkMode } = useQuestionEditorStore();
 
   return (
     <SectionCard

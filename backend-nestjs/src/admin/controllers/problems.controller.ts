@@ -45,7 +45,7 @@ export class AdminProblemsController {
   @Post()
   @ApiOperation({ summary: 'Create a new problem' })
   async createProblem(@Body() body: any, @Req() req: any) {
-    return this.adminService.createProblem(body, req.user?._id);
+    return this.adminService.createProblem(body, req.user?.id || req.user?._id);
   }
 
   @Put(':id')
