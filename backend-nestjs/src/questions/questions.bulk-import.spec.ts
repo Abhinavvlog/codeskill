@@ -2,6 +2,8 @@ jest.mock('@nestjs/typeorm', () => ({ InjectRepository: () => () => {} }));
 
 import { QuestionsService } from './questions.service';
 import * as xlsx from 'xlsx';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 describe('Questions Bulk Import & Merge Strategy', () => {
   let service: QuestionsService;
@@ -55,6 +57,85 @@ describe('Questions Bulk Import & Merge Strategy', () => {
     xlsx.utils.book_append_sheet(wb, ws, 'Questions');
     return xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
   };
+
+  it('imports complete coding workbook columns through preview and commit', async () => {
+    const buffer = createWorkbookBuffer([{
+      title: 'Valid Parentheses',
+      slug: 'valid-parentheses',
+      question_type: 'coding',
+      topic: 'Data Structures',
+      language_cpp: 1,
+      language_java: 1,
+      language_python: 1,
+      problem_statement: 'Check whether brackets are balanced.',
+      input_format: 'One bracket string.',
+      output_format: 'Print true or false.',
+      solution_explanation: 'Use a stack.',
+      time_complexity: 'O(n)',
+      space_complexity: 'O(n)',
+      visibility: 'Published',
+      sample_input_1: '()[]{}',
+      sample_output_1: 'true',
+      sample_input_2: '(]',
+      sample_output_2: 'false',
+      test_input_1: '([)]',
+      test_expected_output_1: 'false',
+      test_hidden_1: 0,
+      test_weight_1: 2,
+      test_input_2: '{[]}',
+      test_expected_output_2: 'true',
+      test_hidden_2: 1,
+      starter_code_cpp: 'int main() {}',
+      starter_code_java: 'class Main {}',
+      starter_code_python: 'def main(): pass',
+      reference_solution_cpp: 'int main() { return 0; }',
+      reference_solution_java: 'class Main { public static void main(String[] args) {} }',
+      reference_solution_python: 'print(True)',
+    }]);
+
+    const preview = await service.parseAndValidateQuestionsImport(buffer);
+    expect(preview.errors).toEqual([]);
+    expect(preview.summary.validCount).toBe(1);
+    expect(preview.validRows[0]).toMatchObject({
+      slug: 'valid-parentheses',
+      language: 'python3',
+      supportedLanguages: ['cpp', 'java', 'python3'],
+      examples: [{ input: '()[]{}', output: 'true' }, { input: '(]', output: 'false' }],
+      testCases: [
+        { input: '([)]', output: 'false', isHidden: false, weight: 2 },
+        { input: '{[]}', output: 'true', isHidden: true },
+      ],
+    });
+
+    await service.confirmQuestionsImport(preview.validRows, admin);
+    expect(questionRepo.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      slug: 'valid-parentheses',
+      title: 'Valid Parentheses',
+      supportedLanguages: ['cpp', 'java', 'python3'],
+      starterCode: expect.arrayContaining([{ language: 'cpp', code: 'int main() {}' }]),
+      referenceSolutions: expect.arrayContaining([{ language: 'python3', sourceCode: 'print(True)' }]),
+      testCases: expect.arrayContaining([{ id: '2', input: '{[]}', expectedOutput: 'true', isHidden: true, weight: 1 }]),
+      metadata: expect.objectContaining({ timeComplexity: 'O(n)', spaceComplexity: 'O(n)' }),
+    }));
+  });
+
+  it.each(['csv', 'xlsx'])('accepts the downloadable coding template as %s', async (extension) => {
+    const path = join(
+      process.cwd(),
+      '..',
+      'frontend-v2',
+      'public',
+      'templates',
+      `chandigarh_university_coding_questions_template.${extension}`,
+    );
+    const preview = await service.parseAndValidateQuestionsImport(readFileSync(path));
+    expect(preview.errors).toEqual([]);
+    expect(preview.summary.validCount).toBe(1);
+    expect(preview.validRows[0].supportedLanguages).toEqual(['cpp', 'java', 'python3']);
+    expect(preview.validRows[0].testCases).toHaveLength(2);
+    expect(preview.validRows[0].referenceSolutions).toHaveLength(3);
+  });
+
 
   it('normalizes whitespace, case, and punctuation to detect exact duplicates via content hash', () => {
     const text1 = 'What is the   time complexity of QuickSort?';
