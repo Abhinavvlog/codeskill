@@ -91,6 +91,13 @@ export interface TestCase {
   weight: number;
 }
 
+export interface SampleExample {
+  id: string;
+  input: string;
+  output: string;
+  explanation: string;
+}
+
 export interface CustomChecker {
   enabled: boolean;
   language: string;
@@ -153,6 +160,7 @@ export interface QuestionState {
 
   starterCode: Record<string, string>;
   referenceSolution: Record<string, string>;
+  sampleExamples: SampleExample[];
   testCases: TestCase[];
   customChecker: CustomChecker;
   solutionExplanation: SolutionExplanation;
@@ -176,6 +184,10 @@ export interface QuestionState {
   setStarterCode: (lang: string, code: string) => void;
   setReferenceSolution: (lang: string, code: string) => void;
 
+  addSampleExample: () => void;
+  updateSampleExample: (id: string, updates: Partial<SampleExample>) => void;
+  removeSampleExample: (id: string) => void;
+
   addTestCase: () => void;
   updateTestCase: (id: string, updates: Partial<TestCase>) => void;
   removeTestCase: (id: string) => void;
@@ -195,10 +207,9 @@ export interface QuestionState {
   getProgress: () => number;
   resetStore: () => void;
   setAllData: (
-    data: Partial<QuestionState> & {
-      /** Legacy: separate example list migrated into public test cases. */
-      examples?: Array<{ input?: string; output?: string; explanation?: string }>;
-      sampleExamples?: Array<{ input?: string; output?: string; explanation?: string }>;
+    data: Omit<Partial<QuestionState>, 'sampleExamples'> & {
+      examples?: Array<{ input?: string; output?: string; explanation?: string; isHidden?: boolean }>;
+      sampleExamples?: Array<{ id?: string; input?: string; output?: string; explanation?: string; isHidden?: boolean }>;
     },
   ) => void;
 }
@@ -226,27 +237,6 @@ function toCodeMap(value: unknown): Record<string, string> {
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
-
-/** Older questions stored examples separately from test cases; unify them as public test cases. */
-function migrateExamplesIntoTestCases(
-  testCases: TestCase[],
-  examples: Array<{ input?: string; output?: string; explanation?: string }>,
-): TestCase[] {
-  const publicInputs = new Set(
-    testCases.filter((tc) => !tc.isHidden).map((tc) => String(tc.input ?? "").trim()),
-  );
-  const migrated = (examples || [])
-    .filter((ex) => String(ex?.input ?? "").trim() && !publicInputs.has(String(ex?.input ?? "").trim()))
-    .map((ex) => ({
-      id: generateId(),
-      input: String(ex.input ?? "").trim(),
-      output: ex.output || "",
-      explanation: ex.explanation || "",
-      isHidden: false,
-      weight: 1,
-    }));
-  return [...testCases, ...migrated];
-}
 
 const initialState = {
   metadata: {
@@ -298,6 +288,7 @@ const initialState = {
   },
   starterCode: {},
   referenceSolution: {},
+  sampleExamples: [],
   testCases: [],
   customChecker: {
     enabled: false,
@@ -436,6 +427,16 @@ export const createQuestionStore = () => create<QuestionState>((set, get) => ({
   setReferenceSolution: (lang, code) =>
     set((s) => ({ referenceSolution: { ...s.referenceSolution, [lang]: code } })),
 
+  addSampleExample: () => set((s) => ({
+    sampleExamples: [...s.sampleExamples, { id: generateId(), input: '', output: '', explanation: '' }],
+  })),
+  updateSampleExample: (id, updates) => set((s) => ({
+    sampleExamples: s.sampleExamples.map((example) => example.id === id ? { ...example, ...updates } : example),
+  })),
+  removeSampleExample: (id) => set((s) => ({
+    sampleExamples: s.sampleExamples.filter((example) => example.id !== id),
+  })),
+
   addTestCase: () =>
     set((s) => ({
       testCases: [
@@ -515,9 +516,9 @@ export const createQuestionStore = () => create<QuestionState>((set, get) => ({
     if (s.statement.inputFormat.trim().length > 0) filled++;
     if (s.statement.outputFormat.trim().length > 0) filled++;
 
-    // Samples (public test cases are shown to candidates as examples)
+    // Authored examples are independent of judge test cases.
     total += 1;
-    if (s.testCases.some((tc) => !tc.isHidden)) filled++;
+    if (s.sampleExamples.some((example) => example.input || example.output)) filled++;
 
     // Starter Code
     total += 1;
@@ -578,10 +579,12 @@ export const createQuestionStore = () => create<QuestionState>((set, get) => ({
       mcqOptions: nextMcqOptions,
       starterCode: { ...state.starterCode, ...toCodeMap(data.starterCode) },
       referenceSolution: { ...state.referenceSolution, ...toCodeMap(data.referenceSolution) },
-      testCases: migrateExamplesIntoTestCases(
-        data.testCases || state.testCases,
-        data.examples || data.sampleExamples || [],
-      ),
+      sampleExamples: data.sampleExamples !== undefined || data.examples !== undefined
+        ? (data.sampleExamples ?? data.examples ?? [])
+            .filter((example) => example.isHidden !== true)
+            .map((example) => ({ id: generateId(), input: example.input ?? '', output: example.output ?? '', explanation: example.explanation ?? '' }))
+        : state.sampleExamples,
+      testCases: data.testCases ?? state.testCases,
       customChecker: { ...state.customChecker, ...data.customChecker },
       solutionExplanation: { ...state.solutionExplanation, ...data.solutionExplanation },
       seo: { ...state.seo, ...data.seo },

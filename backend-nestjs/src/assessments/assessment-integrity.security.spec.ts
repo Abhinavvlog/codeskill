@@ -446,6 +446,33 @@ describe('Assessment Integrity & Server-Side Scoring (AUD-002, NEW-001, NEW-002,
     expect(mockAttemptRepo.save).not.toHaveBeenCalled();
   });
 
+  it.each([true, false])('returns authored examples separately from assessment judge cases (examples: %s)', async (hasExamples) => {
+    mockAssessmentRepo.findOne.mockResolvedValue({ ...mockAssessment, questions: ['q-coding-1'] });
+    mockAttemptRepo.findOne.mockResolvedValue({
+      id: 'attempt-1', assessmentId, studentId: studentUser.id,
+      status: 'in_progress', startedAt: new Date(), questionOrder: ['q-coding-1'], responses: [],
+    });
+    mockQuestionRepo.find.mockResolvedValue([{
+      id: 'q-coding-1', questionType: 'coding',
+      examples: hasExamples ? [
+        { input: 'example input', output: 'example output', explanation: 'An explanation', referenceSolution: 'PRIVATE' },
+        { input: 'PRIVATE', output: 'PRIVATE', isHidden: true },
+      ] : [],
+      testCases: [
+        { input: 'public judge input', expectedOutput: 'public judge output', isHidden: false },
+        { input: 'PRIVATE', expectedOutput: 'PRIVATE', isHidden: true },
+      ],
+    }]);
+    const result = await service.startStudentAttempt(assessmentId, studentUser);
+    expect(result.questions[0].examples).toEqual(hasExamples
+      ? [{ input: 'example input', output: 'example output', explanation: 'An explanation' }]
+      : []);
+    expect(result.questions[0].testCases).toEqual([
+      expect.objectContaining({ input: 'public judge input', output: 'public judge output' }),
+    ]);
+    expect(JSON.stringify(result.questions)).not.toContain('PRIVATE');
+  });
+
   it('grades shuffled multiple-choice answers using the stored order, ignoring client mappings', async () => {
     mockAssessmentRepo.findOne.mockResolvedValue(mockAssessment);
     mockAttemptRepo.findOne.mockResolvedValue({
