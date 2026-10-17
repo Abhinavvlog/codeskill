@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuestionStore } from "../_store/useQuestionStore";
+import { useQuestionEditorStore } from "../_store/QuestionEditorProvider";
 import SectionCard from "./SectionCard";
 import { Cpu } from "lucide-react";
 
@@ -9,8 +9,8 @@ const inputClass =
 
 const labelClass = "text-[13px] font-medium text-gray-700 dark:text-slate-300";
 
-export default function ExecutionSettings() {
-  const { execution, updateExecution } = useQuestionStore();
+export default function ExecutionSettings({ coreOnly = false }: { coreOnly?: boolean }) {
+  const { execution, updateExecution } = useQuestionEditorStore();
 
   return (
     <SectionCard
@@ -28,6 +28,7 @@ export default function ExecutionSettings() {
             <div className="relative">
               <input
                 type="number"
+                aria-label="Time Limit"
                 value={execution.timeLimit}
                 onChange={(e) => updateExecution({ timeLimit: Number(e.target.value) })}
                 min={100}
@@ -43,6 +44,7 @@ export default function ExecutionSettings() {
             <div className="relative">
               <input
                 type="number"
+                aria-label="Memory Limit"
                 value={execution.memoryLimit}
                 onChange={(e) => updateExecution({ memoryLimit: Number(e.target.value) })}
                 min={16}
@@ -53,7 +55,7 @@ export default function ExecutionSettings() {
             </div>
           </div>
 
-          <div className="space-y-1.5">
+          {!coreOnly && <><div className="space-y-1.5">
             <label className={labelClass}>Stack Size</label>
             <div className="relative">
               <input
@@ -108,11 +110,11 @@ export default function ExecutionSettings() {
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-muted-foreground">cores</span>
             </div>
-          </div>
+          </div></>}
         </div>
 
         {/* Toggle switches */}
-        <div className="pt-4 border-t border-gray-100 dark:border-white/[0.04]">
+        {!coreOnly && <div className="pt-4 border-t border-gray-100 dark:border-white/[0.04]">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
               { key: "enableCustomInput" as const, label: "Enable Custom Input", desc: "Allow candidates to test with custom input" },
@@ -156,7 +158,7 @@ export default function ExecutionSettings() {
               </label>
             ))}
           </div>
-        </div>
+        </div>}
       </div>
     </SectionCard>
   );

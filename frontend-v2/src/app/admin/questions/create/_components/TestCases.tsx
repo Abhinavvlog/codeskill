@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuestionStore } from "../_store/useQuestionStore";
+import { useQuestionEditorStore } from "../_store/QuestionEditorProvider";
 import SectionCard from "./SectionCard";
 import { Plus, Trash2, Eye, EyeOff, Upload, Shuffle, Database } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -8,8 +8,8 @@ import { motion, AnimatePresence } from "framer-motion";
 const inputClass =
   "w-full px-3.5 py-2.5 bg-muted/50 dark:bg-card border border-border dark:border-border rounded-xl text-sm text-foreground dark:text-white placeholder:text-gray-400 dark:placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-mono";
 
-export default function TestCases() {
-  const { testCases, addTestCase, updateTestCase, removeTestCase } = useQuestionStore();
+export default function TestCases({ showTools = true }: { showTools?: boolean }) {
+  const { testCases, addTestCase, updateTestCase, removeTestCase } = useQuestionEditorStore();
 
   const publicCount = testCases.filter((tc) => !tc.isHidden).length;
   const hiddenCount = testCases.filter((tc) => tc.isHidden).length;
@@ -39,7 +39,7 @@ export default function TestCases() {
         )}
 
         {/* Bulk upload zone */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {showTools && <><div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
             { label: "CSV Upload", icon: Upload, format: ".csv" },
             { label: "JSON Upload", icon: Upload, format: ".json" },
@@ -62,7 +62,7 @@ export default function TestCases() {
           className="inline-flex items-center gap-2 px-4 py-2 bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20 text-violet-700 dark:text-violet-300 rounded-xl text-sm font-medium hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-all"
         >
           <Shuffle className="w-4 h-4" /> Generate Random Test Cases
-        </button>
+        </button></>}
 
         {/* Test case list */}
         <AnimatePresence mode="popLayout">
@@ -148,6 +148,7 @@ export default function TestCases() {
                       Input
                     </label>
                     <textarea
+                      aria-label={`Test case ${index + 1} input`}
                       value={tc.input}
                       onChange={(e) => updateTestCase(tc.id, { input: e.target.value })}
                       rows={3}
@@ -160,6 +161,7 @@ export default function TestCases() {
                       Expected Output
                     </label>
                     <textarea
+                      aria-label={`Test case ${index + 1} expected output`}
                       value={tc.output}
                       onChange={(e) => updateTestCase(tc.id, { output: e.target.value })}
                       rows={3}
