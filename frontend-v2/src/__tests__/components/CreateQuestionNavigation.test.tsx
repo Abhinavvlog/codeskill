@@ -7,7 +7,7 @@ import { adminQuestionsAPI } from "@/config/api";
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 jest.mock("@/config/api", () => ({ adminQuestionsAPI: { create: jest.fn().mockResolvedValue({}) } }));
 jest.mock("@monaco-editor/react", () => ({ __esModule: true, default: () => <div /> }));
@@ -20,6 +20,7 @@ let observerOptions: IntersectionObserverInit | undefined;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  window.history.replaceState({}, "", "/admin/questions/create");
   useQuestionStore.getState().resetStore();
   HTMLElement.prototype.scrollIntoView = scroll;
   global.IntersectionObserver = jest.fn((callback, options) => {
@@ -79,6 +80,47 @@ it("safely ignores an unmounted target", () => {
   container.querySelector("#languages")!.remove();
   fireEvent.click(nav.getByRole("button", { name: "Languages" }));
   expect(scroll).not.toHaveBeenCalled();
+});
+
+it("starts a fresh MCQ after an edit and again for each new create route", () => {
+  // The normal create link has no type query; the persisted edit state carries MCQ.
+  window.history.replaceState({}, "", "/admin/questions/create");
+  act(() => {
+    const state = useQuestionStore.getState();
+    state.updateMetadata({ title: "Previously edited", slug: "previously-edited", questionType: "MCQ", difficulty: "Hard", points: 25, negativeMarks: 5, categories: ["Arrays"], tags: ["old"] });
+    state.updateStatement({ description: "Old question statement" });
+    state.updateMCQOptions([
+      { text: "Old correct", isCorrect: true, explanation: "Old option note" },
+      { text: "Old option", isCorrect: false, explanation: "" },
+    ]);
+    state.updateSolutionExplanation({ content: "Old explanation" });
+    state.updatePublishing({ contestOnly: true, isFeatured: true });
+  });
+
+  const first = mount();
+  expect(useQuestionStore.getState()).toMatchObject({
+    metadata: { title: "", slug: "", questionType: "MCQ", difficulty: "Easy", points: 100, negativeMarks: 0, categories: [], tags: [] },
+    statement: { description: "" },
+    mcqOptions: [
+      { text: "", isCorrect: true, explanation: "" },
+      { text: "", isCorrect: false, explanation: "" },
+      { text: "", isCorrect: false, explanation: "" },
+      { text: "", isCorrect: false, explanation: "" },
+    ],
+    solutionExplanation: { content: "" },
+    publishing: { contestOnly: false, isFeatured: false },
+  });
+
+  // Ordinary edits after initialization remain in place while the user fills the form.
+  act(() => useQuestionStore.getState().updateMetadata({ title: "New MCQ", slug: "new-mcq" }));
+  expect(useQuestionStore.getState().metadata.title).toBe("New MCQ");
+  first.unmount();
+
+  const second = mount();
+  expect(useQuestionStore.getState().metadata).toMatchObject({ title: "", slug: "", questionType: "MCQ", difficulty: "Easy", categories: [], tags: [] });
+  expect(useQuestionStore.getState().statement.description).toBe("");
+  expect(useQuestionStore.getState().mcqOptions[0]).toMatchObject({ text: "", isCorrect: true, explanation: "" });
+  second.unmount();
 });
 
 it("keeps draft saving and publishing functional", async () => {

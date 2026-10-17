@@ -36,3 +36,33 @@ it("reads all stored topics and falls back to legacy topic without inferring typ
   act(() => useQuestionStore.getState().setAllData({ metadata: { ...useQuestionStore.getState().metadata, questionType: "multiple_choice" as never } }));
   expect(useQuestionStore.getState().metadata.questionType).toBe("MULTIPLE_CHOICE");
 });
+
+it("shows Title and a separate Question field for MCQs while preserving coding labels", () => {
+  act(() => useQuestionStore.getState().updateMetadata({ questionType: "MCQ" }));
+  const { rerender } = render(<BasicInfo />);
+  expect(screen.getByText("Title is required")).toBeInTheDocument();
+  expect(screen.getByPlaceholderText("Enter the question shown to students")).toBeInTheDocument();
+  fireEvent.change(screen.getByPlaceholderText("Enter the question shown to students"), { target: { value: "Student-facing MCQ statement" } });
+  expect(useQuestionStore.getState().statement.description).toBe("Student-facing MCQ statement");
+
+  act(() => useQuestionStore.getState().updateMetadata({ questionType: "DSA" }));
+  rerender(<BasicInfo />);
+  expect(screen.getByText("Question Title")).toBeInTheDocument();
+  expect(screen.queryByPlaceholderText("Enter the question shown to students")).not.toBeInTheDocument();
+});
+
+it("hydrates MCQ slug, statement, and stored option strings into the edit store", () => {
+  const current = useQuestionStore.getState();
+  act(() => current.setAllData({
+    metadata: { ...current.metadata, title: "Java Inheritance", slug: "java-inheritance", questionType: "MCQ" },
+    statement: { ...current.statement, description: "Which statement describes inheritance?" },
+    options: ["A class inherits members", "Inheritance prevents reuse"],
+    correctAnswer: 0,
+  } as any));
+
+  const state = useQuestionStore.getState();
+  expect(state.metadata.slug).toBe("java-inheritance");
+  expect(state.statement.description).toBe("Which statement describes inheritance?");
+  expect(state.mcqOptions.map((option) => option.text)).toEqual(["A class inherits members", "Inheritance prevents reuse"]);
+  expect(state.mcqOptions[0].isCorrect).toBe(true);
+});

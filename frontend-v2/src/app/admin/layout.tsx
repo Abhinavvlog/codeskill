@@ -124,12 +124,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <header className="bg-card/90 backdrop-blur-md border-b border-border h-[72px] flex items-center justify-between gap-3 px-2 sm:px-6 sticky top-0 z-10 shrink-0 shadow-xs">
           <div className="hidden md:flex items-center gap-4 min-w-0">
             <p className="min-w-0 truncate text-base font-semibold tracking-[0.01em] text-foreground md:text-[17px]">
-              Chandigarh University • Department of Skill Development &amp; Lab
+              Chandigarh University • Department of Skill Development
             </p>
-            <div className="hidden xl:flex items-center gap-1.5 ml-4 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-md">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">System Live</span>
-            </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-4 shrink-0 ml-auto">
             <ThemeToggle />

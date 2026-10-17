@@ -124,9 +124,9 @@ export class HealthAndTelemetryController {
           clearTimeout(timer);
           resolve(val);
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           clearTimeout(timer);
-          reject(err);
+          reject(err instanceof Error ? err : new Error(String(err)));
         });
     });
   }

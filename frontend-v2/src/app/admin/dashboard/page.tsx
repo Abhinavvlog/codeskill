@@ -104,6 +104,7 @@ export default function AdminDashboardPage() {
   const fetchStats = useCallback(async (isRefreshCall = false) => {
     if (isTeacher) {
       setLoading(false);
+      setIsRefreshing(false);
       return;
     }
     if (isRefreshCall) setIsRefreshing(true);
@@ -207,7 +208,7 @@ export default function AdminDashboardPage() {
       icon: Plus,
       cta: "New Assessment",
       accent: "from-rose-500/20 via-rose-500/5 to-transparent",
-      btnClass: "bg-rose-600 hover:bg-rose-700 text-white",
+      btnClass: "admin-action",
     },
     {
       title: "Question Bank",
@@ -216,7 +217,7 @@ export default function AdminDashboardPage() {
       icon: Code2,
       cta: "Add Question",
       accent: "from-purple-500/20 via-purple-500/5 to-transparent",
-      btnClass: "bg-purple-600 hover:bg-purple-700 text-white",
+      btnClass: "admin-action",
     },
     {
       title: "Bulk Import Students",
@@ -225,7 +226,7 @@ export default function AdminDashboardPage() {
       icon: UploadCloud,
       cta: "Import Students",
       accent: "from-blue-500/20 via-blue-500/5 to-transparent",
-      btnClass: "bg-blue-600 hover:bg-blue-700 text-white",
+      btnClass: "admin-action",
     },
     {
       title: "Candidate Performance",
@@ -234,7 +235,7 @@ export default function AdminDashboardPage() {
       icon: FileText,
       cta: "View Results",
       accent: "from-emerald-500/20 via-emerald-500/5 to-transparent",
-      btnClass: "bg-emerald-600 hover:bg-emerald-700 text-white",
+      btnClass: "admin-action",
     },
   ];
 
@@ -247,21 +248,9 @@ export default function AdminDashboardPage() {
         {/* Header Strip */}
         <div className="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-2 border-b border-border/40">
           <div>
-            <div className="flex items-center gap-2.5 mb-1.5">
-              <span className="px-2.5 py-0.5 text-[11px] font-bold tracking-wider uppercase bg-primary/10 text-primary border border-primary/20 rounded-md">
-                Chandigarh University
-              </span>
-              <span className="flex items-center gap-1.5 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Examination Infrastructure Live
-              </span>
-            </div>
             <h1 className="text-3xl md:text-4xl font-bold font-heading text-foreground tracking-tight">
               {isTeacher ? "Teacher" : "Admin"} <span className="text-transparent bg-clip-text bg-gradient-to-r from-foreground via-foreground/85 to-primary">Dashboard</span>
             </h1>
-            <p className="text-sm md:text-base text-muted-foreground mt-0.5">
-              Executive overview &amp; real-time telemetry for departmental examinations and candidate evaluations.
-            </p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -346,9 +335,6 @@ export default function AdminDashboardPage() {
                     <h3 className="text-base font-bold text-foreground mb-1 group-hover:text-primary transition-colors">
                       {action.title}
                     </h3>
-                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
-                      {action.description}
-                    </p>
                   </div>
 
                   <div className="relative z-10 pt-2 border-t border-border/40">
