@@ -10,17 +10,35 @@ async function bootstrapWorker() {
     throw new Error('The judge worker must start with PROCESS_ROLE=judge');
   }
 
+  const winstonTransports: winston.transport[] = [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.ms(),
+        winston.format.errors({ stack: true }),
+        winston.format.json(),
+      ),
+    }),
+  ];
+
+  if (process.env.AXIOM_TOKEN && process.env.AXIOM_DATASET) {
+    try {
+      const { AxiomWinstonTransport } = require('./observability/logger/axiom.winston-transport');
+      winstonTransports.push(
+        new AxiomWinstonTransport({
+          dataset: process.env.AXIOM_DATASET,
+          token: process.env.AXIOM_TOKEN,
+          edgeUrl: process.env.AXIOM_EDGE_URL || 'https://eu-central-1.aws.edge.axiom.co',
+          service: 'codeskill-worker',
+        }),
+      );
+    } catch {
+      // Fail-open if transport cannot be loaded
+    }
+  }
+
   const logger = WinstonModule.createLogger({
-    transports: [
-      new winston.transports.Console({
-        format: winston.format.combine(
-          winston.format.timestamp(),
-          winston.format.ms(),
-          winston.format.errors({ stack: true }),
-          winston.format.json(),
-        ),
-      }),
-    ],
+    transports: winstonTransports,
   });
 
   const app = await NestFactory.createApplicationContext(AppModule, { logger });
