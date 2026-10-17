@@ -28,7 +28,13 @@ export class EmailJob {
   @Column()
   name: string;
 
-  @Column({ nullable: true })
+  /**
+   * AUD-037: Stores the plaintext temporary password ONLY until it has been
+   * delivered via the credential email. The processor clears this field to
+   * an empty string after the email is sent, ensuring it is not retained
+   * long-term. This column must NEVER be included in any public API response.
+   */
+  @Column({ nullable: true, select: false })
   temporaryPassword?: string;
 
   @Column({ default: 'pending' })

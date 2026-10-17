@@ -30,6 +30,7 @@ import { UpdateQuestionDto } from './dto/update-question.dto';
 import { QueryQuestionsDto } from './dto/query-questions.dto';
 import { CreateQuestionBankDto } from './dto/create-question-bank.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { AdminGuard } from '../common/guards/admin.guard';
 import { AssessmentAuthorGuard } from '../common/guards/assessment-author.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
@@ -191,9 +192,15 @@ export class QuestionsController {
     return this.questionsService.delete(id, adminUser, ip, userAgent);
   }
 
+  /**
+   * AUD-038: Approval and rejection are administrator-only actions.
+   * Teachers/instructors can author questions but CANNOT approve them.
+   * AdminGuard overrides the class-level AssessmentAuthorGuard for these routes.
+   */
   @Put(':id/approve')
+  @UseGuards(AdminGuard)
   @ApiOperation({
-    summary: 'Approve a pending or AI-generated question into question bank',
+    summary: 'Approve a pending or AI-generated question into question bank (Admin only)',
   })
   @ApiParam({ name: 'id', description: 'Question ID' })
   async approve(
@@ -214,8 +221,9 @@ export class QuestionsController {
   }
 
   @Put(':id/reject')
+  @UseGuards(AdminGuard)
   @ApiOperation({
-    summary: 'Reject a pending or AI-generated question with reason',
+    summary: 'Reject a pending or AI-generated question with reason (Admin only)',
   })
   @ApiParam({ name: 'id', description: 'Question ID' })
   async reject(
@@ -236,6 +244,7 @@ export class QuestionsController {
     );
   }
 }
+
 
 @ApiTags('Admin - Question Bank Collections')
 @ApiBearerAuth()

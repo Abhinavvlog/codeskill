@@ -345,11 +345,11 @@ export class StudentsService {
     await this.auditLogRepo.save(audit);
 
     return {
-      message: 'Student password successfully reset',
-      temporaryPassword: tempPassword,
+      message: 'Student password successfully reset. Credential email queued.',
       uid: student.uid,
       email: student.email,
       name: student.name,
+      forcePasswordChange: true,
     };
   }
 
@@ -1016,9 +1016,18 @@ export class StudentsService {
         retrying,
       },
       jobs: jobs.map((j) => ({
-        ...j,
+        id: j.id,
         _id: j.id,
         studentId: j.student_id,
+        uid: j.uid,
+        email: j.email,
+        name: j.name,
+        status: j.status,
+        retryCount: j.retryCount,
+        sentAt: j.sentAt,
+        error: j.error,
+        createdAt: j.createdAt,
+        updatedAt: j.updatedAt,
       })),
       pagination: {
         page,

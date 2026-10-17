@@ -16,7 +16,8 @@ export class UsersController {
   @Get('leaderboard')
   @ApiOperation({ summary: 'Get top users ranked by XP' })
   async getLeaderboard(@Query('limit') limit: string) {
-    return this.usersService.getLeaderboard(parseInt(limit, 10) || 50);
+    const boundedLimit = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+    return this.usersService.getLeaderboard(boundedLimit);
   }
 
   @Get(':identifier')

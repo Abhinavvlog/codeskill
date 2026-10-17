@@ -132,23 +132,35 @@ async function bootstrap() {
     }),
   );
 
-  // Swagger
-  const config = new DocumentBuilder()
-    .setTitle('CodeSkill API')
-    .setDescription(
-      'CodeSkill Online Judge — Chandigarh University Assessment Platform',
-    )
-    .setVersion('2.0.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  // Swagger — disabled in production unless explicitly opted in via SWAGGER_ENABLED=true
+  const swaggerEnabled =
+    process.env.NODE_ENV !== 'production' ||
+    process.env.SWAGGER_ENABLED === 'true';
 
   const port = process.env.PORT || 5001;
+
+  if (swaggerEnabled) {
+    const config = new DocumentBuilder()
+      .setTitle('CodeSkill API')
+      .setDescription(
+        'CodeSkill Online Judge — Chandigarh University Assessment Platform',
+      )
+      .setVersion('2.0.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
+
   await app.listen(port);
   console.log(`\n🚀 CodeSkill NestJS API running on port ${port}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`📖 Swagger docs: http://localhost:${port}/api/docs\n`);
+  if (swaggerEnabled) {
+    console.log(`📖 Swagger docs: http://localhost:${port}/api/docs`);
+  } else {
+    console.log(`📖 Swagger docs: DISABLED in production (set SWAGGER_ENABLED=true to enable)`);
+  }
+  console.log('');
 }
 bootstrap();
 
