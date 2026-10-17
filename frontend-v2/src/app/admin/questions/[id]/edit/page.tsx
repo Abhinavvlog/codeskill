@@ -21,7 +21,6 @@ import ExecutionSettings from "../../create/_components/ExecutionSettings";
 import ProblemStatement from "../../create/_components/ProblemStatement";
 import Constraints from "../../create/_components/Constraints";
 import InputOutputFormat from "../../create/_components/InputOutputFormat";
-import SampleTestCases from "../../create/_components/SampleTestCases";
 import StarterCode from "../../create/_components/StarterCode";
 import ReferenceSolution from "../../create/_components/ReferenceSolution";
 import TestCases from "../../create/_components/TestCases";
@@ -60,7 +59,6 @@ function EditQuestionContent() {
         { id: "statement", label: "Statement", icon: FileText },
         { id: "constraints", label: "Constraints", icon: AlertTriangle },
         { id: "io-format", label: "I/O Format", icon: ArrowRightLeft },
-        { id: "sample-test-cases", label: "Sample Cases", icon: Lightbulb },
         { id: "starter-code", label: "Starter Code", icon: LayoutTemplate },
         { id: "reference-solution", label: "Reference", icon: Shield },
         { id: "test-cases", label: "Test Cases", icon: Database },
@@ -141,6 +139,7 @@ function EditQuestionContent() {
           sampleExamples: data.examples || data.statement?.samples || [],
           languages: {
             supported: data.supportedLanguages || data.config?.supportedLanguages || ["cpp", "java", "python", "javascript"],
+            default: data.language || data.config?.defaultLanguage || (data.supportedLanguages || data.config?.supportedLanguages || ["python"])[0],
             compilerVersions: {},
           },
           execution: {
@@ -160,7 +159,14 @@ function EditQuestionContent() {
             language: data.config?.customCheckerCode?.language || "cpp",
             code: data.config?.customCheckerCode?.code || "",
           },
-          testCases: data.testCases?.cases || (Array.isArray(data.testCases) ? data.testCases : []),
+          testCases: (data.testCases?.cases || (Array.isArray(data.testCases) ? data.testCases : [])).map((tc: any) => ({
+            id: tc.id || Math.random().toString(36).substring(2, 9),
+            input: tc.input || "",
+            output: tc.expectedOutput ?? tc.output ?? "",
+            isHidden: Boolean(tc.isHidden),
+            explanation: tc.explanation || "",
+            weight: tc.weight || 1,
+          })),
           publishing: {
             publishImmediately: visibility === "Published",
             saveAsDraft: visibility === "Draft",
@@ -300,13 +306,27 @@ function EditQuestionContent() {
         constraints: formattedConstraints,
         inputFormat: store.statement.inputFormat,
         outputFormat: store.statement.outputFormat,
-        examples: store.sampleExamples,
-        starterCode: store.starterCode,
+        // Public test cases double as the sample examples shown to candidates.
+        examples: store.testCases
+          .filter((tc) => !tc.isHidden)
+          .map((tc) => ({
+            input: tc.input,
+            output: tc.output,
+            explanation: tc.explanation || "",
+          })),
+        starterCode: Object.entries(store.starterCode).map(
+          ([language, code]) => ({ language, code }),
+        ),
         referenceSolutions: store.referenceSolution,
-        testCases: store.testCases,
+        testCases: store.testCases.map((tc) => ({
+          ...tc,
+          // The backend persists test case outputs as expectedOutput.
+          expectedOutput: tc.output,
+        })),
         timeLimit: store.execution.timeLimit,
         memoryLimit: store.execution.memoryLimit,
         supportedLanguages: store.languages.supported,
+        language: store.languages.default,
         // Legacy problem structure compatibility
         metadata: {
           ...store.metadata,
@@ -318,7 +338,13 @@ function EditQuestionContent() {
           ...store.statement,
           constraints: formattedConstraints,
         },
-        sampleExamples: store.sampleExamples,
+        sampleExamples: store.testCases
+          .filter((tc) => !tc.isHidden)
+          .map((tc) => ({
+            input: tc.input,
+            output: tc.output,
+            explanation: tc.explanation || "",
+          })),
         referenceSolution: store.referenceSolution,
         customChecker: store.customChecker,
         solutionExplanation: store.solutionExplanation,
@@ -487,7 +513,6 @@ function EditQuestionContent() {
                   <ProblemStatement />
                   <Constraints />
                   <InputOutputFormat />
-                  <SampleTestCases />
                   <StarterCode />
                   <ReferenceSolution />
                   <TestCases />

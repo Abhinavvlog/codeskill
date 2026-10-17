@@ -82,6 +82,32 @@ export default function ProgrammingLanguages() {
           })}
         </div>
 
+        {/* Default language */}
+        {languages.supported.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-white/[0.04]">
+            <h3 className="text-[13px] font-semibold text-gray-700 dark:text-slate-300 mb-3">
+              Default Language
+            </h3>
+            <select
+              value={languages.supported.includes(languages.default) ? languages.default : languages.supported[0]}
+              onChange={(e) => useQuestionStore.getState().updateLanguages({ default: e.target.value })}
+              className="w-full sm:w-64 px-3 py-2 bg-muted/50 dark:bg-card border border-border dark:border-border rounded-lg text-sm text-foreground dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+            >
+              {languages.supported.map((langId) => {
+                const lang = ALL_LANGUAGES.find((l) => l.id === langId);
+                return (
+                  <option key={langId} value={langId}>
+                    {lang?.label || langId}
+                  </option>
+                );
+              })}
+            </select>
+            <p className="text-[11px] text-gray-400 dark:text-muted-foreground mt-1.5">
+              Candidates see this language pre-selected and can switch to any supported language.
+            </p>
+          </div>
+        )}
+
         {/* Compiler Versions */}
         {languages.supported.length > 0 && (
           <div className="mt-4 pt-4 border-t border-gray-100 dark:border-white/[0.04]">

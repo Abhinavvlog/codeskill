@@ -52,7 +52,8 @@ it.each(["Draft", "Published", "Private"] as const)("persists explicit %s visibi
   fireEvent.click(screen.getByRole("button", { name: "Publish to Question Bank" }));
   await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({
     title: "New Problem", question: "New Problem", slug: "new-problem", visibility, contestOnly: true,
-    supportedLanguages: ["cpp"], starterCode: { cpp: "int main() {}" }, testCases: [expect.objectContaining({ input: "1", output: "2" })],
+    supportedLanguages: ["cpp"], starterCode: [{ language: "cpp", code: "int main() {}" }],
+    testCases: [expect.objectContaining({ input: "1", output: "2", expectedOutput: "2" })],
   })));
 });
 
@@ -78,7 +79,8 @@ it.each(["approved", "active", "published"])("restores legacy %s without explici
   fireEvent.click(screen.getByRole("button", { name: "Update Question" }));
   await waitFor(() => expect(update).toHaveBeenCalledWith("question-1", expect.objectContaining({
     title: "Saved title", question: "Saved title", slug: "saved-title", visibility: "Draft", status: "draft", contestOnly: true,
-    supportedLanguages: ["cpp"], starterCode: { cpp: "int main() {}" }, testCases: existing.testCases,
+    supportedLanguages: ["cpp"], starterCode: [{ language: "cpp", code: "int main() {}" }],
+    testCases: [expect.objectContaining({ id: "case-1", input: "1", output: "2", expectedOutput: "2", isHidden: true, weight: 1 })],
   })));
   expect(adminProblemsAPI.update).not.toHaveBeenCalled();
 });

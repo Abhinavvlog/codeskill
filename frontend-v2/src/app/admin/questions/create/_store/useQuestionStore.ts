@@ -59,6 +59,8 @@ export interface ProblemMetadata {
 export interface ProblemLanguages {
   supported: string[];
   compilerVersions: Record<string, string>;
+  /** Preferred language pre-selected for candidates; they can override it. */
+  default: string;
 }
 
 export interface ExecutionConfig {
@@ -78,14 +80,6 @@ export interface ProblemStatement {
   inputFormat: string;
   outputFormat: string;
   constraints: string;
-}
-
-export interface SampleExample {
-  id: string;
-  number: number;
-  input: string;
-  output: string;
-  explanation: string;
 }
 
 export interface TestCase {
@@ -157,7 +151,6 @@ export interface QuestionState {
     expectedOutput: string;
   };
 
-  sampleExamples: SampleExample[];
   starterCode: Record<string, string>;
   referenceSolution: Record<string, string>;
   testCases: TestCase[];
@@ -180,10 +173,6 @@ export interface QuestionState {
   updateExecution: (updates: Partial<ExecutionConfig>) => void;
   updateStatement: (updates: Partial<ProblemStatement>) => void;
 
-  addSampleExample: () => void;
-  updateSampleExample: (id: string, updates: Partial<SampleExample>) => void;
-  removeSampleExample: (id: string) => void;
-
   setStarterCode: (lang: string, code: string) => void;
   setReferenceSolution: (lang: string, code: string) => void;
 
@@ -205,10 +194,59 @@ export interface QuestionState {
   markSaved: () => void;
   getProgress: () => number;
   resetStore: () => void;
-  setAllData: (data: Partial<QuestionState>) => void;
+  setAllData: (
+    data: Partial<QuestionState> & {
+      /** Legacy: separate example list migrated into public test cases. */
+      examples?: Array<{ input?: string; output?: string; explanation?: string }>;
+      sampleExamples?: Array<{ input?: string; output?: string; explanation?: string }>;
+    },
+  ) => void;
+}
+
+/**
+ * Accepts a per-language code map ({ python: "..." }), an array of
+ * { language, code } / { language, sourceCode } entries (how the question bank
+ * stores it), or undefined, and always returns a plain string map.
+ */
+function toCodeMap(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object") return {};
+  if (Array.isArray(value)) {
+    return value.reduce<Record<string, string>>((map, entry) => {
+      const language = String(entry?.language ?? "").trim();
+      const code = entry?.code ?? entry?.sourceCode;
+      if (language && typeof code === "string") map[language] = code;
+      return map;
+    }, {});
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key, code]) => key && typeof code === "string")
+      .map(([key, code]) => [key, code as string]),
+  );
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
+
+/** Older questions stored examples separately from test cases; unify them as public test cases. */
+function migrateExamplesIntoTestCases(
+  testCases: TestCase[],
+  examples: Array<{ input?: string; output?: string; explanation?: string }>,
+): TestCase[] {
+  const publicInputs = new Set(
+    testCases.filter((tc) => !tc.isHidden).map((tc) => String(tc.input ?? "").trim()),
+  );
+  const migrated = (examples || [])
+    .filter((ex) => String(ex?.input ?? "").trim() && !publicInputs.has(String(ex?.input ?? "").trim()))
+    .map((ex) => ({
+      id: generateId(),
+      input: String(ex.input ?? "").trim(),
+      output: ex.output || "",
+      explanation: ex.explanation || "",
+      isHidden: false,
+      weight: 1,
+    }));
+  return [...testCases, ...migrated];
+}
 
 const initialState = {
   metadata: {
@@ -228,6 +266,7 @@ const initialState = {
   languages: {
     supported: ['javascript', 'python3', 'cpp', 'java'],
     compilerVersions: { ...DEFAULT_COMPILER_VERSIONS },
+    default: 'python3',
   },
   execution: {
     timeLimit: 2000,
@@ -257,7 +296,6 @@ const initialState = {
     code: '',
     expectedOutput: '',
   },
-  sampleExamples: [],
   starterCode: {},
   referenceSolution: {},
   testCases: [],
@@ -392,34 +430,6 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
   updateStatement: (updates) =>
     set((s) => ({ statement: { ...s.statement, ...updates } })),
 
-  addSampleExample: () =>
-    set((s) => ({
-      sampleExamples: [
-        ...s.sampleExamples,
-        {
-          id: generateId(),
-          number: s.sampleExamples.length + 1,
-          input: '',
-          output: '',
-          explanation: '',
-        },
-      ],
-    })),
-
-  updateSampleExample: (id, updates) =>
-    set((s) => ({
-      sampleExamples: s.sampleExamples.map((ex) =>
-        ex.id === id ? { ...ex, ...updates } : ex
-      ),
-    })),
-
-  removeSampleExample: (id) =>
-    set((s) => ({
-      sampleExamples: s.sampleExamples
-        .filter((ex) => ex.id !== id)
-        .map((ex, i) => ({ ...ex, number: i + 1 })),
-    })),
-
   setStarterCode: (lang, code) =>
     set((s) => ({ starterCode: { ...s.starterCode, [lang]: code } })),
 
@@ -505,17 +515,17 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
     if (s.statement.inputFormat.trim().length > 0) filled++;
     if (s.statement.outputFormat.trim().length > 0) filled++;
 
-    // Samples
+    // Samples (public test cases are shown to candidates as examples)
     total += 1;
-    if (s.sampleExamples.length > 0) filled++;
+    if (s.testCases.some((tc) => !tc.isHidden)) filled++;
 
     // Starter Code
     total += 1;
-    if (Object.values(s.starterCode).some((c) => c.trim())) filled++;
+    if (Object.values(s.starterCode).some((c) => String(c).trim())) filled++;
 
     // Reference Solution
     total += 1;
-    if (Object.values(s.referenceSolution).some((c) => c.trim())) filled++;
+    if (Object.values(s.referenceSolution).some((c) => String(c).trim())) filled++;
 
     // Test Cases
     total += 1;
@@ -566,10 +576,12 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
           : state.statement.constraints,
       },
       mcqOptions: nextMcqOptions,
-      sampleExamples: data.sampleExamples || state.sampleExamples,
-      starterCode: { ...state.starterCode, ...data.starterCode },
-      referenceSolution: { ...state.referenceSolution, ...data.referenceSolution },
-      testCases: data.testCases || state.testCases,
+      starterCode: { ...state.starterCode, ...toCodeMap(data.starterCode) },
+      referenceSolution: { ...state.referenceSolution, ...toCodeMap(data.referenceSolution) },
+      testCases: migrateExamplesIntoTestCases(
+        data.testCases || state.testCases,
+        data.examples || data.sampleExamples || [],
+      ),
       customChecker: { ...state.customChecker, ...data.customChecker },
       solutionExplanation: { ...state.solutionExplanation, ...data.solutionExplanation },
       seo: { ...state.seo, ...data.seo },

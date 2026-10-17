@@ -36,6 +36,8 @@ export default function CreateProblemPage() {
   const [timeLimit, setTimeLimit] = useState(2000);
   const [memoryLimit, setMemoryLimit] = useState(256);
   const [languages, setLanguages] = useState<string[]>(["python", "cpp"]);
+  const [defaultLanguage, setDefaultLanguage] = useState("python");
+  const [starterCode, setStarterCode] = useState<Record<string, string>>({});
   const [cases, setCases] = useState<TestCaseRow[]>([
     { input: "", output: "", isHidden: false },
   ]);
@@ -69,6 +71,8 @@ export default function CreateProblemPage() {
           categories: categories.split(",").map((c) => c.trim()).filter(Boolean),
         },
         languages,
+        defaultLanguage,
+        starterCode,
         execution: { timeLimit, memoryLimit },
         statement: {
           description: description.trim(),
@@ -211,6 +215,36 @@ export default function CreateProblemPage() {
             >
               {l}
             </button>
+          ))}
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Default language</label>
+          <select
+            className={`${inputClass} max-w-xs`}
+            value={languages.includes(defaultLanguage) ? defaultLanguage : languages[0]}
+            onChange={(e) => setDefaultLanguage(e.target.value)}
+          >
+            {languages.map((l) => (
+              <option key={l} value={l}>{l}</option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Candidates see this language pre-selected and can switch to any supported language.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Starter code (per language)</label>
+          {languages.map((l) => (
+            <div key={l} className="space-y-1">
+              <span className="text-xs font-mono text-muted-foreground">{l}</span>
+              <textarea
+                rows={4}
+                className={`${inputClass} font-mono`}
+                value={starterCode[l] || ""}
+                onChange={(e) => setStarterCode((prev) => ({ ...prev, [l]: e.target.value }))}
+                placeholder={`Starter code for ${l} (optional)`}
+              />
+            </div>
           ))}
         </div>
       </section>

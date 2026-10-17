@@ -86,6 +86,86 @@ beforeEach(() => {
   } as any);
 });
 
+it("shows sample test cases in a dedicated left-panel tab and loads one into the console", async () => {
+  const response = await jest.mocked(problemsAPI.getBySlug)("feedback");
+  response.data.data.statement = {
+    description: "Read input and echo it.",
+    samples: [
+      { input: "PUBLIC", output: "PUBLIC", explanation: "identity" },
+      { input: "OTHER", output: "OTHER" },
+    ],
+  };
+  response.data.data.testCases = {
+    cases: [
+      { input: "PUBLIC", output: "PUBLIC", isHidden: false },
+      { input: "OTHER", output: "OTHER", isHidden: false },
+      { input: "SECRET", output: "SECRET", isHidden: true },
+    ],
+  };
+  jest.mocked(problemsAPI.getBySlug).mockResolvedValue(response);
+  render(<Page params={Promise.resolve({ id: "feedback" })} />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Samples" }));
+  const panel = await screen.findByText("Sample Test Cases");
+  expect(panel).toBeInTheDocument();
+  expect(screen.getByText("Example 1")).toBeInTheDocument();
+  expect(screen.getByText("Example 2")).toBeInTheDocument();
+  expect(screen.getByText("identity")).toBeInTheDocument();
+  // Hidden cases never reach the candidate panel.
+  expect(screen.queryByText("SECRET")).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getAllByRole("button", { name: /Load in Console/ })[1]);
+  expect(screen.getByText("Case 2")).toBeInTheDocument();
+});
+
+it("falls back to public test cases when no samples are authored", async () => {
+  const response = await jest.mocked(problemsAPI.getBySlug)("feedback");
+  response.data.data.statement = { description: "Echo it.", samples: [] };
+  response.data.data.testCases = {
+    cases: [
+      { input: "VISIBLE", output: "VISIBLE", isHidden: false },
+      { input: "HIDDEN-CASE", output: "HIDDEN-CASE", isHidden: true },
+    ],
+  };
+  jest.mocked(problemsAPI.getBySlug).mockResolvedValue(response);
+  render(<Page params={Promise.resolve({ id: "feedback" })} />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Samples" }));
+  expect((await screen.findAllByText("VISIBLE")).length).toBeGreaterThan(0);
+  expect(screen.queryByText("HIDDEN-CASE")).not.toBeInTheDocument();
+});
+
+it("restores the candidate's saved language preference over the author default", async () => {
+  const response = await jest.mocked(problemsAPI.getBySlug)("feedback");
+  response.data.data.config = {
+    supportedLanguages: ["python", "javascript"],
+    starterCode: { python: "print(1)", javascript: "console.log(1)" },
+    defaultLanguage: "javascript",
+  };
+  jest.mocked(problemsAPI.getBySlug).mockResolvedValue(response);
+  localStorage.setItem("codeskill_lang_feedback", "python");
+  render(<Page params={Promise.resolve({ id: "feedback" })} />);
+  const selector = await screen.findByRole("button", {
+    name: "Select programming language",
+  });
+  await waitFor(() => expect(selector).toHaveTextContent("Python 3"));
+});
+
+it("falls back to the author's default language when no preference is saved", async () => {
+  const response = await jest.mocked(problemsAPI.getBySlug)("feedback");
+  response.data.data.config = {
+    supportedLanguages: ["python", "javascript"],
+    starterCode: { python: "print(1)", javascript: "console.log(1)" },
+    defaultLanguage: "javascript",
+  };
+  jest.mocked(problemsAPI.getBySlug).mockResolvedValue(response);
+  render(<Page params={Promise.resolve({ id: "feedback" })} />);
+  const selector = await screen.findByRole("button", {
+    name: "Select programming language",
+  });
+  await waitFor(() => expect(selector).toHaveTextContent("JavaScript"));
+});
+
 it("selects Python automatically for a Python-only problem and submits its restored Python draft", async () => {
   const response = await jest.mocked(problemsAPI.getBySlug)("feedback");
   response.data.data.config = {
