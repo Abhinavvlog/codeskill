@@ -155,6 +155,8 @@ rl.on('close', () => {
   // ─── C++ Tests ────────────────────────────────────────────────────────────
 
   describe('C++', () => {
+    // Cover the existing 15s compile and 5s run budgets plus setup/cleanup;
+    // a cold compiler on a shared CI runner can exceed Jest's 5s default.
     it('should compile and run Hello World', async () => {
       const code = `
 #include <iostream>
@@ -166,7 +168,7 @@ int main() {
       const results = await singleTest('cpp', code, '', 'Hello World');
       expect(results[0].passed).toBe(true);
       expect(results[0].status).toBe(Status.ACCEPTED);
-    });
+    }, 25000);
 
     it('should read from stdin', async () => {
       const code = `
