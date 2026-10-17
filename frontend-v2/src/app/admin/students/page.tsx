@@ -75,9 +75,8 @@ export default function AdminStudentsPage() {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [resetModalData, setResetModalData] = useState<{
     student: Student;
-    temporaryPassword?: string;
+    resetDone: boolean;
     loading: boolean;
-    copied: boolean;
   } | null>(null);
 
   // Form states for Create/Edit
@@ -239,8 +238,8 @@ export default function AdminStudentsPage() {
   const handleStartResetPassword = (student: Student) => {
     setResetModalData({
       student,
+      resetDone: false,
       loading: false,
-      copied: false,
     });
   };
 
@@ -249,32 +248,16 @@ export default function AdminStudentsPage() {
     setResetModalData((prev) => (prev ? { ...prev, loading: true } : null));
 
     try {
-      const res = await adminStudentsAPI.resetPassword(
-        resetModalData.student._id,
-      );
+      await adminStudentsAPI.resetPassword(resetModalData.student._id);
+      // AUD-037: The backend no longer returns the plaintext password.
+      // The credential email is queued by the backend automatically.
       setResetModalData((prev) =>
-        prev
-          ? {
-              ...prev,
-              temporaryPassword: res.data?.temporaryPassword,
-              loading: false,
-            }
-          : null,
+        prev ? { ...prev, resetDone: true, loading: false } : null,
       );
       fetchStudents();
     } catch (err: any) {
       alert(err.response?.data?.message || "Failed to reset password.");
       setResetModalData(null);
-    }
-  };
-
-  const handleCopyPassword = () => {
-    if (resetModalData?.temporaryPassword) {
-      navigator.clipboard.writeText(resetModalData.temporaryPassword);
-      setResetModalData((prev) => (prev ? { ...prev, copied: true } : null));
-      setTimeout(() => {
-        setResetModalData((prev) => (prev ? { ...prev, copied: false } : null));
-      }, 2000);
     }
   };
 
@@ -841,30 +824,18 @@ export default function AdminStudentsPage() {
               <span className="font-mono">{resetModalData.student.uid}</span>)
             </p>
 
-            {resetModalData.temporaryPassword ? (
+            {resetModalData.resetDone ? (
               <div className="space-y-4">
                 <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl space-y-2">
                   <div className="text-xs font-semibold text-emerald-400">
-                    Temporary One-Time Password Generated:
+                    Password Reset Successfully
                   </div>
-                  <div className="flex items-center justify-between p-3 bg-background border border-border rounded-lg font-mono text-base font-bold text-foreground">
-                    <span>{resetModalData.temporaryPassword}</span>
-                    <button
-                      onClick={handleCopyPassword}
-                      className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      title="Copy to clipboard"
-                    >
-                      {resetModalData.copied ? (
-                        <Check className="w-4 h-4 text-emerald-500" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-emerald-400/80">
-                    ✓ Action logged to institutional audit timeline.
-                    <br />
-                    ✓ The student will be forced to change this password on their next login.
+                  <p className="text-xs text-emerald-400/80 leading-relaxed">
+                    ✓ A new secure temporary password has been set for{" "}
+                    <strong>{resetModalData.student.name}</strong>.<br />
+                    ✓ The student will be forced to change it on next login.<br />
+                    ✓ Credential email has been queued for delivery.<br />
+                    ✓ Action recorded in audit timeline.
                   </p>
                 </div>
 

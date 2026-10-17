@@ -14,6 +14,7 @@ import { SubmissionsService } from './submissions.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { SubmissionRateLimitGuard } from '../common/guards/submission-rate-limit.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { ADMIN_ROLES } from '../common/guards/admin.guard';
 
 @ApiTags('Submissions')
 @ApiBearerAuth()
@@ -73,7 +74,7 @@ export class SubmissionsController {
       status?: string;
     },
   ) {
-    const isAdmin = role === 'admin';
+    const isAdmin = ADMIN_ROLES.includes(role);
     const effectiveUserId = isAdmin ? targetUserId : currentUserId;
     return this.submissionsService.getSubmissionsByUser(effectiveUserId, query);
   }
@@ -98,7 +99,7 @@ export class SubmissionsController {
     @CurrentUser('role') role: string,
     @Param('id') id: string,
   ) {
-    const isAdmin = role === 'admin';
+    const isAdmin = ADMIN_ROLES.includes(role);
     const submission = await this.submissionsService.getSubmissionById(
       userId,
       id,
@@ -114,7 +115,7 @@ export class SubmissionsController {
     @CurrentUser('role') role: string,
     @Param('id') id: string,
   ) {
-    const isAdmin = role === 'admin';
+    const isAdmin = ADMIN_ROLES.includes(role);
     const result = await this.submissionsService.getSubmissionResult(
       userId,
       id,
@@ -131,7 +132,7 @@ export class SubmissionsController {
     @CurrentUser('role') role: string,
     @Param('id') id: string,
   ) {
-    const isAdmin = role === 'admin';
+    const isAdmin = ADMIN_ROLES.includes(role);
     return this.submissionsService.cancelSubmission(userId, id, isAdmin);
   }
   @Get('problem/:problemId/stats')

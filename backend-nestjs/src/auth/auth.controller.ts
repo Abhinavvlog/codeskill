@@ -42,6 +42,7 @@ import {
   LogoutDto,
 } from './dto/auth.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Auth')
@@ -129,10 +130,14 @@ export class AuthController {
 
   @Post('logout')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Revoke active refresh token or user session' })
   @HttpCode(HttpStatus.OK)
-  async logout(@CurrentUser('id') userId: string, @Body() dto: LogoutDto) {
+  async logout(@Req() req: any, @Body() dto: LogoutDto) {
+    // AUD-044: Logout must succeed even when the access token is already expired.
+    // If the JWT guard populated req.user, use that userId for full-session invalidation.
+    // Otherwise fall back to refresh-token-only revocation via the body payload.
+    const userId: string | undefined = req.user?.id;
     return this.authService.logout(userId, dto);
   }
 

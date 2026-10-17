@@ -91,21 +91,46 @@ export class UsersService {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
 
     if (isUuid) {
-      user = await this.userRepository.findOne({ where: { id: identifier } });
+      user = await this.userRepository.findOne({
+        where: { id: identifier },
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          avatar: true,
+          bio: true,
+          profile: true,
+          stats: true,
+          solvedProblems: true,
+          createdAt: true,
+        },
+      });
     } else {
-      user = await this.userRepository.findOne({ where: { username: identifier.toLowerCase() } });
+      user = await this.userRepository.findOne({
+        where: { username: identifier.toLowerCase() },
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          avatar: true,
+          bio: true,
+          profile: true,
+          stats: true,
+          solvedProblems: true,
+          createdAt: true,
+        },
+      });
     }
 
     if (!user) return null;
 
     let solvedProblemsDetails: any[] = [];
     if (user.solvedProblems && user.solvedProblems.length > 0) {
-      solvedProblemsDetails = await this.problemRepository.find({
+      const problems = await this.problemRepository.find({
         where: { slug: In(user.solvedProblems) },
         select: { slug: true, title: true, difficulty: true, tags: true, stats: true },
       });
-      // Map to old structure format if needed
-      solvedProblemsDetails = solvedProblemsDetails.map(p => ({
+      solvedProblemsDetails = problems.map(p => ({
         slug: p.slug,
         title: p.title,
         difficulty: p.difficulty,
@@ -114,8 +139,31 @@ export class UsersService {
       }));
     }
 
+    // Return only public-safe fields — never spread the entity directly.
     return {
-      ...user,
+      _id: user.id,
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      avatar: user.avatar || null,
+      bio: user.bio || null,
+      profile: user.profile
+        ? {
+            institution: (user.profile as any).institution || null,
+            role: (user.profile as any).role || null,
+            preferredLanguage: (user.profile as any).preferredLanguage || null,
+          }
+        : null,
+      stats: user.stats
+        ? {
+            xp: (user.stats as any).xp ?? 0,
+            totalSolved: (user.stats as any).totalSolved ?? 0,
+            currentStreak: (user.stats as any).currentStreak ?? 0,
+            totalSubmissions: (user.stats as any).totalSubmissions ?? 0,
+          }
+        : null,
+      createdAt: user.createdAt,
+      solvedProblems: solvedProblemsDetails,
       solvedProblemsDetails,
     };
   }

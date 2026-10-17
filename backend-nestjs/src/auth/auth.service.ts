@@ -577,15 +577,18 @@ export class AuthService {
     };
   }
 
-  async logout(userId: string, dto?: LogoutDto) {
+  async logout(userId: string | undefined, dto?: LogoutDto) {
     if (dto?.refreshToken) {
+      // Always revoke the specific refresh token family when a token is provided.
+      // This works even if the access token is expired (userId may be undefined).
       await this.tokenService.revokeRefreshToken(dto.refreshToken);
-    } else {
+    } else if (userId) {
+      // Full session invalidation: requires a valid userId from the access token.
       await this.tokenService.invalidateUserSessions(userId);
     }
     this.logger.log({
       event: 'AUTH_LOGOUT',
-      userId,
+      userId: userId ?? 'unknown',
       revokedSingleToken: !!dto?.refreshToken,
     });
     return { success: true, message: 'Logged out successfully' };

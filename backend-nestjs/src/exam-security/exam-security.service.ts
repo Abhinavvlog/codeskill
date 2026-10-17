@@ -24,7 +24,6 @@ export class ExamSecurityService {
   async initSecureSession(
     assessmentId: string,
     candidateId: string,
-    headers: any,
     clientBody: any,
   ) {
     if (!assessmentId) throw new BadRequestException('Invalid assessment ID');

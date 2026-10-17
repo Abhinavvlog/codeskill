@@ -4,11 +4,11 @@ import {
   Param,
   Body,
   UseGuards,
-  Req,
   HttpCode,
 } from '@nestjs/common';
 import { ExamSecurityService } from './exam-security.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @Controller('exam-security')
 @UseGuards(JwtAuthGuard)
@@ -19,35 +19,38 @@ export class ExamSecurityController {
   @HttpCode(200)
   async initSession(
     @Param('assessmentId') assessmentId: string,
-    @Req() req: any,
+    @CurrentUser('id') userId: string,
     @Body() body: any,
   ) {
     return this.examSecurityService.initSecureSession(
       assessmentId,
-      req.user._id,
-      req.headers,
+      userId,
       body,
     );
   }
 
   @Post('session/:sessionId/heartbeat')
   @HttpCode(200)
-  async heartbeat(@Param('sessionId') sessionId: string, @Req() req: any) {
-    return this.examSecurityService.processHeartbeat(sessionId, req.user._id);
+  async heartbeat(
+    @Param('sessionId') sessionId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.examSecurityService.processHeartbeat(sessionId, userId);
   }
 
   @Post('session/:sessionId/violation')
   @HttpCode(200)
   async reportViolation(
     @Param('sessionId') sessionId: string,
-    @Req() req: any,
+    @CurrentUser('id') userId: string,
     @Body() body: { eventType: string; metadata?: any },
   ) {
     return this.examSecurityService.reportViolation(
       sessionId,
-      req.user._id,
+      userId,
       body.eventType,
       body.metadata || {},
     );
   }
 }
+
