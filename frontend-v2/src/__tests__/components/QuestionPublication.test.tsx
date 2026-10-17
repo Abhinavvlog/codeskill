@@ -113,3 +113,21 @@ it("preserves explicit private visibility despite stale Publish Immediately flag
   fireEvent.click(screen.getByRole("button", { name: "Update Question" }));
   await waitFor(() => expect(update).toHaveBeenCalledWith("question-1", expect.objectContaining({ visibility: "Private", status: "draft", contestOnly: false })));
 });
+
+it("edits saved examples independently and supports clearing them", async () => {
+  getById.mockResolvedValueOnce({ data: { ...existing,
+    examples: [{ input: "7", output: "14", explanation: "Double seven" }],
+  } } as Awaited<ReturnType<typeof adminQuestionsAPI.getById>>);
+  render(<EditQuestion />);
+  expect(await screen.findByLabelText("Example 1 input")).toHaveValue("7");
+  expect(screen.getByLabelText("Test case 1 input")).toHaveValue("1");
+  fireEvent.change(screen.getByLabelText("Example 1 output"), { target: { value: "15" } });
+  fireEvent.click(screen.getByRole("button", { name: "Update Question" }));
+  await waitFor(() => expect(update).toHaveBeenCalledWith("question-1", expect.objectContaining({
+    examples: [{ input: "7", output: "15", explanation: "Double seven" }],
+    testCases: [expect.objectContaining({ input: "1", expectedOutput: "2", isHidden: true })],
+  })));
+  fireEvent.click(screen.getByRole("button", { name: "Remove example 1" }));
+  fireEvent.click(screen.getByRole("button", { name: "Update Question" }));
+  await waitFor(() => expect(update).toHaveBeenLastCalledWith("question-1", expect.objectContaining({ examples: [], sampleExamples: [] })));
+});

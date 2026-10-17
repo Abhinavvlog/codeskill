@@ -74,6 +74,7 @@ interface Question {
   timeLimit?: number;
   memoryLimit?: number;
   testCases?: TestCase[];
+  examples?: { input?: string; output?: string; explanation?: string }[];
 }
 
 interface AssessmentProctoring {
