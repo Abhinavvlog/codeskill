@@ -32,6 +32,7 @@ import { studentAssessmentsAPI } from "@/config/api";
 import DSAAssessmentEditor from "@/components/assessment/DSAAssessmentEditor";
 import SafeExamBrowser from "@/components/assessment/SafeExamBrowser";
 import { Spinner } from "@/components/ui/spinner";
+import { toast } from "react-hot-toast";
 import { useAssessmentMedia } from "@/hooks/useAssessmentMedia";
 import { releaseAssessmentStream } from "@/lib/assessment-media-session";
 import { AssessmentReadingZoom } from "@/components/assessment/AssessmentReadingZoom";
@@ -76,6 +77,8 @@ interface Question {
 }
 
 interface AssessmentProctoring {
+  mode?: 'fully_proctored' | 'partial_proctored' | 'non_proctored';
+  violationPenaltyMarks?: number;
   useCamera?: boolean;
   enforceFullscreen?: boolean;
   detectTabSwitch?: boolean;
@@ -123,6 +126,7 @@ export default function TakeAssessmentPage({
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [proctoring, setProctoring] = useState<AssessmentProctoring | null>(null);
+  const [totalPenaltyMarks, setTotalPenaltyMarks] = useState(0);
   const [loadedAssessmentId, setLoadedAssessmentId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submissionRequestedRef = useRef(false);
@@ -219,14 +223,38 @@ export default function TakeAssessmentPage({
       setViolations(updated);
       violationsRef.current = updated;
 
-      // Temporary visual toast
-      setWarningToast({
-        id: Date.now(),
-        message: type === "multiple_faces_detected"
-          ? `Warning ${updated.filter(event => event.type === "multiple_faces_detected").length}/${MAX_FACE_WARNINGS}: ${details} The test will end at warning ${MAX_FACE_WARNINGS}.`
-          : details,
-        type: type === "tab_switch" ? "alert" : "warning",
-      });
+      const isPartialProctored =
+        proctoring?.mode === "partial_proctored" ||
+        (proctoring?.autoSubmitOnViolation === false &&
+          (proctoring?.violationPenaltyMarks ?? 0) > 0);
+      const penaltyPerViolation = proctoring?.violationPenaltyMarks ?? 2;
+
+      if (isPartialProctored) {
+        const newTotalPenalty = updated.length * penaltyPerViolation;
+        setTotalPenaltyMarks(newTotalPenalty);
+        setWarningToast({
+          id: Date.now(),
+          message: `🚨 Negative marks applied: -${penaltyPerViolation} marks deducted for ${details}. (Total Penalty: -${newTotalPenalty} marks)`,
+          type: "alert",
+        });
+        toast.error(
+          `Violation detected: -${penaltyPerViolation} marks deducted! Total Penalty: -${newTotalPenalty} marks`,
+          { duration: 5000 }
+        );
+      } else {
+        // Temporary visual toast for fully proctored mode
+        setWarningToast({
+          id: Date.now(),
+          message:
+            type === "multiple_faces_detected"
+              ? `Warning ${
+                  updated.filter((event) => event.type === "multiple_faces_detected")
+                    .length
+                }/${MAX_FACE_WARNINGS}: ${details} The test will end at warning ${MAX_FACE_WARNINGS}.`
+              : details,
+          type: type === "tab_switch" ? "alert" : "warning",
+        });
+      }
 
       // Sync with server immediately
       const formattedResponses = questions.map((q) => {
@@ -421,15 +449,33 @@ export default function TakeAssessmentPage({
       setFaceWarningCount(faceWarningsRef.current);
       recordViolation(issue, details);
       const warningNumber = faceWarningsRef.current;
-      const warningText = warningNumber === 4
-        ? `Face warning 4/5: ${details} One more warning will automatically submit your assessment.`
-        : `Face warning ${warningNumber}/5: ${details}`;
-      setWarningToast({ id: Date.now(), message: warningText, type: warningNumber >= 4 ? "alert" : "warning" });
-      setFaceMonitorStatus(details);
-      if (warningNumber >= 5 && proctoring?.autoSubmitOnViolation !== false) {
-        setIsAutoSubmitting(true);
-        setWarningToast({ id: Date.now(), message: "Five face-verification warnings reached. Your assessment is being submitted now.", type: "alert" });
-        void submitExam(true);
+      const isAutoSubmitMode =
+        proctoring?.autoSubmitOnViolation !== false &&
+        proctoring?.mode !== "partial_proctored";
+
+      if (isAutoSubmitMode) {
+        const warningText =
+          warningNumber === 4
+            ? `Face warning 4/5: ${details} One more warning will automatically submit your assessment.`
+            : `Face warning ${warningNumber}/5: ${details}`;
+        setWarningToast({
+          id: Date.now(),
+          message: warningText,
+          type: warningNumber >= 4 ? "alert" : "warning",
+        });
+        setFaceMonitorStatus(details);
+        if (warningNumber >= 5) {
+          setIsAutoSubmitting(true);
+          setWarningToast({
+            id: Date.now(),
+            message:
+              "Five face-verification warnings reached. Your assessment is being submitted now.",
+            type: "alert",
+          });
+          void submitExam(true);
+        }
+      } else {
+        setFaceMonitorStatus(`${details} (Negative marks deducted)`);
       }
     };
 
@@ -861,7 +907,7 @@ export default function TakeAssessmentPage({
       detectTabSwitch={proctoring?.detectTabSwitch !== false}
       blockCopyPaste={proctoring?.blockCopyPaste !== false}
       monitorViolations={loadedAssessmentId === id}
-      autoSubmitOnViolation={proctoring?.autoSubmitOnViolation !== false}
+      autoSubmitOnViolation={proctoring?.mode !== 'partial_proctored' && proctoring?.autoSubmitOnViolation !== false}
       onFullscreenEntered={beginAssessmentAfterFullscreen}
       maxWarnings={proctoring?.maxTabSwitches ?? maxTabSwitches}
       onTerminate={() => submitExam(true)}
@@ -909,8 +955,27 @@ export default function TakeAssessmentPage({
           </div>
         </div>
 
-        {/* Center: Live Countdown Clock */}
+        {/* Center: Live Countdown Clock & Penalty Badge */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {((proctoring?.mode === 'partial_proctored') || (proctoring?.violationPenaltyMarks && proctoring.violationPenaltyMarks > 0) || totalPenaltyMarks > 0) && (
+            <div
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md border text-xs font-mono font-bold transition-all shadow-xs ${
+                totalPenaltyMarks > 0
+                  ? "bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800"
+                  : "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800"
+              }`}
+              title="Partial proctored exam: Negative marks applied for violations. Manual submission is required."
+            >
+              <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                Penalty: -{totalPenaltyMarks}
+              </span>
+              <span className="hidden lg:inline font-normal text-[10px] opacity-80">
+                ({violations.length} {violations.length === 1 ? "violation" : "violations"})
+              </span>
+            </div>
+          )}
+
           <div
             className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-md border text-xs sm:text-sm font-mono font-bold transition-all ${
               isTimeCritical

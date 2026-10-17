@@ -569,11 +569,17 @@ export default function AssessmentResultsPage({
             </div>
 
             {/* Candidate Summary Pills */}
-            <div className="grid grid-cols-4 gap-2 text-center text-xs p-3 rounded-xl bg-muted/30 border border-border font-mono">
+            <div className={`grid ${selectedCandidate.proctoringPenalty && selectedCandidate.proctoringPenalty > 0 ? "grid-cols-5" : "grid-cols-4"} gap-2 text-center text-xs p-3 rounded-xl bg-muted/30 border border-border font-mono`}>
               <div>
-                <span className="text-[10px] text-muted-foreground uppercase font-bold">Best Score</span>
+                <span className="text-[10px] text-muted-foreground uppercase font-bold">Final Score</span>
                 <div className="font-bold text-foreground">{selectedCandidate.score} / {selectedCandidate.maxScore}</div>
               </div>
+              {selectedCandidate.proctoringPenalty && selectedCandidate.proctoringPenalty > 0 ? (
+                <div>
+                  <span className="text-[10px] text-rose-500 uppercase font-bold">Penalty</span>
+                  <div className="font-bold text-rose-500">-{selectedCandidate.proctoringPenalty}</div>
+                </div>
+              ) : null}
               <div>
                 <span className="text-[10px] text-muted-foreground uppercase font-bold">Accuracy</span>
                 <div className="font-bold text-foreground">{selectedCandidate.accuracy || 0}%</div>
@@ -647,8 +653,13 @@ export default function AssessmentResultsPage({
                           {getViolationIcon(v.type)}
                         </div>
                         <div>
-                          <div className="font-semibold text-foreground capitalize">
-                            {v.type ? v.type.replace(/_/g, " ") : "Proctoring Alert"}
+                          <div className="font-semibold text-foreground capitalize flex items-center gap-2">
+                            <span>{v.type ? v.type.replace(/_/g, " ") : "Proctoring Alert"}</span>
+                            {v.penaltyMarks !== undefined && Number(v.penaltyMarks) > 0 && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                                -{v.penaltyMarks} marks
+                              </span>
+                            )}
                           </div>
                           <div className="text-[11px] text-muted-foreground mt-0.5">
                             {v.details || "Security incident recorded during exam session"}

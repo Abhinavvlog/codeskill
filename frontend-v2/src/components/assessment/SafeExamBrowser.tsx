@@ -148,19 +148,18 @@ export default function SafeExamBrowser({
 
   const handleWarning = (type: string, message: string) => {
     const callbacks = callbacksRef.current;
-    if (warningCountRef.current >= callbacks.maxWarnings) return;
+    if (callbacks.autoSubmitOnViolation && warningCountRef.current >= callbacks.maxWarnings) return;
     callbacks.onViolation?.(type, message);
     const nextCount = ++warningCountRef.current;
     setWarnings(nextCount);
-    if (nextCount >= callbacks.maxWarnings) {
-      if (callbacks.autoSubmitOnViolation) {
-        toast.error('Maximum warnings exceeded. Exam terminated.');
-        callbacks.onTerminate?.();
-      } else {
-        toast.error(`Warning limit reached: ${message}`);
-      }
-    } else {
+    if (callbacks.autoSubmitOnViolation && nextCount >= callbacks.maxWarnings) {
+      toast.error('Maximum warnings exceeded. Exam terminated.');
+      callbacks.onTerminate?.();
+    } else if (callbacks.autoSubmitOnViolation) {
       toast.error(`Warning ${nextCount}/${callbacks.maxWarnings}: ${message}`);
+    } else {
+      // In manual submission mode, continuous violations are tracked with penalty feedback
+      toast.error(`Violation recorded (#${nextCount}): ${message}`);
     }
   };
 

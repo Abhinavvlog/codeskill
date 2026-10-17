@@ -85,7 +85,7 @@ export class AssessmentsAdminController {
   @ApiOperation({
     summary: 'Get student attempt results and summary analytics',
   })
-  async getResults(@Param('id') id: string) {
-    return this.assessmentsService.getAssessmentResults(id);
+  async getResults(@Param('id') id: string, @CurrentUser() adminUser: any) {
+    return this.assessmentsService.getAssessmentResults(id, adminUser);
   }
 }

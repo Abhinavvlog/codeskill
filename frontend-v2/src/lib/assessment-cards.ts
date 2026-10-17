@@ -5,7 +5,18 @@ export interface AssignedAssessment {
   durationMinutes: number; totalMarks: number; questionCount: number;
   startTime?: string; endTime?: string; status: string; attemptStatus?: string;
   attemptScore?: number; attemptPassed?: boolean; canRetake?: boolean; allowedAttempts?: number;
+  completedAttemptsCount?: number;
+  targetSemesters?: string[]; targetSections?: string[]; targetGroups?: string[];
+  targetCourses?: string[]; targetDepartments?: string[]; targetBatches?: string[];
   proctoring?: Record<string, unknown>;
+}
+export function formatSemesterScope(semesters?: string[]): string {
+  if (!semesters || semesters.length === 0) return "All Semesters";
+  const cleaned = semesters.map(s => String(s).replace(/^(semester|sem)[\s_-]*/i, '').trim()).filter(Boolean);
+  if (!cleaned.length) return "All Semesters";
+  if (cleaned.length === 1) return `Semester ${cleaned[0]}`;
+  const sorted = [...new Set(cleaned)].sort((a, b) => Number(a) - Number(b));
+  return `Semesters: ${sorted.join(", ")}`;
 }
 const aliases: Record<string, QuestionType> = {
   mcq: "MCQ", single_choice: "MCQ", multiple_choice: "MULTIPLE_CHOICE", true_false: "TRUE_FALSE",

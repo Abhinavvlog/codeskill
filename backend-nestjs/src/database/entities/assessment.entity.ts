@@ -16,6 +16,8 @@ import { User } from './user.entity';
 @Index(['targetDepartments'])
 @Index(['targetStudentIds'])
 @Index(['targetGroups'])
+@Index(['targetSemesters'])
+@Index(['targetSections'])
 export class Assessment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -125,8 +127,16 @@ export class Assessment {
   @Column({ type: 'int', default: 1 })
   allowedAttempts: number;
 
+  @Column({ type: 'varchar', length: 50, default: 'fully_proctored' })
+  mode: string;
+
+  @Column({ type: 'varchar', length: 50, default: 'auto' })
+  submissionPolicy: string;
+
   @Column({ type: 'jsonb', default: {} })
   proctoring: {
+    mode?: 'fully_proctored' | 'partial_proctored' | 'non_proctored';
+    violationPenaltyMarks?: number;
     useCamera?: boolean;
     enforceFullscreen?: boolean;
     blockCopyPaste?: boolean;

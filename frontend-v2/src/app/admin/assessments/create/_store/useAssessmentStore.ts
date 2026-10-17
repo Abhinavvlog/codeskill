@@ -21,7 +21,11 @@ export type AssessmentSection = {
   questions: AssessmentQuestionConfig[];
 };
 
+export type ProctoringMode = 'fully_proctored' | 'partial_proctored' | 'non_proctored';
+
 export type ProctoringSettings = {
+  mode: ProctoringMode;
+  violationPenaltyMarks: number;
   useCamera: boolean;
   enforceFullscreen: boolean;
   blockCopyPaste: boolean;
@@ -66,6 +70,8 @@ interface AssessmentStore {
 }
 
 const defaultProctoring: ProctoringSettings = {
+  mode: 'fully_proctored',
+  violationPenaltyMarks: 2,
   useCamera: true,
   enforceFullscreen: true,
   blockCopyPaste: true,
@@ -102,11 +108,30 @@ export const useAssessmentStore = create<AssessmentStore>((set) => ({
   setAllowedAttempts: (allowedAttempts) => set({ allowedAttempts }),
   setProctoring: (proctoring) => set((state) => ({ proctoring: { ...state.proctoring, ...proctoring } })),
   setStatus: (status) => set({ status }),
-  hydrate: (assessment) => set((state) => ({
-    ...assessment,
-    proctoring: { ...defaultProctoring, ...assessment.proctoring },
-    sections: assessment.sections ?? state.sections,
-  })),
+  hydrate: (assessment) => set((state) => {
+    const incoming = assessment.proctoring || {};
+    const mode: ProctoringMode =
+      incoming.mode ||
+      (incoming.autoSubmitOnViolation === false
+        ? incoming.useCamera === false && incoming.detectTabSwitch === false
+          ? 'non_proctored'
+          : 'partial_proctored'
+        : 'fully_proctored');
+
+    return {
+      ...assessment,
+      proctoring: {
+        ...defaultProctoring,
+        ...incoming,
+        mode,
+        violationPenaltyMarks:
+          incoming.violationPenaltyMarks !== undefined
+            ? Number(incoming.violationPenaltyMarks)
+            : defaultProctoring.violationPenaltyMarks,
+      },
+      sections: assessment.sections ?? state.sections,
+    };
+  }),
   reset: () => set({
     title: '',
     code: `EXAM-${Date.now().toString().slice(-4)}`,
