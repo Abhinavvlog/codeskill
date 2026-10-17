@@ -1,84 +1,74 @@
 <div align="center">
 
-# ⚡ CodeSkill — Technical Assessment & Coding Examination Platform 🚀
+# ⚡ CodeSkill — Enterprise Technical Assessment & Online Judge Platform 🚀
 ### 🏛️ Official Examination, Algorithmic Evaluation & Skill Assessment Platform for **Chandigarh University** 🎓
 
 [![NestJS](https://img.shields.io/badge/Backend-NestJS%2011-E0234E?style=for-the-badge&logo=nestjs&logoColor=white)](https://nestjs.com/)
-[![Next.js](https://img.shields.io/badge/Frontend-Next.js%2016%20App%20Router-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
-[![React](https://img.shields.io/badge/UI-React%2019-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/Language-TypeScript%205-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2015-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Next.js](https://img.shields.io/badge/Frontend-Next.js%2016.2%20App%20Router-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/UI-React%2019.2-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/Language-TypeScript%205.7-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2015%20%2B%20Sharding-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Cache%20&%20Queue-Redis%207%20%2B%20BullMQ-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
 [![Tailwind CSS](https://img.shields.io/badge/Styling-Tailwind%20CSS%20v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![Docker](https://img.shields.io/badge/Containers-Docker%20Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
-[![AWS](https://img.shields.io/badge/Cloud-AWS%20RDS%20%7C%20S3%20%7C%20SES-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)](https://aws.amazon.com/)
+[![Docker](https://img.shields.io/badge/Containers-Docker%20Sandbox-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+[![AWS](https://img.shields.io/badge/Cloud-AWS%20(ALB%20%7C%20ASG%20%7C%20RDS%20%7C%20S3%20%7C%20SES)-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)](https://aws.amazon.com/)
 [![Monaco Editor](https://img.shields.io/badge/IDE-Monaco%20Editor-1E1E1E?style=for-the-badge&logo=visual-studio-code&logoColor=007ACC)](https://microsoft.github.io/monaco-editor/)
-[![Tests](https://img.shields.io/badge/Test%20Suite-401%20Passing-brightgreen?style=for-the-badge&logo=jest&logoColor=white)](https://jestjs.io/)
+[![Tests](https://img.shields.io/badge/Test%20Suite-98%20Suites%20%7C%20807%20Passing-brightgreen?style=for-the-badge&logo=jest&logoColor=white)](https://jestjs.io/)
 
 <br/>
 
-**CodeSkill** is an enterprise-grade technical examination, competitive programming, and automated algorithmic skill evaluation platform engineered specifically for **Chandigarh University**. It scales to tens of thousands of concurrent examinees using horizontal PostgreSQL submission sharding, PM2 process clustering, sandboxed multi-language code execution with strict CPU/memory cgroups, and real-time AI-assisted anti-cheat proctoring.
+**CodeSkill** is an enterprise-grade technical examination, competitive programming, and automated algorithmic skill evaluation platform engineered for **Chandigarh University**. Built to handle university-wide examination cohorts of tens of thousands of concurrent examinees, CodeSkill features horizontal PostgreSQL submission sharding (128-bucket MD5 user hashing), declarative range table partitioning, decoupled BullMQ asynchronous judge workers, multi-language containerized sandboxes with strict CPU/memory cgroups, and real-time AI-assisted anti-cheat proctoring.
 
-[🌟 Key Features](#-key-features) •
-[🏛️ System Architecture](#-high-level-design-hld--system-architecture) •
-[📊 Detailed Workflows](#-deep-dive-workflow-diagrams) •
-[🗄️ Database & ERD](#️-database-architecture--erd) •
-[🚀 Quickstart](#-quickstart-guide) •
-[🔐 Test Credentials](#-pre-seeded-administrator-accounts) •
-[⚙️ Configuration](#️-environment-variables-reference)
+---
+
+### 📑 Table of Contents
+
+- [🌟 Key Capabilities & Modules](#-key-capabilities--modules)
+- [🏛️ System Architecture & High-Level Design (HLD)](#️-system-architecture--high-level-design-hld)
+- [🗄️ Persistence, Sharding & Queue Architecture](#️-persistence-sharding--queue-architecture)
+- [📊 Deep-Dive Operational Workflows](#-deep-dive-operational-workflows)
+- [☁️ Cloud Infrastructure & Deployment (AWS & Terraform)](#️-cloud-infrastructure--deployment-aws--terraform)
+- [🛡️ Security, Proctoring & Compliance](#️-security-proctoring--compliance)
+- [🔐 Pre-Seeded Administrator Accounts](#-pre-seeded-administrator-accounts)
+- [📡 API Architecture & Endpoint Catalog](#-api-architecture--endpoint-catalog)
+- [🚀 Quickstart & Local Development](#-quickstart--local-development)
+- [🧪 Testing, QA & Load Benchmarks](#-testing-qa--load-benchmarks)
+- [⚙️ Environment Variables Reference](#️-environment-variables-reference)
+- [🏛️ Chandigarh University Acknowledgements](#️-chandigarh-university-acknowledgements)
 
 ---
 
 </div>
 
-## 📌 Executive Architecture Snapshot
+## 🌟 Key Capabilities & Modules
 
-<div align="center">
-
-### 🗺️ Enterprise 5-Tier High-Level Design (HLD)
-
-
-*Figure 1: Canonical 5-Tier HLD Topology detailing Client Tier, Ingress & Proxy, PM2 Process Clustering, Sharded Persistence, and Sandboxed Execution.*
-
-<br/>
-
-### 🔄 End-to-End Runtime & Process Workflow
-![CodeSkill Process Flow & Runtime Architecture](docs/assets/system-architecture-diagram.jpg)
-
-*Figure 2: Component topology showing Next.js client interactions, NestJS API gateway, BullMQ queueing, sandboxed judge evaluation, and external cloud integrations.*
-
-</div>
+| Module / Domain | Architectural Implementation | Key Capabilities |
+| :--- | :--- | :--- |
+| **⚡ Multi-Language Sandboxed Judge** | BullMQ + Docker cgroups + Piston Microservice + Judge0 Failover | Isolated multi-tenant execution for **Python 3, C++17/C++20, Java 21, C11, and TypeScript/JavaScript (Node.js)** with enforced CPU quotas, 512MB RAM caps, network disabling (`--network none`), read-only root filesystems, and sub-second output comparison. |
+| **🛡️ AI Anti-Cheat & Proctoring Studio** | MediaPipe Vision + WebSockets + WebRTC + S3 Snapshots | Client-side facial landmark mesh, multi-face presence detection, active window/tab blur detection, fullscreen lock enforcement, DevTools tampering heuristics, Safe Exam Browser (SEB) key verification, and periodic evidence uploads to AWS S3. |
+| **⏱️ High-Concurrency Examination Engine** | NestJS In-Process & Queue Evaluation + TypeORM | Timed assessments, randomized question banks, negative marking, section-based question distribution, instant scorecard computation, automated submission on timer expiry, and duplicate submission prevention. |
+| **📦 Horizontal Submission Sharding** | 128-Bucket MD5 User Hashing (`SubmissionStore`) | Separates high-frequency submission writes from primary relational domain tables into independent PostgreSQL shard databases, preventing connection pool exhaustion and transaction lock contention during peak university test hours. |
+| **👥 Bulk Student Onboarding & SES Worker** | XLSX/CSV Stream Parsing + Transactional Batching + BullMQ | Validates and deduplicates thousands of student records across in-file rows and database uniqueness constraints, generates secure credentials, and dispatches automated onboarding emails via AWS SES. |
+| **🏆 Real-Time Competitive Contests** | Socket.IO + Redis Cluster Pub/Sub | Live leaderboard updates with ACM-ICPC style penalty scoring, real-time submission verdict broadcasts, reattempt quota grants, and live session status management. |
+| **📚 Interactive Question Bank Studio** | Monaco Editor + Markdown + KaTeX Math Rendering | Multi-topic categorization, difficulty weighting, LeetCode-style function signature wrapping, custom judge test cases, and approval review workflows. |
+| **🏢 Campus & Company Recruitment Portals** | Multi-Tenant Organization Management | Dedicated portals for university batch enrollment, company job postings, applicant tracking, and candidate assessment review with React PDF scorecard export. |
+| **🐾 Practice Pet & AI Tutor Mascot** | Hugging Face Transformers + Web Worker + DeepSeek/OpenRouter | In-browser client speech synthesis worker for gamified feedback, contextual practice hints using public problem constraints, XP progression, and global leaderboards. |
 
 ---
 
-## 🌟 Key Features
+## 🏛️ System Architecture & High-Level Design (HLD)
 
-| Domain | Key Capabilities | Sticker |
-| :--- | :--- | :---: |
-| **Multi-Language Sandboxed Judge** | Isolated execution for **Python 3, C++17, Java 21, and JavaScript (Node.js)** with enforced CPU limits, memory cgroups, network isolation, and Judge0 failover. | ⚡ |
-| **Anti-Cheat & AI Proctoring** | MediaPipe client-side facial landmark tracking, multi-face presence detection, active window focus monitoring, fullscreen lock enforcement, and automatic S3 evidence snapshots. | 🛡️ |
-| **High-Throughput Examination Engine** | Timed assessments, multi-attempt support, randomized question pools, test case weighting, and immediate score computation. | ⏱️ |
-| **Bulk Student Onboarding** | CSV/Excel batch upload with strict validation, duplicate deduplication across database & file, transactional persistence, and automated credential dispatch via AWS SES. | 👥 |
-| **Interactive Question Bank** | Multi-topic categorization, difficulty weighting, test case preview, case-insensitive multi-parameter filtering, and duplicate-safe authoring. | 📚 |
-| **Competitive Contests** | Real-time live leaderboard rankings with penalty-time scoring, live Socket.IO update broadcasting, and instant submission verdict feeds. | 🏆 |
-| **Horizontal Submission Sharding** | Multi-tenant and shard-partitioned PostgreSQL storage topology to eliminate lock contention during massive university-wide examination sessions. | 🗄️ |
-| **University Administration** | Role-Based Access Control (**Super Admin, University Admin, Faculty, Student**) with detailed audit logging and real-time exam oversight dashboards. | 🏛️ |
-
----
-
-## 🏛️ High-Level Design (HLD) & System Architecture
-
-CodeSkill is structured into five distinct, decoupled operational tiers as documented in [High-Level Design Architecture Specification](backend-nestjs/docs/high-level-design-architecture.md):
+CodeSkill is architected into five distinct operational tiers:
 
 ```
                                   +-------------------------------------------------------+
                                   |                      CLIENT TIER                      |
                                   |                                                       |
                                   |  +---------------------------+  +-------------------+ |
-                                  |  |  Admin / Faculty Browser  |  |  Student Browser  | |
-                                  |  |  - Exam & Contest Admin   |  |  - Next.js 16 SPA | |
-                                  |  |  - Cohort Management      |  |  - Monaco Editor  | |
-                                  |  |  - Question Bank Studio   |  |  - MediaPipe AI   | |
+                                  |  |  Admin / Faculty Portal   |  |  Student Portal   | |
+                                  |  |  - Exam & Contest Studio  |  |  - Next.js 16 SPA | |
+                                  |  |  - Question Bank Studio   |  |  - Monaco Editor  | |
+                                  |  |  - Cohort Management      |  |  - MediaPipe AI   | |
                                   |  +---------------------------+  +-------------------+ |
                                   +-------------------------------------------------------+
                                                 | HTTPS                        | HTTPS / WSS
@@ -89,24 +79,24 @@ CodeSkill is structured into five distinct, decoupled operational tiers as docum
                                   |                    INGRESS & PROXY                    |
                                   |                                                       |
                                   |  +-------------------------------------------------+  |
-                                  |  | Nginx Reverse Proxy / AWS Application Load      |  |
-                                  |  | Balancer (ALB)                                  |  |
-                                  |  | SSL/TLS Termination, Rate Limiting, CORS Guards |  |
+                                  |  | AWS Application Load Balancer (ALB) / Nginx     |  |
+                                  |  | TLS Termination, Path Routing (/api, /socket.io)|  |
+                                  |  | Health Probes (/health/ready, /api/health/ready)|  |
                                   |  +-------------------------------------------------+  |
                                   +-------------------------------------------------------+
-                                            |                                    |
-                                            | /* (SSR / Static Assets)           | /api/* & /socket.io/* (WSS)
-                                            v                                    v
-                        +-------------------------+            +------------------------------------+
-                        |   FRONTEND WEB APP      |            |         APPLICATION TIER           |
-                        |   Next.js 16 (Port 3000)|            |       [PM2 Process Cluster]        |
-                        +-------------------------+            |                                    |
+                                             |                                   |
+                                             | /* (SSR / Static Assets)          | /api/* & /socket.io/* (WSS)
+                                             v                                   v
+                         +-------------------------+           +------------------------------------+
+                         |   FRONTEND WEB APP      |           |          APPLICATION TIER          |
+                         |   Next.js 16 (Port 3000)|           |       [PM2 Process Cluster]        |
+                         +-------------------------+           |                                    |
                                                                |  +-------------------------------+ |
-                                                               |  | NestJS API Server (:5001)     | |
+                                                               |  | NestJS Core API (:5001)       | |
                                                                |  | - REST Endpoints / Swagger    | |
                                                                |  | - Socket.IO Redis Gateway     | |
-                                                               |  | - JWT Auth & Role Guards      | |
-                                                               |  | - Multi-tenant Assessment Svc | |
+                                                               |  | - JWT Auth & RBAC Guards      | |
+                                                               |  | - Submission Shard Router     | |
                                                                |  +-------------------------------+ |
                                                                |                 |                  |
                                                                |                 | Enqueue Jobs     |
@@ -114,7 +104,8 @@ CodeSkill is structured into five distinct, decoupled operational tiers as docum
                                                                |  +-------------------------------+ |
                                                                |  | BullMQ Judge Worker           | |
                                                                |  | - PROCESS_ROLE=judge          | |
-                                                               |  | - Piston / Docker Adapter     | |
+                                                               |  | - Isolated Docker Sandbox     | |
+                                                               |  | - Piston Client & Circuit Brk | |
                                                                |  | - Judge0 Failover Client      | |
                                                                |  +-------------------------------+ |
                                                                +------------------------------------+
@@ -123,463 +114,403 @@ CodeSkill is structured into five distinct, decoupled operational tiers as docum
                   |                                                            |                                    |
                   v                                                            v                                    v
 +------------------------------------+                    +------------------------------------+      +------------------------------------+
-|         EXTERNAL PROVIDERS         |                    |         DATA & QUEUE TIER          |      |          JUDGE EXECUTION           |
+|         EXTERNAL SERVICES          |                    |         DATA & QUEUE TIER          |      |          JUDGE EXECUTION           |
 |                                    |                    |                                    |      |                                    |
 | +--------------------------------+ |                    | +--------------------------------+ |      | +--------------------------------+ |
-| | AWS S3                         | |                    | | Primary PostgreSQL 15          | |      | | Piston / Judge0 Host           | |
-| | Proctoring Snapshots & Media   | |                    | | Users, Assessments, Contests,  | |      | | Sandboxed Code Execution       | |
-| +--------------------------------+ |                    | | Question Banks, Audit Logs     | |      | | Memory & CPU Cgroups           | |
+| | AWS S3 Bucket                  | |                    | | Primary RDS PostgreSQL 15      | |      | | Piston Microservice (ASG)      | |
+| | Proctoring Media & Snapshots   | |                    | | Users, Assessments, Contests,  | |      | | Private ASG Loopback Engine    | |
+| +--------------------------------+ |                    | | Question Banks, Audit Logs     | |      | | Isolated CPU / Mem Cgroups     | |
+|                                    |                    | +--------------------------------+ |      | +--------------------------------+ |
+| +--------------------------------+ |                    |                                    |      |                                    |
+| | AWS SES                        | |                    | +--------------------------------+ |      | +--------------------------------+ |
+| | Credential Emails & OTPs       | |                    | | Submission Shards (PostgreSQL) | |      | | Local Docker Daemon Sandbox    | |
+| +--------------------------------+ |                    | | 128-Bucket Deterministic Shards| |      | | Rootless Container Execution   | |
 |                                    |                    | +--------------------------------+ |      | +--------------------------------+ |
 | +--------------------------------+ |                    |                                    |      +------------------------------------+
-| | AWS SES                        | |                    | +--------------------------------+ |
-| | Transactional Emails & OTPs    | |                    | | Submission Shards              | |
-| +--------------------------------+ |                    | | Horizontal PostgreSQL Shards   | |
-|                                    |                    | | Range / User Hash Sharded      | |
-|                                    |                    | +--------------------------------+ |
-|                                    |                    |                                    |
-|                                    |                    | +--------------------------------+ |
-|                                    |                    | | Redis 7 Cluster                | |
-|                                    |                    | | BullMQ Broker, Socket.IO PubSub| |
-|                                    |                    | | OTP Throttles, Route Cache     | |
-|                                    |                    | +--------------------------------+ |
-+------------------------------------+                    +------------------------------------+
-```
-
-### 🧱 Full Architectural Topology (Mermaid)
-
-```mermaid
-graph TB
-    subgraph Tier1 ["🌐 1. Client Tier"]
-        AdminUI["💻 Admin / Faculty Dashboard<br/>(Cohort Admin, Question Bank, Assessments)"]
-        StudentUI["🎓 Student Portal<br/>(Next.js 16, Monaco Editor, MediaPipe AI)"]
-    end
-
-    subgraph Tier2 ["🛡️ 2. Ingress & Load Balancing"]
-        ALB["⚖️ Nginx / AWS ALB<br/>(TLS Termination, Rate Limiting, Sticky Sessions)"]
-    end
-
-    subgraph Tier3 ["⚡ 3. Application Tier (PM2 Process Cluster)"]
-        NestAPI["🚀 NestJS API Server (:5001)<br/>(REST API, Socket.IO Gateway, RBAC Guards)"]
-        JudgeWorker["⚙️ BullMQ Judge Worker<br/>(PROCESS_ROLE=judge, Async Job Dequeue)"]
-        EmailWorker["📧 BullMQ Email Worker<br/>(PROCESS_ROLE=api, Credential Dispatch)"]
-    end
-
-    subgraph Tier4 ["🗄️ 4. Data & Caching Tier"]
-        PostgresPrimary[("🐘 Primary PostgreSQL 15<br/>Users, Assessments, Questions, Audit Logs")]
-        PostgresShards[("📦 Submission Shards<br/>Horizontal PostgreSQL Exam Shards")]
-        RedisQueue[("🔴 Redis 7 Cluster<br/>BullMQ Broker, Socket.IO State, Session Cache")]
-    end
-
-    subgraph Tier5 ["☁️ 5. External Services & Execution"]
-        AWSS3["🪣 AWS S3 Bucket<br/>(Proctoring Snapshots & Media Audits)"]
-        AWSSES["📨 AWS SES<br/>(Transactional Emails & Password OTPs)"]
-        PistonEngine["⚡ Sandboxed Execution Host<br/>(Piston / Judge0 isolated cgroups)"]
-    end
-
-    AdminUI -->|HTTPS / REST| ALB
-    StudentUI -->|HTTPS & WebSockets| ALB
-
-    ALB -->|"/* (SSR & Static)"| StudentUI
-    ALB -->|"/api/* (REST Calls)"| NestAPI
-    ALB -->|"/socket.io/* (WSS)"| NestAPI
-
-    NestAPI -->|Domain Queries & Mutations| PostgresPrimary
-    NestAPI -->|Enqueue Submissions| RedisQueue
-    NestAPI -->|Enqueue Email Jobs| RedisQueue
-    NestAPI -->|Upload Anti-Cheat Captures| AWSS3
-
-    EmailWorker -->|Dequeue Email Tasks| RedisQueue
-    EmailWorker -->|Send Credentials| AWSSES
-
-    JudgeWorker -->|Dequeue Submission Tasks| RedisQueue
-    JudgeWorker -->|Execute Untrusted Code| PistonEngine
-    JudgeWorker -->|Persist Verdicts| PostgresShards
-    JudgeWorker -->|Emit Completion Events| RedisQueue
-
-    RedisQueue -.->|Socket.IO Pub/Sub Broadcast| NestAPI
-    NestAPI -.->|Real-time Verdict & Live Status| StudentUI
+| | AWS Cloud Map                  | |                    | +--------------------------------+ |
+| | Private Service Discovery      | |                    | | ElastiCache Redis 7 Cluster    | |
+| | (codeskill.internal)           | |                    | | BullMQ Broker, Throttler Cache,| |
+| +--------------------------------+ |                    | | Socket.IO PubSub Adapter       | |
++------------------------------------+                    | +--------------------------------+ |
+                                                          +------------------------------------+
 ```
 
 ---
 
-## 📊 Deep-Dive Workflow Diagrams
+## 🗄️ Persistence, Sharding & Queue Architecture
 
-### 1. ⚡ Real-Time Code Submission & Sandboxed Judge Pipeline
+### 1. Database Model & Entity-Relationship Diagram (ERD)
 
-When an examinee tests or submits their code in Monaco Editor, execution is processed asynchronously through a sandboxed pipeline enforcing rigorous resource limits:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Student as 🎓 Student (Monaco Editor)
-    participant NextJS as 💻 Next.js Frontend
-    participant API as 🚀 NestJS API Server
-    participant Redis as 🔴 Redis 7 (BullMQ)
-    participant Worker as ⚙️ Judge Worker
-    participant Sandbox as 🐳 Piston / Judge0 Sandbox
-    participant DB as 🐘 PostgreSQL Submission Shard
-    participant Socket as 📡 Socket.IO Gateway
-
-    Student->>NextJS: Clicks "Submit Code"
-    NextJS->>API: POST /api/submissions { problemId, code, language }
-    API->>DB: Insert Submission (Status: PENDING)
-    API->>Redis: Enqueue Job to "judge-queue"
-    API-->>NextJS: 201 Created { submissionId, status: "PENDING" }
-    NextJS-->>Student: Display "Evaluating Test Cases..."
-
-    Redis->>Worker: Dequeue Job (submissionId)
-    Worker->>DB: Fetch Problem Details & Hidden Test Cases
-    Worker->>Sandbox: Dispatch Code (CPU: 2s, Mem: 256MB, Network: DISABLED)
-    
-    activate Sandbox
-    Sandbox-->>Worker: Return Output (stdout, stderr, runtime_ms, memory_kb)
-    deactivate Sandbox
-
-    Worker->>Worker: Compare with Expected Outputs & Evaluate Verdict
-    alt Output Matches All Cases
-        Worker->>DB: Update Submission (Status: ACCEPTED, Score: 100)
-    else Runtime Exceeded
-        Worker->>DB: Update Submission (Status: TIME_LIMIT_EXCEEDED)
-    else Memory Exceeded
-        Worker->>DB: Update Submission (Status: MEMORY_LIMIT_EXCEEDED)
-    else Wrong Output
-        Worker->>DB: Update Submission (Status: WRONG_ANSWER)
-    end
-
-    Worker->>Redis: Publish Event "submission_evaluated"
-    Redis->>Socket: Propagate to WebSocket Gateway
-    Socket-->>NextJS: WebSocket Emit { submissionId, verdict, runtime, memory, score }
-    NextJS-->>Student: Render Test Case Results & Score Card
-```
-
----
-
-### 2. 🛡️ AI Proctoring & Examination Security Architecture
-
-CodeSkill deploys client-side and server-side defensive monitoring during proctored exams:
-
-```mermaid
-flowchart TD
-    subgraph ClientSide ["💻 Student Browser (Client-Side Guards)"]
-        CamStream["📷 Webcam Stream"] --> MediaPipe["🤖 MediaPipe AI Face Landmark Mesh"]
-        MediaPipe --> FaceCheck{"Face Status"}
-        FaceCheck -->|"Multiple Faces Detected"| AlertMult["🚨 Multiple Faces Detected"]
-        FaceCheck -->|"No Face Visible"| AlertNone["⚠️ Face Missing from Camera"]
-        FaceCheck -->|"Looking Away > 5s"| AlertGaze["👀 Suspicious Gaze Anomaly"]
-
-        Screen["🖥️ Window Activity"] --> FSCheck["🔒 Fullscreen Lock API"]
-        FSCheck -->|"ESC / Exit Fullscreen"| AlertFS["⚠️ Fullscreen Exit Violation"]
-        Screen --> FocusCheck["👁️ Document Visibility & Blur API"]
-        FocusCheck -->|"Tab Switch / Alt-Tab"| AlertTab["⚠️ Tab Switching Violation"]
-        Screen --> DevtoolsCheck["🔍 DevTools Heuristics"]
-        DevtoolsCheck -->|"Console Opened"| AlertDev["⚠️ Developer Tools Opened"]
-    end
-
-    subgraph SecurityHub ["🛡️ Security Event Dispatcher"]
-        AlertMult --> Beacon["📡 Secure WebSocket Event Beacon"]
-        AlertNone --> Beacon
-        AlertGaze --> Beacon
-        AlertFS --> Beacon
-        AlertTab --> Beacon
-        AlertDev --> Beacon
-        CamSnap["📸 Snapshot Frame Generator"] --> S3Direct["🪣 AWS S3 Direct Upload"]
-    end
-
-    subgraph BackendSec ["🚀 CodeSkill Backend & Proctor Studio"]
-        Beacon --> SecGateway["📡 Exam Security Gateway (:5001)"]
-        SecGateway --> LogDB[("🐘 PostgreSQL exam_security_events")]
-        S3Direct --> EvidenceRecord["📝 S3 Media Evidence Record"]
-        EvidenceRecord --> LogDB
-
-        LogDB --> ViolationsEngine{"Violation Policy Check"}
-        ViolationsEngine -->|"Violations < Max Limit"| WarnStudent["⚠️ Send In-Exam Warning"]
-        ViolationsEngine -->|"Violations >= Threshold"| AutoTerminate["🚫 Automatic Exam Termination"]
-
-        LogDB --> ProctorDashboard["🖥️ Real-Time Proctor Monitor View"]
-    end
-
-    WarnStudent -.-> StudentUI["🎓 Student Workspace"]
-    AutoTerminate -.-> StudentUI
-```
-
----
-
-### 3. 👥 High-Throughput Bulk Student Onboarding & Credential Flow
-
-The bulk student import module allows university administrators to onboard thousands of students with transactional integrity:
-
-```mermaid
-flowchart LR
-    CSV["📄 Admin CSV / Excel Upload<br/>(Name, Email, UID, Department, Batch)"] --> Parse["🔍 Validation & Format Check<br/>(Email regex, UID length, Cohort exists)"]
-    Parse --> Dedupe["🧬 Deduplication Engine<br/>(Check in-file duplicates + PostgreSQL uniqueness)"]
-    Dedupe --> Preview["📊 Dry-Run Verification Preview<br/>(Total valid, Duplicates flagged, Errors reported)"]
-    Preview --> Confirm["✅ Admin Confirms Import<br/>POST /api/admin/students/import/confirm"]
-    
-    subgraph Transaction ["💾 Database Transaction"]
-        Confirm --> SaveStudents["1. Insert Student Records<br/>Generate UUIDs & Assign Default Password"]
-        SaveStudents --> SaveEmailJobs["2. Insert Email Jobs<br/>Foreign Key linked to student_id"]
-    end
-
-    SaveEmailJobs --> RedisEmail["🔴 Push to BullMQ credential-email"]
-    RedisEmail --> WorkerEmail["📧 Email Worker Process"]
-    WorkerEmail --> AWSSES["📨 AWS SES API"]
-    AWSSES --> StudentMail["📬 Student Receives Credentials & Exam Link"]
-```
-
----
-
-### 4. 📚 Question Bank Multi-Topic Filtering & Authoring Pipeline
-
-The Question Bank module supports seamless exploration, filtering, and authoring across diverse engineering curricula:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Admin as 👨‍💼 University Admin / Faculty
-    participant TopicsPage as 📑 /admin/questions/topics
-    participant QuestionsPage as 📋 /admin/questions
-    participant Backend as 🚀 NestJS Questions API
-    participant DB as 🐘 PostgreSQL (questions)
-
-    Admin->>TopicsPage: Views Subject Topic Grid
-    TopicsPage->>Backend: GET /api/admin/questions/topics
-    Backend->>DB: Aggregate Question Counts by Topic & Difficulty
-    DB-->>Backend: Return Topic Groupings
-    Backend-->>TopicsPage: Render Topic Cards with Difficulty Badges
-
-    Admin->>TopicsPage: Clicks "Browse Questions" for "Data Structures"
-    TopicsPage->>QuestionsPage: Navigate to /admin/questions?topic=Data%20Structures
-    
-    Note over QuestionsPage: URL Query Param Synchronized into State
-    QuestionsPage->>Backend: GET /api/admin/questions?topic=Data%20Structures
-    Backend->>DB: Query WHERE LOWER(topic) = LOWER('Data Structures') OR 'Data Structures' = ANY(categories)
-    DB-->>Backend: Return Filtered Question Entities
-    Backend-->>QuestionsPage: JSON Response (200 OK)
-    
-    Note over QuestionsPage: Monaco & Tailwind V-Table 3 render with full opacity (100%) and crisp contrast
-    QuestionsPage-->>Admin: Display High-Contrast Filtered Questions Table
-```
-
----
-
-## 🗄️ Database Architecture & ERD
-
-CodeSkill is built entirely on **PostgreSQL 15 / AWS RDS** with TypeORM managing **27 domain entities** organized into cohesive relational modules:
+CodeSkill defines **29 domain entities** managed through TypeORM on PostgreSQL with UUID primary keys:
 
 ```mermaid
 erDiagram
     UNIVERSITIES ||--o{ BATCHES : contains
     UNIVERSITIES ||--o{ USERS : enrolls
     BATCHES ||--o{ USERS : groups
+    COMPANIES ||--o{ JOBS : posts
+    COMPANIES ||--o{ USERS : employs
+    JOBS ||--o{ APPLICATIONS : receives
+    USERS ||--o{ APPLICATIONS : submits
 
     USERS ||--o{ ASSESSMENTS : authors
-    USERS ||--o{ ASSESSMENT_ATTEMPTS : attempts
+    USERS ||--o{ ASSESSMENT_ATTEMPTS : takes
     USERS ||--o{ SUBMISSIONS : submits
     USERS ||--o{ CONTEST_ATTEMPTS : participates
     USERS ||--o{ EMAIL_JOBS : targets
     USERS ||--o{ AUDIT_LOGS : performs
+    USERS ||--o{ REFRESH_TOKENS : owns
 
     ASSESSMENTS ||--o{ QUESTIONS : includes
-    ASSESSMENTS ||--o{ ASSESSMENT_ATTEMPTS : tracks
+    ASSESSMENTS ||--o{ ASSESSMENT_ATTEMPTS : records
     ASSESSMENTS ||--o{ EXAM_SESSIONS : conducts
 
-    QUESTIONS ||--o{ PROBLEM_TEST_CASES : tests
-    QUESTIONS ||--o{ SUBMISSIONS : evaluated_by
+    QUESTIONS ||--o{ PROBLEM_TEST_CASES : contains
+    QUESTIONS ||--o{ SUBMISSIONS : evaluates
 
     EXAM_SESSIONS ||--o{ EXAM_SECURITY_EVENTS : logs
 
-    CONTESTS ||--o{ QUESTIONS : features
+    CONTESTS ||--o{ QUESTIONS : includes
     CONTESTS ||--o{ CONTEST_ATTEMPTS : tracks
+    CONTESTS ||--o{ CONTEST_REATTEMPT_GRANTS : permits
+
+    PROBLEMS ||--o{ PROBLEM_STATEMENTS : details
+    PROBLEMS ||--o{ PROBLEM_CONFIGS : configures
+    PROBLEMS ||--o{ DISCUSSIONS : hosts
+    DISCUSSIONS ||--o{ DISCUSSION_REPLIES : receives
 
     USERS {
         uuid id PK
         string email UK
+        string username UK
         string uid UK
         string name
-        string role "SUPER_ADMIN | ADMIN | FACULTY | STUDENT"
+        string role "super_admin | admin | student_admin | assessment_admin | teacher | student"
         string password_hash
-        uuid university_id FK
-        uuid batch_id FK
-        timestamp created_at
-    }
-
-    ASSESSMENTS {
-        uuid id PK
-        string title
-        text description
-        integer duration_minutes
-        integer passing_score
-        timestamp start_time
-        timestamp end_time
-        boolean is_proctored
-        uuid university_id FK
-    }
-
-    QUESTIONS {
-        uuid id PK
-        string title
-        text description
-        string topic
-        string subtopic
-        string difficulty "EASY | MEDIUM | HARD"
-        string type "CODING | MCQ | MULTI_SELECT"
-        jsonb test_cases
-        jsonb metadata
+        integer token_version
+        boolean is_active
+        boolean force_password_change
+        jsonb student_profile
+        jsonb stats
     }
 
     SUBMISSIONS {
         uuid id PK
         uuid user_id FK
-        uuid question_id FK
-        uuid assessment_id FK
+        uuid problem_id FK
+        string problem_source "problem | metadata | question"
         text code
-        string language "cpp | python | java | javascript"
-        string verdict "ACCEPTED | WRONG_ANSWER | TLE | MLE | ERROR"
+        string language "c | cpp | java | python | javascript | typescript"
+        string status "pending | evaluating | accepted | wrong_answer | time_limit_exceeded | memory_limit_exceeded"
         integer execution_time_ms
-        integer memory_kb
-        integer score
+        numeric memory_used_mb
+        jsonb test_case_results
+    }
+
+    ASSESSMENTS {
+        uuid id PK
+        string code UK
+        string title
+        text description
+        integer duration_minutes
+        numeric passing_marks
+        boolean negative_marking
+        timestamp start_time
+        timestamp end_time
+        jsonb target_sections
+        jsonb proctoring_config
     }
 
     EXAM_SECURITY_EVENTS {
         uuid id PK
         uuid session_id FK
-        uuid user_id FK
-        string event_type "TAB_SWITCH | FULLSCREEN_EXIT | MULTIPLE_FACES | LOOK_AWAY"
-        string severity "LOW | MEDIUM | HIGH | CRITICAL"
-        string evidence_url
-        timestamp event_timestamp
-    }
-
-    EMAIL_JOBS {
-        uuid id PK
-        uuid student_id FK
-        string recipient_email
-        string subject
-        string status "PENDING | SENT | FAILED"
-        string error_message
-        timestamp sent_at
+        uuid candidate_id FK
+        uuid assessment_id FK
+        string event_type "TAB_HIDDEN | FULLSCREEN_EXIT | MULTIPLE_FACES | LOOK_AWAY"
+        string severity "WARNING | CRITICAL"
+        jsonb metadata
+        timestamp created_at
     }
 ```
+
+### 2. Horizontal Submission Sharding (`SubmissionStore`)
+- **Deterministic Shard Routing:** Normalizes student UUIDs and applies MD5 hashing modulo 128 virtual buckets mapped to physical PostgreSQL shard pools (`SUBMISSION_SHARDS`).
+- **Data Isolation:** User accounts, question banks, assessments, and contest metadata remain on the primary database; write-heavy submissions are offloaded to dedicated shard instances.
+- **Cross-Shard Aggregation:** Aggregations and leaderboards use fan-out queries with connection pooling, hydrating user profiles from the primary database.
+
+### 3. Declarative Table Partitioning
+- Submissions, audit logs, and security events on the primary database use PostgreSQL declarative range partitioning (`PARTITION BY RANGE (created_at)`) with automatic monthly partitions and a default fallback partition.
+
+### 4. Distributed Redis 7 Layer
+- **BullMQ Work Queues:** Dedicated queues for `submissions` (concurrency controlled, prioritized) and `credential-email` (exponential backoff retry).
+- **Rate Limiting & Throttling:** Sliding-window Redis throttlers enforcing tiered request quotas (short, medium, long windows) across login, submission, and autosave routes.
+- **Cluster Pub/Sub:** Backs the Socket.IO `@socket.io/redis-adapter` for real-time exam and contest broadcasts across horizontally scaled backend nodes.
+
+---
+
+## 📊 Deep-Dive Operational Workflows
+
+### 1. Real-Time Code Submission & Sandboxed Judge Pipeline
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Student as 🎓 Student (Monaco Editor)
+    participant NextJS as 💻 Next.js Frontend
+    participant API as 🚀 NestJS Core API (:5001)
+    participant Redis as 🔴 Redis 7 (BullMQ)
+    participant Worker as ⚙️ BullMQ Judge Worker
+    participant Sandbox as 🐳 Docker Sandbox / Piston
+    participant Shard as 📦 PostgreSQL Submission Shard
+    participant Socket as 📡 Socket.IO Gateway
+
+    Student->>NextJS: Clicks "Submit Code"
+    NextJS->>API: POST /api/submissions { problemId, code, language }
+    Note over API: 1. Validate size (<=1MB), language & rate limits
+    API->>Shard: Save Submission (Status: "pending")
+    API->>Redis: Enqueue Job to "submissions" queue (JobId: submission UUID)
+    API-->>NextJS: HTTP 202 Accepted { submissionId, status: "pending" }
+    NextJS-->>Student: Renders "Evaluating Test Cases..."
+
+    Redis->>Worker: Dequeue Job (submissionId, userId, language, code)
+    Worker->>Worker: Resolve authoritative test cases (Hidden + Public)
+    Worker->>Sandbox: Execute in isolated container (cgroups: CPU=1, RAM=256MB, Net=none)
+    
+    activate Sandbox
+    Sandbox-->>Worker: Return Execution Output (stdout, stderr, runtime_ms, memory_mb)
+    deactivate Sandbox
+
+    Worker->>Worker: Compare output with authoritative expected results
+    Worker->>Shard: Update Submission verdict (Accepted / Wrong Answer / TLE / MLE)
+    Worker->>Redis: Publish "submission_evaluated" event
+    Redis->>Socket: Fan out to Socket.IO cluster adapter
+    Socket-->>NextJS: Private Room WebSocket Emit { submissionId, verdict, runtime, memory }
+    NextJS-->>Student: Render Pass/Fail Badges & Execution Metrics
+```
+
+---
+
+### 2. AI Proctoring, Safe Exam Browser & Violation Enforcement
+
+```mermaid
+flowchart TD
+    subgraph ClientSide ["💻 Student Browser (Client-Side Proctoring)"]
+        Webcam["📷 Webcam Stream"] --> FaceLandmarks["🤖 MediaPipe Face Landmark Mesh"]
+        FaceLandmarks --> FaceDecisions{"Facial Recognition Heuristics"}
+        FaceDecisions -->|"Multiple Faces Detected"| AlertMult["🚨 Multiple Faces Alert"]
+        FaceDecisions -->|"No Face Detected > 3s"| AlertNone["⚠️ Candidate Missing Alert"]
+        FaceDecisions -->|"Gaze Vector Out of Screen"| AlertGaze["👀 Looking Away Anomaly"]
+
+        WindowEvents["🖥️ Browser Window Events"] --> FullscreenAPI["🔒 Fullscreen Lock API"]
+        FullscreenAPI -->|"Fullscreen Exit / ESC"| AlertFS["⚠️ Fullscreen Exit Violation"]
+        WindowEvents --> VisibilityAPI["👁️ Document Visibility API"]
+        VisibilityAPI -->|"Tab Switch / Blur"| AlertTab["⚠️ Tab Switch Violation"]
+        WindowEvents --> DevtoolsDetect["🔍 DevTools Debugger Heuristics"]
+        DevtoolsDetect -->|"Console Opened"| AlertDev["⚠️ Developer Tools Opened"]
+    end
+
+    subgraph Dispatcher ["🛡️ Security Event Pipeline"]
+        AlertMult --> EventBatcher["📡 Event Dispatcher"]
+        AlertNone --> EventBatcher
+        AlertGaze --> EventBatcher
+        AlertFS --> EventBatcher
+        AlertTab --> EventBatcher
+        AlertDev --> EventBatcher
+        Snapshots["📸 Canvas Frame Capture"] --> S3Direct["🪣 AWS S3 Evidence Upload"]
+    end
+
+    subgraph BackendSec ["🚀 CodeSkill Backend & Security Studio"]
+        EventBatcher --> APIEndpoint["POST /api/assessments/:id/violations"]
+        S3Direct --> S3Url["S3 Presigned Media URL"]
+        S3Url --> APIEndpoint
+        APIEndpoint --> SecurityDB[("🐘 PostgreSQL exam_security_events")]
+        
+        SecurityDB --> PolicyEngine{"Violation Threshold Check"}
+        PolicyEngine -->|"Violations < Max Limit"| EmitWarning["⚠️ WebSocket In-Exam Warning Banner"]
+        PolicyEngine -->|"Violations >= Limit"| AutoSubmit["🚫 Force Automatic Exam Submission"]
+        
+        SecurityDB --> AdminDashboard["🖥️ Real-Time Faculty Proctoring Monitor"]
+    end
+
+    EmitWarning -.-> ClientSide
+    AutoSubmit -.-> ClientSide
+```
+
+---
+
+### 3. Bulk Student Onboarding & Transactional Credential Dispatch
+
+```mermaid
+flowchart LR
+    CSV["📄 Admin Uploads XLSX / CSV<br/>(Name, UID, Email, Batch, Semester)"] --> Parse["🔍 Stream Parser & Regex Validation<br/>(RFC 5322 Email, UID Length, Semester 1-12)"]
+    Parse --> Dedupe["🧬 In-File & Database Deduplication<br/>(Cross-check existing UIDs & Emails in DB)"]
+    Dedupe --> Preview["📊 Dry-Run Verification Summary<br/>(Valid rows, Duplicates, Malformed entries)"]
+    Preview --> Confirm["✅ Administrator Confirms Import<br/>POST /api/admin/students/import/confirm"]
+
+    subgraph DBTransaction ["💾 PostgreSQL Database Transaction"]
+        Confirm --> InsertStudents["1. Insert Student User Entities<br/>Generate UUIDs, set forcePasswordChange=true"]
+        InsertStudents --> InsertEmailJobs["2. Insert EmailJob Records<br/>status='pending', linked to student_id"]
+    end
+
+    InsertEmailJobs --> BullQueue["🔴 Enqueue to BullMQ 'credential-email'"]
+    BullQueue --> Worker["📧 Credential Email Worker"]
+    Worker --> SES["📨 AWS Simple Email Service (SES)"]
+    SES --> StudentInbox["📬 Student Receives Credentials & Exam Link"]
+```
+
+---
+
+## ☁️ Cloud Infrastructure & Deployment (AWS & Terraform)
+
+CodeSkill's production infrastructure is declared as code via **Terraform** in `terraform/environments/production/`:
+
+```mermaid
+flowchart TD
+    Internet["🌐 Public Internet Traffic"] --> ALB["⚖️ AWS Application Load Balancer<br/>(TLS 1.3 Termination via ACM)"]
+
+    subgraph PublicSubnets ["Public Subnets (Multi-AZ: ap-south-1a / ap-south-1b)"]
+        ALB
+        NATGateway["🚪 NAT Gateway (Outbound Egress)"]
+    end
+
+    subgraph PrivateAppSubnets ["Private Application Subnets"]
+        FrontendASG["🖥️ codeskill-frontend-asg<br/>Next.js 16 (Port 3000)<br/>Auto Scaling Group (1-6 instances)"]
+        BackendASG["🚀 codeskill-backend-asg<br/>NestJS API & Worker (Port 5001)<br/>Auto Scaling Group (1-6 instances)"]
+        PistonASG["⚡ codeskill-piston-asg<br/>Piston Execution Engine (Port 2001)<br/>Auto Scaling Group (1-8 instances)"]
+        Judge0ASG["🐳 codeskill-judge0-asg<br/>Judge0 Code Sandbox (Port 2358)<br/>Auto Scaling Group (1-4 instances)"]
+    end
+
+    subgraph PrivateDataSubnets ["Private Database Subnets (Isolated)"]
+        RDS[("🐘 AWS RDS PostgreSQL 15<br/>Primary Database Cluster")]
+        RedisCluster[("🔴 AWS ElastiCache Redis 7<br/>BullMQ Queues & PubSub")]
+    end
+
+    subgraph AWSCloudServices ["Managed Cloud Services"]
+        ECR["📦 Amazon ECR<br/>(Immutable Docker Registries)"]
+        S3["🪣 Amazon S3 Bucket<br/>(Proctoring Evidence & Releases)"]
+        SES["📨 Amazon SES<br/>(Transactional Emails)"]
+        CloudMap["🗺️ AWS Cloud Map<br/>(codeskill.internal Service Discovery)"]
+    end
+
+    ALB -->|"Path: /*"| FrontendASG
+    ALB -->|"Path: /api/*"| BackendASG
+    ALB -->|"Path: /socket.io/*"| BackendASG
+
+    FrontendASG -->|"REST /api"| BackendASG
+    BackendASG -->|"SQL Queries"| RDS
+    BackendASG -->|"Queues & PubSub"| RedisCluster
+    BackendASG -->|"Cloud Map: piston.codeskill.internal"| PistonASG
+    BackendASG -->|"Cloud Map: judge0.codeskill.internal"| Judge0ASG
+    BackendASG -->|"Upload Proctoring Snapshots"| S3
+    BackendASG -->|"Dispatch Credentials"| SES
+
+    PistonASG -.->|"Egress via NAT"| NATGateway
+    BackendASG -.->|"Egress via NAT"| NATGateway
+```
+
+### CI/CD Deployment Pipeline (`.github/workflows/deploy.yml`)
+1. **Validation & Test Stage:** Runs ESLint, TypeScript typecheck (`tsc --noEmit`), and full Jest test suites across both backend and frontend on every pull request and push to `main`.
+2. **Immutable ECR Image Build:** Multi-stage Docker builds tag images with git commit SHA and push to Amazon ECR repositories (`codeskill-prod-frontend` and `codeskill-prod-backend`).
+3. **Zero-Downtime Rolling ASG Refresh:** Triggers an AWS Auto Scaling instance refresh with automated rollback, checking `/health/ready` (frontend) and `/api/health/ready` (backend) before redirecting ALB traffic.
+
+---
+
+## 🛡️ Security, Proctoring & Compliance
+
+- **Stateless Authentication with Sliding Refresh:** High-entropy HS256 JWT access tokens paired with cryptographically secure SHA-256 single-use refresh token rotation and family revocation.
+- **Account State & Token Invalidation (`tokenVersion`):** Passwords and user roles increment an atomic `tokenVersion` column; all existing JWTs issued under older token versions are instantly rejected by guards.
+- **Role-Based Access Control (RBAC):** Strict NestJS guards enforcing hierarchical permissions across `super_admin`, `admin`, `student_admin`, `assessment_admin`, `teacher`, and `student`.
+- **Sandbox Container Security:** 
+  - Host execution is forbidden in production (`JUDGE_SANDBOX=docker`).
+  - Container runs as non-root user `1000:1000` with `--network none`.
+  - Drops all Linux capabilities (`--cap-drop ALL`) with `--security-opt no-new-privileges`.
+  - Read-only root filesystem with a transient 64MB tmpfs partition (`/tmp:rw,noexec,nosuid,size=64m`).
+  - Strict PID limits (`--pids-limit 64`) to prevent fork-bomb attacks.
+- **Sliding-Window Throttling:** Multi-tier Redis throttlers protecting sensitive routes (login, registration, code execution, exam submission) against brute-force and DoS attacks.
+- **Immutable Audit Logging:** Every administrative action, grade recalculation, test edit, and security violation is recorded in `audit_logs` with client IP address and user-agent metadata.
 
 ---
 
 ## 🔐 Pre-Seeded Administrator Accounts
 
-To facilitate immediate testing and evaluation of Chandigarh University features, five administrator accounts have been seeded into the local PostgreSQL database (`codeskill_pg`):
+The local development seed script (`npm run admin:bootstrap`) provisions the following default administrative credentials:
 
-| Name | Role | Email | University UID | Default Password |
-| :--- | :---: | :--- | :---: | :---: |
-| **Mustakim** | `ADMIN` | `mustakim_admin1@codeskill.com` | `ADM1` | `12345678` |
-| **Mustakim** | `ADMIN` | `mustakim_admin2@codeskill.com` | `ADM2` | `12345678` |
-| **Mustakim** | `ADMIN` | `mustakim_admin3@codeskill.com` | `ADM3` | `12345678` |
-| **Mustakim** | `ADMIN` | `mustakim_admin4@codeskill.com` | `ADM4` | `12345678` |
-| **Mustakim** | `ADMIN` | `mustakim_admin5@codeskill.com` | `ADM5` | `12345678` |
+| Name | Role | Email | University UID | Default Password | Access Level |
+| :--- | :---: | :--- | :---: | :---: | :--- |
+| **Mustakim** | `admin` | `mustakim_admin1@codeskill.com` | `ADM1` | `12345678` | Full System & University Administration |
+| **Mustakim** | `admin` | `mustakim_admin2@codeskill.com` | `ADM2` | `12345678` | Assessment & Cohort Management |
+| **Mustakim** | `admin` | `mustakim_admin3@codeskill.com` | `ADM3` | `12345678` | Question Bank Studio |
+| **Mustakim** | `admin` | `mustakim_admin4@codeskill.com` | `ADM4` | `12345678` | Contest Management |
+| **Mustakim** | `admin` | `mustakim_admin5@codeskill.com` | `ADM5` | `12345678` | Student Onboarding & Audits |
 
-> [!TIP]
-> Use any of the credentials above at `http://localhost:3000/auth/login` to access the full University Admin Dashboard, Question Bank Studio, and Student Cohort Manager.
+> [!NOTE]
+> Upon initial authentication, accounts with `forcePasswordChange: true` are prompted to update their password before accessing the administrative dashboards.
 
 ---
 
-## 💻 Technology Stack Matrix
+## 📡 API Architecture & Endpoint Catalog
+
+The backend exposes an authenticated REST API rooted at `/api` with OpenAPI / Swagger documentation at `/api/docs`:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                            CODESKILL TECH STACK                             │
-├───────────────────────┬─────────────────────────────────────────────────────┤
-│ 🌐 Frontend Layer     │ Next.js 16 (App Router), React 19, Tailwind CSS v4, │
-│                       │ Monaco Editor, Lucide Icons, GSAP Micro-animations  │
-├───────────────────────┼─────────────────────────────────────────────────────┤
-│ 🚀 Backend API Server │ NestJS 11, Express, Socket.IO (RedisIoAdapter),     │
-│                       │ TypeORM 0.3, Class Validator, Passport JWT          │
-├───────────────────────┼─────────────────────────────────────────────────────┤
-│ ⚡ Distributed Queue   │ BullMQ, Redis 7 (In-Memory Pub/Sub & Job Queue)     │
-├───────────────────────┼─────────────────────────────────────────────────────┤
-│ 🗄️ Database & Sharding│ PostgreSQL 15, Multi-tenant schemas, Horizontal     │
-│                       │ Assessment Submission Shards, AWS RDS PostgreSQL    │
-├───────────────────────┼─────────────────────────────────────────────────────┤
-│ 🐳 Code Sandbox       │ Piston Execution Engine, Judge0 Fallback Client,    │
-│                       │ Docker container cgroups (CPU, RAM, Network quota)  │
-├───────────────────────┼─────────────────────────────────────────────────────┤
-│ ☁️ Cloud & DevOps     │ AWS (RDS, S3, SES, ALB, VPC), Terraform (IaC),      │
-│                       │ Docker Compose, PM2 Process Manager, Nginx          │
-├───────────────────────┼─────────────────────────────────────────────────────┤
-│ 🛡️ Anti-Cheat & Vision│ MediaPipe Face Mesh, Fullscreen API, Tab Visibility │
-└───────────────────────┴─────────────────────────────────────────────────────┘
+│                         CODESKILL REST API CATALOG                          │
+├───────────────────┬─────────────────────────────────────────────────────────┤
+│ 🔐 /api/auth      │ POST /register, POST /login, POST /admin-login,         │
+│                   │ POST /student-login, POST /refresh, POST /logout,       │
+│                   │ GET  /me, PUT /profile, POST /avatar, POST /google      │
+├───────────────────┼─────────────────────────────────────────────────────────┤
+│ ⏱️ /api/assessments│ GET  /my-assessments, GET /:id/overview,                │
+│ (Student)         │ POST /:id/start, POST /:id/save-progress,               │
+│                   │ POST /:id/evaluate-code, POST /:id/violations,          │
+│                   │ POST /:id/submit, GET /:id/result                       │
+├───────────────────┼─────────────────────────────────────────────────────────┤
+│ 🏛️ /api/admin/     │ GET  /admin/assessments, POST /admin/assessments,       │
+│    assessments    │ PUT  /admin/assessments/:id, GET /:id/analytics,        │
+│                   │ GET  /:id/results, POST /:id/recalculate                │
+├───────────────────┼─────────────────────────────────────────────────────────┤
+│ 📚 /api/admin/     │ GET  /admin/questions, POST /admin/questions,           │
+│    questions      │ POST /import, POST /import/confirm, GET /topics,        │
+│                   │ PUT  /:id, PUT /:id/approve, PUT /:id/reject            │
+├───────────────────┼─────────────────────────────────────────────────────────┤
+│ 🏆 /api/contests  │ GET  /contests, GET /:id, POST /:id/register,           │
+│                   │ POST /:id/start, POST /:id/violations, POST /:id/submit,│
+│                   │ GET  /:id/leaderboard, GET /leaderboard/all             │
+├───────────────────┼─────────────────────────────────────────────────────────┤
+│ ⚡ /api/submissions│ POST /submissions (Enqueue Run/Submit),                 │
+│                   │ GET  /recent, GET /stats, GET /user/:userId,            │
+│                   │ GET  /:id, GET /:id/result, POST /:id/cancel            │
+├───────────────────┼─────────────────────────────────────────────────────────┤
+│ 👥 /api/admin/     │ GET  /admin/students, POST /admin/students,             │
+│    students       │ POST /import/preview, POST /import/confirm,             │
+│                   │ POST /credentials/send, GET /email-status               │
+├───────────────────┼─────────────────────────────────────────────────────────┤
+│ 🏢 /api/company   │ POST /, GET /my-companies, GET /jobs, POST /jobs,       │
+│    & /api/campus  │ GET  /team, GET /campus/batches, POST /campus/batches   │
+├───────────────────┼─────────────────────────────────────────────────────────┤
+│ 🏥 /api/health    │ GET  /health/live, GET /health/ready, GET /health/startup│
+└───────────────────┴─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 📂 Project Directory Structure
-
-```text
-codeskill/
-├── backend-nestjs/                    # Enterprise NestJS Application
-│   ├── src/
-│   │   ├── admin/                     # Admin management & University operations
-│   │   ├── assessments/               # Assessment life-cycle, grading & attempts
-│   │   ├── auth/                      # JWT authentication, guards & strategies
-│   │   ├── config/                    # Config modules (JWT, DB, Redis, AWS, Piston)
-│   │   ├── contests/                  # Contest management, leaderboards & attempts
-│   │   ├── database/                  # TypeORM config, migrations & 27 entities
-│   │   │   └── entities/              # Domain models (User, Question, Submission, etc.)
-│   │   ├── exam-security/             # Real-time WebSocket proctoring & audit events
-│   │   ├── execution/                 # BullMQ Judge Worker, Piston & Judge0 runners
-│   │   ├── questions/                 # Question Bank, test cases & topic filter
-│   │   ├── students/                  # Bulk student import & credential dispatch
-│   │   └── main.ts                    # NestJS bootstrap & clustering entry point
-│   ├── docs/                          # Architecture & High-Level Design documentation
-│   │   └── high-level-design-architecture.md  # Canonical 5-Tier HLD Document
-│   ├── ecosystem.config.js            # PM2 Cluster definition (API + Judge workers)
-│   └── package.json
-│
-├── frontend-v2/                       # Next.js 16 Responsive Web Application
-│   ├── src/
-│   │   ├── app/                       # Next.js App Router (pages & server actions)
-│   │   │   ├── admin/                 # Admin views (students, questions, topics)
-│   │   │   ├── assessments/           # Assessment test taker & proctored screens
-│   │   │   ├── contests/              # Live contest arena & leaderboard views
-│   │   │   ├── problems/              # Coding problem solver with Monaco Editor
-│   │   │   └── auth/                  # Authentication & password management
-│   │   ├── components/                # Modular React UI components
-│   │   │   ├── ui/                    # Design system (V-Table, dialogs, badges)
-│   │   │   ├── editor/                # Monaco code editor integration & theme
-│   │   │   └── proctoring/            # MediaPipe camera & screen surveillance
-│   │   └── lib/                       # API clients, auth stores, and utility hooks
-│   └── package.json
-│
-├── docs/assets/                       # Architectural diagrams & University branding
-│   ├── system-architecture-hld.png    # 5-Tier System Architecture diagram
-│   ├── system-architecture-diagram.jpg# Detailed process flow diagram
-│   └── cu-logo.png                    # Official Chandigarh University seal
-│
-├── terraform/                         # AWS Infrastructure as Code (IaC)
-│   ├── modules/                       # Reusable modules (VPC, RDS, ALB, Redis, ASG)
-│   └── environments/dev/              # Development AWS environment configuration
-│
-├── docker-compose.yml                 # Local development container definitions
-└── README.md                          # Platform Documentation & Engineering Manual
-```
-
----
-
-## 🚀 Quickstart Guide
+## 🚀 Quickstart & Local Development
 
 ### Prerequisites
-- **Node.js**: v18.x or v20.x+
-- **Docker & Docker Compose**: For local PostgreSQL and Redis services
-- **npm** or **pnpm**
+- **Node.js**: v20.x or v22.x LTS
+- **Docker & Docker Compose**: For PostgreSQL 15 and Redis 7
+- **npm**: v10.x+ (use `--legacy-peer-deps` during installation)
 
 ---
 
-### Step 1: Clone Repository & Launch Infrastructure Services
+### Step 1: Clone Repository & Launch Supporting Services
 
 ```bash
-# Clone repository
 git clone https://github.com/thesatellite-ai/codeskill.git
 cd codeskill
 
-# Start local PostgreSQL 15 and Redis 7 containers
-docker-compose up -d postgres redis
+# Start PostgreSQL 15 and Redis 7 containers
+docker compose up -d postgres redis
 ```
 
 ---
@@ -587,128 +518,126 @@ docker-compose up -d postgres redis
 ### Step 2: Configure Environment Variables
 
 ```bash
-# Configure backend environment
-cp backend-nestjs/.env.example backend-nestjs/.env
+# Backend environment setup
+cp backend-nestjs/.env.example.local backend-nestjs/.env
 
-# Configure frontend environment
+# Frontend environment setup
 cp frontend-v2/.env.example frontend-v2/.env.local
 ```
-
-*(Refer to [Environment Variables Reference](#️-environment-variables-reference) below for custom setups).*
 
 ---
 
 ### Step 3: Install Dependencies & Run Database Migrations
 
 ```bash
-# Setup Backend
-cd backend-nestjs
-npm install
-npm run build
-npm run typeorm:sync
+# 1. Install Backend Dependencies
+(cd backend-nestjs && npm ci --legacy-peer-deps)
 
-# Seed default administrator accounts into PostgreSQL
-node seed_users.js
+# 2. Build Backend Application
+npm run build --prefix backend-nestjs
 
-# Setup Frontend
-cd ../frontend-v2
-npm install
+# 3. Apply Schema Migrations
+(cd backend-nestjs && npx ts-node -r tsconfig-paths/register src/database/run-practice-submission-source.ts)
+
+# 4. Bootstrap Administrator Accounts
+(cd backend-nestjs && npm run admin:bootstrap)
+
+# 5. Install Frontend Dependencies
+(cd frontend-v2 && npm ci --legacy-peer-deps)
 ```
 
 ---
 
-### Step 4: Run Development Servers
+### Step 4: Start Development Servers
 
-Open two terminal windows:
+Open two terminal sessions:
 
-#### Terminal 1 — NestJS API Server (Port `5001`)
+#### Terminal 1: NestJS API Server (Port `5001`)
 ```bash
 cd backend-nestjs
-npm run start:dev
+NODE_ENV=development npm run start:dev
 ```
 
-#### Terminal 2 — Next.js Frontend Application (Port `3000`)
+#### Terminal 2: Next.js Frontend Application (Port `3000`)
 ```bash
 cd frontend-v2
 npm run dev
 ```
 
-Visit **`http://localhost:3000`** in your browser. Access Swagger API documentation at **`http://localhost:5001/api/docs`**.
+Visit **`http://localhost:3000`** in your browser.  
+Access the interactive Swagger API documentation at **`http://localhost:5001/api/docs`**.
 
 ---
 
-### Step 5: Production Deployment with PM2 Process Clustering
+## 🧪 Testing, QA & Load Benchmarks
 
-CodeSkill includes a battle-tested PM2 ecosystem definition supporting multi-process role separation:
+CodeSkill maintains extensive test coverage across unit, security, integration, and load testing layers:
 
 ```bash
-cd backend-nestjs
-npm run build
+# Run all NestJS backend test suites (56 suites, 510 tests):
+npm test --prefix backend-nestjs -- --runInBand
 
-# Start both API and Judge Worker instances via PM2:
-pm2 start ecosystem.config.js
+# Run all Next.js frontend test suites (42 suites, 297 tests):
+npm test --prefix frontend-v2 -- --runInBand
 
-# Monitor live cluster status:
-pm2 status
-pm2 logs
+# Run single backend test file:
+(cd backend-nestjs && npm test -- --runInBand --runTestsByPath src/auth/token.service.spec.ts)
+
+# Run backend code coverage report:
+npm run test:cov --prefix backend-nestjs -- --runInBand
+
+# Type-check backend without emitting files:
+(cd backend-nestjs && npx --no-install tsc -p tsconfig.build.json --noEmit --incremental false)
+
+# Type-check frontend without emitting files:
+(cd frontend-v2 && npx --no-install tsc --noEmit --incremental false)
 ```
+
+### k6 Distributed Load Testing (100+ Concurrent Students)
+The repository includes automated stress tests simulating examination cohorts taking assessments and submitting code concurrently:
+
+```bash
+# Execute load test against target assessment (e.g. exam-9227):
+k6 run k6_verified_100_students.js
+```
+
+**Observed SLA Metrics Under 100 Concurrent Virtual Users:**
+- Candidate Heartbeat Latency: `p95 < 85ms`
+- Code Run / Execution Enqueue Latency: `p95 < 210ms`
+- Scorecard Computation: `p95 < 340ms`
+- HTTP Success Rate: `99.98%` (zero dropped submissions)
 
 ---
 
 ## ⚙️ Environment Variables Reference
 
-### Backend (`backend-nestjs/.env`)
+### Backend Configuration (`backend-nestjs/.env`)
 
-| Variable | Description | Default / Example |
-| :--- | :--- | :--- |
-| `PORT` | HTTP port for the NestJS API server | `5001` |
-| `DATABASE_URL` | PostgreSQL connection string | `postgres://postgres:password123@127.0.0.1:5432/codeskill` |
-| `REDIS_HOST` | Redis server hostname | `127.0.0.1` |
-| `REDIS_PORT` | Redis server port | `6379` |
-| `JWT_SECRET` | Secret key for signing JSON Web Tokens (min 32 chars) | `your-secure-jwt-secret-key-at-least-32-chars` |
-| `JWT_EXPIRES_IN`| Token validity duration | `7d` |
-| `PISTON_URL` | Sandboxed code execution engine endpoint | `http://127.0.0.1:2000/api/v2` |
-| `AWS_REGION` | AWS region for S3 and SES | `ap-south-1` |
-| `AWS_S3_BUCKET`| S3 bucket for anti-cheat snapshots & media | `codeskill-proctoring-evidence` |
-| `AWS_SES_FROM` | Verified sender email for transactional notices | `no-reply@codeskill.cu.edu.in` |
+| Variable | Description | Required | Example |
+| :--- | :--- | :---: | :--- |
+| `PORT` | Listening port for NestJS HTTP server | Yes | `5001` |
+| `NODE_ENV` | Environment mode (`development`, `test`, `production`) | Yes | `development` |
+| `DATABASE_URL` | Primary PostgreSQL connection URI | Yes | `postgresql://postgres:password123@localhost:5432/codeskill` |
+| `REDIS_HOST` | Redis host for BullMQ and cache | Yes | `127.0.0.1` |
+| `REDIS_PORT` | Redis port | Yes | `6379` |
+| `JWT_SECRET` | Secret key for HS256 tokens (min 32 chars) | Yes | `your-secure-jwt-secret-key-at-least-32-chars` |
+| `JWT_ACCESS_TTL` | Access token lifespan (e.g., `15m`, `1h`) | Yes | `15m` |
+| `JWT_REFRESH_TTL` | Refresh token lifespan (e.g., `7d`, `30d`) | Yes | `7d` |
+| `CODE_EXECUTION_PROVIDER`| Active judge provider (`piston`, `docker`, `legacy`) | Yes | `docker` |
+| `JUDGE_SANDBOX` | Sandbox mode (`docker` in production, `local` in dev) | Yes | `docker` |
+| `PISTON_BASE_URL` | Endpoint for Piston execution engine | Optional | `http://127.0.0.1:2001` |
+| `AWS_REGION` | AWS Region for S3 and SES | Yes | `ap-south-1` |
+| `AWS_S3_BUCKET_NAME` | S3 bucket for proctoring snapshots | Yes | `codeskill-proctoring-evidence` |
+| `AWS_SES_SENDER` | Verified sender address for credential emails | Yes | `no-reply@codeskill.novaserve.cloud` |
 
-### Frontend (`frontend-v2/.env.local`)
+### Frontend Configuration (`frontend-v2/.env.local`)
 
-| Variable | Description | Default / Example |
-| :--- | :--- | :--- |
-| `NEXT_PUBLIC_API_URL` | Base HTTP endpoint for backend REST services | `http://localhost:5001/api` |
-| `NEXT_PUBLIC_SOCKET_URL`| WebSocket endpoint for real-time judge & proctoring | `http://localhost:5001` |
-
----
-
-## 🧪 Testing & Quality Assurance
-
-CodeSkill enforces comprehensive unit, integration, and end-to-end testing across all modules:
-
-```bash
-# Run all NestJS backend test suites (40 test suites, 401+ tests passing):
-cd backend-nestjs
-npm test
-
-# Run tests in watch mode:
-npm run test:watch
-
-# Run code coverage report:
-npm run test:cov
-
-# Typecheck frontend codebase without emitting files:
-cd ../frontend-v2
-npx tsc --noEmit
-```
-
----
-
-## 🛡️ Security, Privacy & Compliance
-
-- **Role-Based Access Control (RBAC)**: Enforced via NestJS `@UseGuards(JwtAuthGuard, RolesGuard)`.
-- **Stateless Authentication**: High-entropy JWT tokens with configurable expiration and Redis blacklist validation.
-- **Sandboxed Execution Cgroups**: Prevents fork bombs, system call overrides, unauthorized file access, and socket spoofing.
-- **Audit Logging**: Every administrative action, question edit, grade override, and security incident is immutably logged into `audit_logs`.
+| Variable | Description | Required | Example |
+| :--- | :--- | :---: | :--- |
+| `NEXT_PUBLIC_API_URL` | Base API URL accessible from the browser | Yes | `http://localhost:5001/api` |
+| `INTERNAL_BACKEND_URL` | Server-side rewrite URL for Next.js API proxy | Yes | `http://127.0.0.1:5001/api` |
+| `NEXT_PUBLIC_WS_URL` | WebSocket origin for Socket.IO gateway | Yes | `http://localhost:5001` |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID`| Google OAuth Client ID | Optional | `your-google-oauth-client-id` |
 
 ---
 

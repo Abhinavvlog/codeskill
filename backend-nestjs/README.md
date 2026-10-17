@@ -1,98 +1,80 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# 🚀 CodeSkill Backend — NestJS Core API & Distributed Judge Engine
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+The enterprise backend service for the **CodeSkill Assessment Platform**, built with **NestJS 11**, **TypeORM**, **PostgreSQL 15**, and **Redis 7 / BullMQ**.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## 🏛️ Architecture & Modules
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+The backend operates as both an HTTP REST / Socket.IO API server and a decoupled asynchronous background worker:
 
-## Project setup
+- **Authentication & RBAC (`src/auth/`):** High-entropy HS256 JWT access tokens, SHA-256 single-use refresh token rotation with family revocation, and `tokenVersion` immediate invalidation.
+- **Examinations & Grading (`src/assessments/`):** Timed exam lifecycles, autosave responses, multi-attempt support, section scoring, and server-side coding evaluation.
+- **Contest Engine (`src/contests/`):** Real-time competitive programming arena with live leaderboards, penalty calculations, and Socket.IO cluster broadcast.
+- **Submission Sharding (`src/database/sharding/`):** `SubmissionStore` providing 128-bucket deterministic MD5 user hash routing across independent PostgreSQL shards.
+- **Execution & Sandboxing (`src/execution/`):** BullMQ queue processor executing multi-language code (Python, C++, Java, C, TypeScript) inside isolated Docker containers or remote Piston microservices with strict CPU/memory cgroups and network disabling.
+- **AI Anti-Cheat & Security (`src/exam-security/`):** Heartbeat tracking, Safe Exam Browser (SEB) verification, and timestamped proctoring violation ingestion.
+- **Student Onboarding (`src/students/`):** Streamed CSV/Excel bulk upload, cross-table deduplication, transactional insertion, and BullMQ AWS SES credential dispatch.
 
+---
+
+## 🛠️ Developer Setup & Commands
+
+### Prerequisites
+- Node.js v20.x or v22.x
+- PostgreSQL 15 & Redis 7 (via `docker compose up -d postgres redis` at root)
+
+### Installation
 ```bash
-$ npm install
+# Install dependencies with legacy peer dependency resolution
+npm ci --legacy-peer-deps
 ```
 
-## Compile and run the project
-
+### Environment Configuration
 ```bash
-# development
-$ npm run start
+cp .env.example.local .env
+```
+Ensure `DATABASE_URL`, `REDIS_HOST`, `REDIS_PORT`, and a strong 32+ character `JWT_SECRET` are set.
 
-# watch mode
-$ npm run start:dev
+### Database Migrations & Seeding
+```bash
+# Compile TypeScript build
+npm run build
 
-# production mode
-$ npm run start:prod
+# Run schema migrations (partitioning, contest security, sharding)
+npx ts-node -r tsconfig-paths/register src/database/run-practice-submission-source.ts
+
+# Seed default administrator accounts (ADM1 - ADM5)
+npm run admin:bootstrap
 ```
 
-## Run tests
-
+### Development & Testing
 ```bash
-# unit tests
-$ npm run test
+# Start API in watch mode (Port 5001)
+NODE_ENV=development npm run start:dev
 
-# e2e tests
-$ npm run test:e2e
+# Run complete test suite (56 suites, 510 tests):
+npm test -- --runInBand
 
-# test coverage
-$ npm run test:cov
+# Run single test file:
+npm test -- --runInBand --runTestsByPath src/auth/token.service.spec.ts
+
+# Type-check without emitting files:
+npx --no-install tsc -p tsconfig.build.json --noEmit --incremental false
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
+### Production Execution (PM2 Process Clustering)
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# Build production bundle
+npm run build
+
+# Start API and Judge Worker instances via PM2:
+pm2 start ecosystem.config.js
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+---
 
-## Resources
+## 📡 Interactive API Documentation
 
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+When running locally, explore the interactive OpenAPI / Swagger catalog at:  
+👉 **`http://localhost:5001/api/docs`**

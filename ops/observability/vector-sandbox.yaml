@@ -1,0 +1,49 @@
+sources:
+  docker_sandboxes:
+    type: docker_logs
+    include_containers:
+      - piston
+      - piston_api
+      - judge0
+      - judge0-server
+      - judge0-workers
+
+transforms:
+  filter_and_enrich:
+    type: remap
+    inputs:
+      - docker_sandboxes
+    source: |
+      .message = to_string!(.message)
+      
+      # Drop noisy health check logs to protect Axiom 500GB Free Tier
+      if contains(.message, "/api/v2/runtimes") || contains(.message, "/workers") || contains(.message, "GET /about") {
+        abort
+      }
+
+      .environment = "production"
+      .host = get_env_var("HOSTNAME") ?? "sandbox-node"
+      
+      if contains(downcase(to_string!(.container_name)), "piston") {
+        .service = "piston-sandbox"
+      } else {
+        .service = "judge0-sandbox"
+      }
+
+      # Detect fatal Cgroup / Isolate / OOM sandbox errors automatically
+      if contains(.message, "Out of memory") || contains(.message, "Cannot allocate memory") || contains(.message, "isolate") || contains(.message, "FATAL") {
+        .level = "error"
+      } else if contains(.message, "WARN") || contains(.message, "timeout") {
+        .level = "warn"
+      } else {
+        .level = "info"
+      }
+
+sinks:
+  axiom_free_tier:
+    type: axiom
+    inputs:
+      - filter_and_enrich
+    token: "${AXIOM_TOKEN}"
+    dataset: "${AXIOM_DATASET}"
+    compression: gzip
