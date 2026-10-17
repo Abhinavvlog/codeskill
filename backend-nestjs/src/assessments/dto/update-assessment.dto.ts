@@ -9,10 +9,21 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { AssessmentSectionDto } from './create-assessment.dto';
 
 class UpdateAssessmentProctoringDto {
+  @IsString()
+  @IsOptional()
+  @IsEnum(['fully_proctored', 'partial_proctored', 'non_proctored'])
+  mode?: 'fully_proctored' | 'partial_proctored' | 'non_proctored';
+
+  @IsNumber()
+  @Type(() => Number)
+  @Min(0)
+  @IsOptional()
+  violationPenaltyMarks?: number;
+
   @IsBoolean()
   @IsOptional()
   useCamera?: boolean;
@@ -95,6 +106,21 @@ export class UpdateAssessmentDto {
   @IsArray()
   @IsString({ each: true })
   @IsOptional()
+  targetBatches?: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  targetDepartments?: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  targetCourses?: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
   targetSections?: string[];
 
   @IsArray()
@@ -108,6 +134,7 @@ export class UpdateAssessmentDto {
   targetStudentIds?: string[];
 
   @IsArray()
+  @Transform(({ value }) => (Array.isArray(value) ? value.map(String) : value))
   @IsString({ each: true })
   @IsOptional()
   targetSemesters?: string[];

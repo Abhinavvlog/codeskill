@@ -420,13 +420,43 @@ export class AssessmentsService {
       allowReview: dto.allowReview ?? true,
       allowedAttempts:
         dto.allowedAttempts !== undefined ? Number(dto.allowedAttempts) : 1,
-      proctoring: dto.proctoring || {
-        useCamera: true,
-        enforceFullscreen: true,
-        blockCopyPaste: true,
-        detectTabSwitch: true,
-        maxTabSwitches: 3,
-        autoSubmitOnViolation: true,
+      mode: dto.proctoring?.mode || 'fully_proctored',
+      submissionPolicy:
+        dto.proctoring?.mode === 'partial_proctored' ||
+        dto.proctoring?.mode === 'non_proctored'
+          ? 'manual'
+          : 'auto',
+      proctoring: {
+        mode: dto.proctoring?.mode || 'fully_proctored',
+        violationPenaltyMarks:
+          dto.proctoring?.violationPenaltyMarks !== undefined
+            ? Number(dto.proctoring.violationPenaltyMarks)
+            : dto.proctoring?.mode === 'partial_proctored'
+              ? 2
+              : 0,
+        useCamera:
+          dto.proctoring?.mode === 'non_proctored'
+            ? false
+            : (dto.proctoring?.useCamera ?? true),
+        enforceFullscreen:
+          dto.proctoring?.mode === 'non_proctored'
+            ? false
+            : (dto.proctoring?.enforceFullscreen ?? true),
+        blockCopyPaste:
+          dto.proctoring?.mode === 'non_proctored'
+            ? false
+            : (dto.proctoring?.blockCopyPaste ?? true),
+        detectTabSwitch:
+          dto.proctoring?.mode === 'non_proctored'
+            ? false
+            : (dto.proctoring?.detectTabSwitch ?? true),
+        maxTabSwitches: dto.proctoring?.maxTabSwitches ?? 3,
+        autoSubmitOnViolation:
+          dto.proctoring?.mode === 'partial_proctored'
+            ? false
+            : dto.proctoring?.mode === 'non_proctored'
+              ? false
+              : (dto.proctoring?.autoSubmitOnViolation ?? true),
       },
       instructions: dto.instructions || [
         'Ensure a stable internet connection throughout the test duration.',
@@ -550,6 +580,11 @@ export class AssessmentsService {
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
+    if (adminUser && ['teacher', 'faculty', 'instructor'].includes(adminUser.role)) {
+      if (assessment.created_by_id && assessment.created_by_id !== (adminUser.id || adminUser._id)) {
+        throw new ForbiddenException('You are not authorized to modify this assessment');
+      }
+    }
     assessment.status = 'archived';
     await this.assessmentRepo.save(assessment);
     return { success: true, message: 'Assessment archived successfully' };
@@ -561,6 +596,11 @@ export class AssessmentsService {
     });
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
+    }
+    if (adminUser && ['teacher', 'faculty', 'instructor'].includes(adminUser.role)) {
+      if (assessment.created_by_id && assessment.created_by_id !== (adminUser.id || adminUser._id)) {
+        throw new ForbiddenException('You are not authorized to modify this assessment');
+      }
     }
 
     if (dto.title !== undefined) assessment.title = dto.title;
@@ -590,6 +630,12 @@ export class AssessmentsService {
     if (dto.allowReview !== undefined) assessment.allowReview = dto.allowReview;
     if (dto.allowedAttempts !== undefined)
       assessment.allowedAttempts = Number(dto.allowedAttempts);
+    if (dto.targetBatches !== undefined)
+      assessment.targetBatches = dto.targetBatches;
+    if (dto.targetDepartments !== undefined)
+      assessment.targetDepartments = dto.targetDepartments;
+    if (dto.targetCourses !== undefined)
+      assessment.targetCourses = dto.targetCourses;
     if (dto.targetSections !== undefined)
       assessment.targetSections = dto.targetSections;
     if (dto.targetGroups !== undefined)
@@ -603,10 +649,36 @@ export class AssessmentsService {
     }
 
     if (dto.proctoring) {
+      const mode = dto.proctoring.mode || assessment.proctoring?.mode;
+      const autoSubmit =
+        mode === 'partial_proctored'
+          ? false
+          : mode === 'non_proctored'
+            ? false
+            : (dto.proctoring.autoSubmitOnViolation ??
+              assessment.proctoring?.autoSubmitOnViolation ??
+              true);
+      const violationPenaltyMarks =
+        dto.proctoring.violationPenaltyMarks !== undefined
+          ? Number(dto.proctoring.violationPenaltyMarks)
+          : assessment.proctoring?.violationPenaltyMarks;
+
       assessment.proctoring = {
         ...assessment.proctoring,
         ...dto.proctoring,
+        ...(mode ? { mode } : {}),
+        autoSubmitOnViolation: autoSubmit,
+        ...(violationPenaltyMarks !== undefined
+          ? { violationPenaltyMarks }
+          : {}),
       };
+      if (mode) {
+        assessment.mode = mode;
+        assessment.submissionPolicy =
+          mode === 'partial_proctored' || mode === 'non_proctored'
+            ? 'manual'
+            : 'auto';
+      }
     }
 
     if (dto.sections !== undefined && Array.isArray(dto.sections)) {
@@ -697,6 +769,11 @@ export class AssessmentsService {
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
+    if (adminUser && ['teacher', 'faculty', 'instructor'].includes(adminUser.role)) {
+      if (assessment.created_by_id && assessment.created_by_id !== (adminUser.id || adminUser._id)) {
+        throw new ForbiddenException('You are not authorized to modify this assessment');
+      }
+    }
 
     assessment.status = status;
     await this.assessmentRepo.save(assessment);
@@ -719,12 +796,17 @@ export class AssessmentsService {
     };
   }
 
-  async getAssessmentResults(id: string) {
+  async getAssessmentResults(id: string, adminUser?: any) {
     const assessment = await this.assessmentRepo.findOne({
       where: [{ id }, { mongoId: id }],
     });
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
+    }
+    if (adminUser && ['teacher', 'faculty', 'instructor'].includes(adminUser.role)) {
+      if (assessment.created_by_id && assessment.created_by_id !== (adminUser.id || adminUser._id)) {
+        throw new ForbiddenException('You are not authorized to access results for this assessment');
+      }
     }
 
     const attempts = await this.attemptRepo.find({
@@ -775,6 +857,8 @@ export class AssessmentsService {
           totalAttempts: studentAttempts.length,
           score: maxScore,
           highestScore: maxScore,
+          rawScore: best?.rawScore ?? maxScore,
+          proctoringPenalty: best?.proctoringPenalty ?? 0,
           passed: hasPassed,
           allAttempts: studentAttempts
             .sort((a, b) => (a.attemptNumber || 0) - (b.attemptNumber || 0))
@@ -782,6 +866,8 @@ export class AssessmentsService {
               _id: a.id,
               attemptNumber: a.attemptNumber || idx + 1,
               score: a.score ?? 0,
+              rawScore: a.rawScore ?? a.score ?? 0,
+              proctoringPenalty: a.proctoringPenalty ?? 0,
               maxScore: a.maxScore || assessment.totalMarks || 100,
               status: a.status,
               percentage: a.percentage ?? 0,
@@ -904,30 +990,52 @@ export class AssessmentsService {
     return qb.getOne();
   }
 
+  private normalizeSemester(val: any): string {
+    if (val == null) return '';
+    return String(val).replace(/^(semester|sem)[\s_-]*/i, '').trim();
+  }
+
   private isStudentTargeted(
     assessment: Assessment,
     studentUser: any,
     profileContext?: { batch: string; dept: string; studentProfile: any },
   ) {
-    const profile = profileContext?.studentProfile || studentUser.studentProfile || {};
+    let rawProfile = profileContext?.studentProfile ?? studentUser.studentProfile ?? {};
+    if (typeof rawProfile === 'string') {
+      try {
+        rawProfile = JSON.parse(rawProfile);
+      } catch {
+        rawProfile = {};
+      }
+    }
+    const profile = rawProfile && typeof rawProfile === 'object' ? rawProfile : {};
     const batch = profileContext?.batch ?? profile.batch ?? '';
     const dept = profileContext?.dept ?? profile.department ?? '';
     const studentKeys = [studentUser.id, studentUser._id, studentUser.uid]
       .filter(Boolean)
       .map(String);
     const matches = (targets: string[] | undefined, value: string) =>
-      !targets?.length || (!!value && targets.includes(String(value)));
+      !targets?.length || (!!value && targets.map((t) => String(t).trim().toLowerCase()).includes(String(value).trim().toLowerCase()));
     const group = String(profile.group || '')
       .trim()
       .replace(/^group[\s_-]*/i, '')
       .toUpperCase();
+
+    const studentSem = this.normalizeSemester(profile.semester);
+    const normalizedTargetSemesters = (assessment.targetSemesters || [])
+      .map((s) => this.normalizeSemester(s))
+      .filter(Boolean);
+
+    const matchesSemester =
+      !normalizedTargetSemesters.length ||
+      (!!studentSem && normalizedTargetSemesters.includes(studentSem));
 
     return (
       (!assessment.targetStudentIds?.length || studentKeys.some((key) => assessment.targetStudentIds.includes(key))) &&
       matches(assessment.targetBatches, batch) &&
       matches(assessment.targetDepartments, dept) &&
       matches(assessment.targetCourses, profile.course || '') &&
-      matches(assessment.targetSemesters, profile.semester == null ? '' : String(profile.semester)) &&
+      matchesSemester &&
       matches(assessment.targetSections, profile.section || '') &&
       matches(assessment.targetGroups, group)
     );
@@ -1487,6 +1595,16 @@ export class AssessmentsService {
         (v) => v.type === 'fullscreen_exit',
       ).length;
 
+      const penaltyPerViolation =
+        Number(assessment.proctoring?.violationPenaltyMarks) || 0;
+      const isPartialProctored =
+        assessment.proctoring?.mode === 'partial_proctored' ||
+        (!assessment.proctoring?.autoSubmitOnViolation &&
+          penaltyPerViolation > 0);
+      attempt.proctoringPenalty = isPartialProctored
+        ? attempt.violations.length * penaltyPerViolation
+        : 0;
+
       for (const v of dto.violations) {
         this.logger.warn({
           event: 'ASSESSMENT_VIOLATION_RECORDED',
@@ -1791,9 +1909,34 @@ export class AssessmentsService {
     }
 
     const maxScore = assessment.totalMarks || 1;
-    const finalScore = Math.min(
+    const rawScore = Math.min(
       maxScore,
       Math.max(0, Math.round(totalScore * 100) / 100),
+    );
+
+    const existingViolations = Array.isArray(attempt.violations) ? attempt.violations : [];
+    const clientViolations = (dto.violations || []).map((v: any) => ({
+      type: v.type,
+      timestamp: v.timestamp ? new Date(v.timestamp) : new Date(),
+      details: v.details || '',
+      evidenceUrl: v.evidenceUrl || '',
+      metadata: v.metadata || {},
+      warningIndex: v.warningIndex,
+    }));
+    const violations = clientViolations.length >= existingViolations.length ? clientViolations : existingViolations;
+
+    const penaltyPerViolation =
+      Number(assessment.proctoring?.violationPenaltyMarks) || 0;
+    const isPartialProctored =
+      assessment.proctoring?.mode === 'partial_proctored' ||
+      (!assessment.proctoring?.autoSubmitOnViolation && penaltyPerViolation > 0);
+    const proctoringPenalty = isPartialProctored
+      ? Math.round(violations.length * penaltyPerViolation * 100) / 100
+      : 0;
+
+    const finalScore = Math.max(
+      0,
+      Math.round((rawScore - proctoringPenalty) * 100) / 100,
     );
     const percentage = Math.round((finalScore / maxScore) * 1000) / 10;
     const passed = finalScore >= (assessment.passingMarks || 0);
@@ -1802,14 +1945,6 @@ export class AssessmentsService {
         ? Math.round((totalCorrect / totalAttempted) * 100)
         : 0;
 
-    const violations = (dto.violations || []).map((v: any) => ({
-      type: v.type,
-      timestamp: v.timestamp ? new Date(v.timestamp) : new Date(),
-      details: v.details || '',
-      evidenceUrl: v.evidenceUrl || '',
-      metadata: v.metadata || {},
-      warningIndex: v.warningIndex,
-    }));
     const tabSwitches = violations.filter(
       (v) => v.type === 'tab_switch',
     ).length;
@@ -1839,6 +1974,8 @@ export class AssessmentsService {
     attempt.submittedAt = now;
     attempt.timeSpentSeconds = dto.timeSpentSeconds || 0;
     attempt.responses = evaluatedResponses;
+    attempt.rawScore = rawScore;
+    attempt.proctoringPenalty = proctoringPenalty;
     attempt.score = finalScore;
     attempt.highestScore = finalHighestScore;
     attempt.maxScore = maxScore;
@@ -1852,6 +1989,12 @@ export class AssessmentsService {
     attempt.tabSwitchCount = tabSwitches;
     attempt.fullscreenExitCount = fullscreenExits;
     attempt.violations = violations;
+    attempt.mode = assessment.proctoring?.mode || 'fully_proctored';
+    attempt.submissionPolicy =
+      assessment.proctoring?.mode === 'partial_proctored' ||
+      assessment.proctoring?.mode === 'non_proctored'
+        ? 'manual'
+        : 'auto';
 
     await this.attemptRepo.save(attempt);
 
@@ -1998,6 +2141,9 @@ export class AssessmentsService {
       attempt: {
         _id: attempt.id,
         score: attempt.score,
+        rawScore: attempt.rawScore ?? attempt.score,
+        proctoringPenalty: attempt.proctoringPenalty ?? 0,
+        mode: attempt.mode,
         maxScore: attempt.maxScore,
         percentage: attempt.percentage,
         passed: attempt.passed,
@@ -2010,6 +2156,7 @@ export class AssessmentsService {
         startedAt: attempt.startedAt,
         submittedAt: attempt.submittedAt,
         tabSwitchCount: attempt.tabSwitchCount,
+        violations: attempt.violations || [],
       },
       topicBreakdown,
       reviewQuestions: assessment.allowReview ? reviewQuestions : [],
@@ -2024,6 +2171,9 @@ export class AssessmentsService {
     const studentId = studentUser._id || studentUser.id;
     const assessment = await this.findAssessmentByIdOrCode(id);
     if (!assessment) throw new NotFoundException('Assessment not found');
+    if (!this.isStudentTargeted(assessment, studentUser)) {
+      throw new ForbiddenException('Assessment is not assigned to you');
+    }
 
     const attempt = await this.attemptRepo.findOne({
       where: [{ assessmentId: assessment.id, studentId, status: 'in_progress' }],
@@ -2061,6 +2211,9 @@ export class AssessmentsService {
     const studentId = studentUser._id || studentUser.id;
     const assessment = await this.findAssessmentByIdOrCode(id);
     if (!assessment) throw new NotFoundException('Assessment not found');
+    if (!this.isStudentTargeted(assessment, studentUser)) {
+      throw new ForbiddenException('Assessment is not assigned to you');
+    }
 
     let attempt = await this.attemptRepo.findOne({
       where: [{ assessmentId: assessment.id, studentId, status: 'in_progress' }],
@@ -2086,6 +2239,12 @@ export class AssessmentsService {
     const existingViolations = Array.isArray(attempt.violations) ? attempt.violations : [];
     const warningIndex = existingViolations.length + 1;
 
+    const penaltyPerViolation =
+      Number(assessment.proctoring?.violationPenaltyMarks) || 0;
+    const isPartialProctored =
+      assessment.proctoring?.mode === 'partial_proctored' ||
+      (!assessment.proctoring?.autoSubmitOnViolation && penaltyPerViolation > 0);
+
     const newViolation = {
       type: dto.type,
       timestamp: dto.timestamp ? new Date(dto.timestamp) : new Date(),
@@ -2093,6 +2252,7 @@ export class AssessmentsService {
       evidenceUrl,
       metadata: dto.metadata || {},
       warningIndex,
+      penaltyMarks: isPartialProctored ? penaltyPerViolation : 0,
     };
 
     attempt.violations = [...existingViolations, newViolation];
@@ -2109,9 +2269,19 @@ export class AssessmentsService {
       'face_mismatch',
       'looking_away',
     ]);
-    const faceWarningCount = attempt.violations.filter((event: any) => faceWarningTypes.has(event.type)).length;
-    const warningLimit = 5;
-    const forceSubmit = faceWarningCount >= warningLimit;
+    const faceWarningCount = attempt.violations.filter((event: any) =>
+      faceWarningTypes.has(event.type),
+    ).length;
+    const warningLimit = assessment.proctoring?.maxTabSwitches ?? 5;
+    const autoSubmitOnViolation =
+      assessment.proctoring?.autoSubmitOnViolation !== false &&
+      assessment.proctoring?.mode !== 'partial_proctored';
+    const forceSubmit = autoSubmitOnViolation && faceWarningCount >= warningLimit;
+
+    const totalPenaltyMarks = isPartialProctored
+      ? attempt.violations.length * penaltyPerViolation
+      : 0;
+    attempt.proctoringPenalty = totalPenaltyMarks;
 
     await this.attemptRepo.save(attempt);
 
@@ -2121,6 +2291,9 @@ export class AssessmentsService {
       warningLimit,
       forceSubmit,
       violation: newViolation,
+      penaltyDeducted: isPartialProctored ? penaltyPerViolation : 0,
+      totalPenaltyMarks,
+      mode: assessment.proctoring?.mode || 'fully_proctored',
     };
   }
 
@@ -2132,6 +2305,9 @@ export class AssessmentsService {
     const studentId = studentUser._id || studentUser.id;
     const assessment = await this.findAssessmentByIdOrCode(id);
     if (!assessment) throw new NotFoundException('Assessment not found');
+    if (!this.isStudentTargeted(assessment, studentUser)) {
+      throw new ForbiddenException('Assessment is not assigned to you');
+    }
 
     const attempt = await this.attemptRepo.findOne({
       where: { assessmentId: assessment.id, studentId, status: 'in_progress' },

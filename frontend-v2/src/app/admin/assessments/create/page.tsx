@@ -7,8 +7,8 @@ import { adminAssessmentsAPI, adminQuestionsAPI, adminUsersAPI } from "@/config/
 import { useAssessmentStore, type ProctoringSettings } from "./_store/useAssessmentStore";
 import QuestionPicker from "./_components/QuestionPicker";
 import {
-  ArrowLeft, CheckCircle2, Clock, Plus, Trash2, ShieldAlert,
-  GripVertical, Settings, Save, Sparkles, X
+  ArrowLeft, CheckCircle2, Clock, Plus, Trash2, Shield, ShieldAlert,
+  ShieldOff, AlertTriangle, GripVertical, Settings, Save, Sparkles, X, GraduationCap
 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { ToastProvider, useToast } from "../../questions/create/_components/Toast"; // Reuse toast
@@ -299,13 +299,16 @@ function AssessmentBuilder() {
   }, []);
 
   const years = ["1", "2", "3", "4"];
-  const visibleSemesters = Array.from(new Set(selectedYears.flatMap((year) => {
-    const firstSemester = (Number(year) - 1) * 2 + 1;
-    return [String(firstSemester), String(firstSemester + 1)];
-  }))).sort((a, b) => Number(a) - Number(b));
+  const allSemesters = ["1", "2", "3", "4", "5", "6", "7", "8"];
+  const visibleSemesters = selectedYears.length
+    ? Array.from(new Set(selectedYears.flatMap((year) => {
+        const firstSemester = (Number(year) - 1) * 2 + 1;
+        return [String(firstSemester), String(firstSemester + 1)];
+      }))).sort((a, b) => Number(a) - Number(b))
+    : allSemesters;
   const visibleSections = Array.from(new Set([
     ...cohorts
-      .filter((cohort) => targetSemesters.includes(cohort.semester))
+      .filter((cohort) => !targetSemesters.length || targetSemesters.includes(cohort.semester))
       .map((cohort) => cohort.section).filter(Boolean),
     ...targetSections,
   ])).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
@@ -319,7 +322,14 @@ function AssessmentBuilder() {
   };
 
   const updateSemesters = (semester: string) => {
-    setTargetSemesters((current) => toggleValue(current, semester));
+    setTargetSemesters((current) => {
+      const updated = toggleValue(current, semester);
+      if (updated.length && !selectedYears.length) {
+        const inferredYears = Array.from(new Set(updated.map((s) => String(Math.ceil(Number(s) / 2)))));
+        setSelectedYears(inferredYears);
+      }
+      return updated;
+    });
     setTargetSections([]);
     setTargetGroup("");
   };
@@ -512,24 +522,216 @@ function AssessmentBuilder() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 pt-2">
-            <label className="flex items-center gap-3 p-3 rounded-xl border border-border bg-background cursor-pointer">
-              <input type="checkbox" checked={store.proctoring.useCamera} onChange={e => store.setProctoring({ useCamera: e.target.checked })} className="rounded text-primary focus:ring-primary w-4 h-4" />
-              <span className="text-sm font-semibold">Use Camera &amp; Microphone</span>
+          {/* Proctoring Policy Selection: Fully Proctored, Partial Proctored (Manual Submission), Non Proctored */}
+          <div className="space-y-3 pt-2">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Proctoring Enforcement Mode
             </label>
-            <label className="flex items-center gap-3 p-3 rounded-xl border border-border bg-background cursor-pointer">
-              <input type="checkbox" checked={store.proctoring.enforceFullscreen} onChange={e => store.setProctoring({ enforceFullscreen: e.target.checked })} className="rounded text-primary focus:ring-primary w-4 h-4" />
-              <span className="text-sm font-semibold">Enforce Fullscreen</span>
-            </label>
-            <label className="flex items-center gap-3 p-3 rounded-xl border border-border bg-background cursor-pointer">
-              <input type="checkbox" checked={store.proctoring.blockCopyPaste} onChange={e => store.setProctoring({ blockCopyPaste: e.target.checked })} className="rounded text-primary focus:ring-primary w-4 h-4" />
-              <span className="text-sm font-semibold">Block Copy/Paste</span>
-            </label>
-            <label className="flex items-center gap-3 p-3 rounded-xl border border-border bg-background cursor-pointer">
-              <input type="checkbox" checked={store.proctoring.detectTabSwitch} onChange={e => store.setProctoring({ detectTabSwitch: e.target.checked })} className="rounded text-primary focus:ring-primary w-4 h-4" />
-              <span className="text-sm font-semibold">Detect Tab Switches</span>
-            </label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Option 1: Fully Proctored */}
+              <button
+                type="button"
+                onClick={() =>
+                  store.setProctoring({
+                    mode: 'fully_proctored',
+                    autoSubmitOnViolation: true,
+                    useCamera: true,
+                    enforceFullscreen: true,
+                    detectTabSwitch: true,
+                    blockCopyPaste: true,
+                  })
+                }
+                className={`p-4 rounded-2xl border text-left transition-all relative flex flex-col justify-between ${
+                  (store.proctoring.mode || 'fully_proctored') === 'fully_proctored'
+                    ? 'border-primary bg-primary/5 ring-2 ring-primary/20 shadow-sm'
+                    : 'border-border bg-background hover:border-primary/40'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="p-2 rounded-xl bg-primary/10 text-primary">
+                      <Shield className="w-5 h-5" />
+                    </span>
+                    {(store.proctoring.mode || 'fully_proctored') === 'fully_proctored' && (
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-primary text-primary-foreground">
+                        Active
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-sm font-bold text-foreground">Fully Proctored</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Strict anti-cheat. Exceeding warning attempts (2–3 times) triggers automatic exam submission.
+                  </p>
+                </div>
+                <div className="mt-3 text-[11px] font-medium text-amber-500 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  Auto-submits on violation limit
+                </div>
+              </button>
+
+              {/* Option 2: Partial Proctored (Manual Submission) */}
+              <button
+                type="button"
+                onClick={() =>
+                  store.setProctoring({
+                    mode: 'partial_proctored',
+                    autoSubmitOnViolation: false,
+                    useCamera: true,
+                    enforceFullscreen: true,
+                    detectTabSwitch: true,
+                    blockCopyPaste: true,
+                    violationPenaltyMarks: store.proctoring.violationPenaltyMarks || 2,
+                  })
+                }
+                className={`p-4 rounded-2xl border text-left transition-all relative flex flex-col justify-between ${
+                  store.proctoring.mode === 'partial_proctored'
+                    ? 'border-indigo-500 bg-indigo-500/5 ring-2 ring-indigo-500/20 shadow-sm'
+                    : 'border-border bg-background hover:border-indigo-500/40'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500">
+                      <ShieldAlert className="w-5 h-5" />
+                    </span>
+                    {store.proctoring.mode === 'partial_proctored' && (
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-600 text-white">
+                        Active
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-sm font-bold text-foreground">Partial Proctored</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Manual submission guaranteed. Candidate completes test, but every tab switch or violation deducts negative marks live.
+                  </p>
+                </div>
+                <div className="mt-3 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  Manual submit · Negative marks on cheat
+                </div>
+              </button>
+
+              {/* Option 3: Non Proctored */}
+              <button
+                type="button"
+                onClick={() =>
+                  store.setProctoring({
+                    mode: 'non_proctored',
+                    autoSubmitOnViolation: false,
+                    useCamera: false,
+                    enforceFullscreen: false,
+                    detectTabSwitch: false,
+                    blockCopyPaste: false,
+                    violationPenaltyMarks: 0,
+                  })
+                }
+                className={`p-4 rounded-2xl border text-left transition-all relative flex flex-col justify-between ${
+                  store.proctoring.mode === 'non_proctored'
+                    ? 'border-emerald-500 bg-emerald-500/5 ring-2 ring-emerald-500/20 shadow-sm'
+                    : 'border-border bg-background hover:border-emerald-500/40'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+                      <ShieldOff className="w-5 h-5" />
+                    </span>
+                    {store.proctoring.mode === 'non_proctored' && (
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+                        Active
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-sm font-bold text-foreground">Non Proctored</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Standard open assessment. No camera, tab-switch restrictions, or proctoring deductions.
+                  </p>
+                </div>
+                <div className="mt-3 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  Free attempt · No restrictions
+                </div>
+              </button>
+            </div>
           </div>
+
+          {/* If Partial Proctored: Editable Negative Marks Config */}
+          {store.proctoring.mode === 'partial_proctored' && (
+            <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 space-y-3 animate-in fade-in duration-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                    <ShieldAlert className="w-4 h-4 text-indigo-600" />
+                    Negative Marks per Violation (Tab switch / Cheating)
+                  </h4>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Deducted from candidate's final score for each recorded violation. Displayed live on candidate screen during test.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-muted-foreground">Penalty:</span>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      max="100"
+                      value={store.proctoring.violationPenaltyMarks ?? 2}
+                      onChange={(e) =>
+                        store.setProctoring({
+                          violationPenaltyMarks: Math.max(0, Number(e.target.value) || 0),
+                        })
+                      }
+                      className="w-24 px-3 py-1.5 bg-background border border-indigo-300 dark:border-indigo-800 rounded-lg text-sm font-bold text-red-500 focus:ring-2 focus:ring-indigo-500 text-center"
+                    />
+                  </div>
+                  <span className="text-xs font-medium text-muted-foreground">marks / violation</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Fine-grained Feature Toggles */}
+          {store.proctoring.mode !== 'non_proctored' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 pt-2">
+              <label className="flex items-center gap-3 p-3 rounded-xl border border-border bg-background cursor-pointer hover:bg-muted/30 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={store.proctoring.useCamera}
+                  onChange={(e) => store.setProctoring({ useCamera: e.target.checked })}
+                  className="rounded text-primary focus:ring-primary w-4 h-4"
+                />
+                <span className="text-sm font-semibold">Use Camera &amp; Microphone</span>
+              </label>
+              <label className="flex items-center gap-3 p-3 rounded-xl border border-border bg-background cursor-pointer hover:bg-muted/30 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={store.proctoring.enforceFullscreen}
+                  onChange={(e) => store.setProctoring({ enforceFullscreen: e.target.checked })}
+                  className="rounded text-primary focus:ring-primary w-4 h-4"
+                />
+                <span className="text-sm font-semibold">Enforce Fullscreen</span>
+              </label>
+              <label className="flex items-center gap-3 p-3 rounded-xl border border-border bg-background cursor-pointer hover:bg-muted/30 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={store.proctoring.blockCopyPaste}
+                  onChange={(e) => store.setProctoring({ blockCopyPaste: e.target.checked })}
+                  className="rounded text-primary focus:ring-primary w-4 h-4"
+                />
+                <span className="text-sm font-semibold">Block Copy/Paste</span>
+              </label>
+              <label className="flex items-center gap-3 p-3 rounded-xl border border-border bg-background cursor-pointer hover:bg-muted/30 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={store.proctoring.detectTabSwitch}
+                  onChange={(e) => store.setProctoring({ detectTabSwitch: e.target.checked })}
+                  className="rounded text-primary focus:ring-primary w-4 h-4"
+                />
+                <span className="text-sm font-semibold">Detect Tab Switches</span>
+              </label>
+            </div>
+          )}
         </section>
 
         {/* Audience and availability */}
@@ -541,7 +743,7 @@ function AssessmentBuilder() {
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
             <MultiSelectDropdown label="Year" placeholder="Choose student year(s)" options={years} selected={selectedYears} onChange={updateYears} />
-            <MultiSelectDropdown label="Semester" placeholder={selectedYears.length ? "Choose semester(s)" : "Choose year first"} options={visibleSemesters} selected={targetSemesters} onChange={updateSemesters} disabled={!visibleSemesters.length} />
+            <MultiSelectDropdown label="Semester" placeholder="Choose semester(s)" options={visibleSemesters} selected={targetSemesters} onChange={updateSemesters} />
             <MultiSelectDropdown label="Section" placeholder={targetSemesters.length ? "Choose section(s)" : "Choose semester first"} options={sectionOptions} selected={targetSections} onChange={(section) => {
               setTargetSections((current) => toggleValue(current, section));
               setTargetGroup("");
@@ -555,7 +757,27 @@ function AssessmentBuilder() {
                 <option value="both">Both</option>
               </select>
             </div>
-            <p className="md:col-span-4 -mt-2 text-[11px] text-muted-foreground">Choose year, semester, section, then group. Section options come from matching student profiles.</p>
+            <div className="md:col-span-4 p-3.5 bg-muted/30 border border-border/70 rounded-xl text-xs space-y-1">
+              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                <GraduationCap className="w-4 h-4 text-primary" />
+                Target Audience Cohort Preview:
+              </span>
+              <p className="text-muted-foreground">
+                {targetSemesters.length || selectedYears.length || targetSections.length || targetGroup ? (
+                  <span>
+                    {selectedYears.length ? <strong className="text-foreground">Year {selectedYears.join(", ")}</strong> : null}
+                    {selectedYears.length && (targetSemesters.length || visibleSemesters.length) ? " • " : ""}
+                    {targetSemesters.length ? <strong className="text-foreground">Semester {targetSemesters.join(", ")}</strong> : selectedYears.length ? <strong className="text-foreground">Semesters {visibleSemesters.join(", ")}</strong> : null}
+                    {" • "}
+                    {targetSections.length ? <span className="text-foreground font-medium">Sections: {targetSections.join(", ")}</span> : "All Sections"}
+                    {" • "}
+                    {targetGroup ? <span className="text-foreground font-medium">Group: {targetGroup.toUpperCase()}</span> : "All Groups"}
+                  </span>
+                ) : (
+                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">Open Access (available to all registered students)</span>
+                )}
+              </p>
+            </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold">Available from</label>
               <input type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="w-full px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm focus:ring-1 focus:ring-primary" />

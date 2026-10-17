@@ -10,7 +10,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 export class AssessmentQuestionConfigDto {
   @IsString()
@@ -81,6 +81,45 @@ export class AssessmentSectionDto {
   @Type(() => AssessmentAutoSelectionDto)
   @IsOptional()
   autoSelection?: AssessmentAutoSelectionDto;
+}
+
+export class CreateAssessmentProctoringDto {
+  @IsString()
+  @IsOptional()
+  @IsEnum(['fully_proctored', 'partial_proctored', 'non_proctored'])
+  mode?: 'fully_proctored' | 'partial_proctored' | 'non_proctored';
+
+  @IsNumber()
+  @Type(() => Number)
+  @Min(0)
+  @IsOptional()
+  violationPenaltyMarks?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  useCamera?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  enforceFullscreen?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  blockCopyPaste?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  detectTabSwitch?: boolean;
+
+  @IsNumber()
+  @Type(() => Number)
+  @Min(0)
+  @IsOptional()
+  maxTabSwitches?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  autoSubmitOnViolation?: boolean;
 }
 
 export class CreateAssessmentDto {
@@ -167,6 +206,7 @@ export class CreateAssessmentDto {
   targetStudentIds?: string[];
 
   @IsArray()
+  @Transform(({ value }) => (Array.isArray(value) ? value.map(String) : value))
   @IsString({ each: true })
   @IsOptional()
   targetSemesters?: string[];
@@ -199,14 +239,9 @@ export class CreateAssessmentDto {
   allowedAttempts?: number;
 
   @IsOptional()
-  proctoring?: {
-    useCamera?: boolean;
-    enforceFullscreen?: boolean;
-    blockCopyPaste?: boolean;
-    detectTabSwitch?: boolean;
-    maxTabSwitches?: number;
-    autoSubmitOnViolation?: boolean;
-  };
+  @ValidateNested()
+  @Type(() => CreateAssessmentProctoringDto)
+  proctoring?: CreateAssessmentProctoringDto;
 
   @IsArray()
   @IsString({ each: true })

@@ -93,6 +93,18 @@ export class AssessmentAttempt {
   @Column({ type: 'float', default: 0 })
   score: number;
 
+  @Column({ type: 'float', default: 0 })
+  rawScore: number;
+
+  @Column({ type: 'float', default: 0 })
+  proctoringPenalty: number;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  mode?: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  submissionPolicy?: string;
+
   @Column({ type: 'float', nullable: true, default: 0 })
   highestScore?: number;
 

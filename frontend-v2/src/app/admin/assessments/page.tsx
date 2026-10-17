@@ -19,7 +19,8 @@ import {
   Layers,
   Trash2,
   RefreshCw,
-  Edit3
+  Edit3,
+  GraduationCap
 } from "lucide-react";
 import { adminAssessmentsAPI } from "@/config/api";
 import { Spinner } from "@/components/ui/spinner";
@@ -192,6 +193,26 @@ export default function AdminAssessmentsPage() {
                           ? "1 Attempt"
                           : `${test.allowedAttempts} Attempts`}
                       </span>
+                      {test.targetSemesters && test.targetSemesters.length > 0 ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary border border-primary/25 flex items-center gap-1">
+                          <GraduationCap className="w-3 h-3" />
+                          {`Sem ${test.targetSemesters.join(", ")}`}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground border border-border flex items-center gap-1">
+                          <GraduationCap className="w-3 h-3" /> All Semesters
+                        </span>
+                      )}
+                      {test.targetSections && test.targetSections.length > 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground border border-border">
+                          Sec: {test.targetSections.join(", ")}
+                        </span>
+                      )}
+                      {test.targetGroups && test.targetGroups.length > 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground border border-border">
+                          Grp: {test.targetGroups.join(", ")}
+                        </span>
+                      )}
                     </div>
 
                     {/* Instant Admin Live Trigger Toggle */}
