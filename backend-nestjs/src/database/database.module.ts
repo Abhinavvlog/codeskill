@@ -119,7 +119,7 @@ const entities = [
             synchronize: isSyncAllowed,
             extra: poolConfig,
             invalidWhereValuesBehavior: {
-              null: 'ignore',
+              null: 'throw',
             },
           } as any;
         }
@@ -137,7 +137,7 @@ const entities = [
           synchronize: isSyncAllowed,
           extra: poolConfig,
           invalidWhereValuesBehavior: {
-            null: 'ignore',
+            null: 'throw',
           },
         } as any;
       },

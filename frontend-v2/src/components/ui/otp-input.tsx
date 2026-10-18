@@ -95,14 +95,21 @@ export function useOtpInput({
   const [focusedIndex, setFocusedIndex] = useState(-1);
 
   const charsRef = useRef(chars);
-  charsRef.current = chars;
-
   const refs = useRef<(HTMLInputElement | null)[]>([]);
-
   const changed = useRef(onChange);
-  changed.current = onChange;
   const completed = useRef(onComplete);
-  completed.current = onComplete;
+
+  useEffect(() => {
+    charsRef.current = chars;
+  }, [chars]);
+
+  useEffect(() => {
+    changed.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    completed.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     setChars((prev) =>

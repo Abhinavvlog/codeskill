@@ -29,9 +29,9 @@ env:
   BACKEND_ASG: codeskill-backend-asg
   FRONTEND_TG: codeskill-prod-tg
   BACKEND_TG: codeskill-prod-be-tg
-  ASG_INSTANCE_WARMUP: 120
-  ASG_MIN_HEALTHY_PERCENTAGE: 0
-  ASG_MAX_HEALTHY_PERCENTAGE: 100
+  ASG_INSTANCE_WARMUP: 180
+  ASG_MIN_HEALTHY_PERCENTAGE: 100
+  ASG_MAX_HEALTHY_PERCENTAGE: 200
 
 permissions:
   id-token: write # Required for AWS OIDC authentication

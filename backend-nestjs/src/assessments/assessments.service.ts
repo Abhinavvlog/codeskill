@@ -6,6 +6,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  ConflictException,
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -1580,14 +1581,31 @@ export class AssessmentsService {
     }
 
     if (dto.violations && Array.isArray(dto.violations)) {
-      attempt.violations = dto.violations.map((v: any) => ({
+      const existingViolations = Array.isArray(attempt.violations) ? attempt.violations : [];
+      const existingTypesWithoutTimestamp = new Set(
+        existingViolations.filter((v: any) => !v.timestamp).map((v: any) => v.type),
+      );
+      const existingKeys = new Set(
+        existingViolations
+          .filter((v: any) => v.timestamp)
+          .map((v: any) => `${v.type}_${new Date(v.timestamp).getTime()}`),
+      );
+      const incomingViolations = dto.violations.map((v: any) => ({
         type: v.type,
         timestamp: v.timestamp ? new Date(v.timestamp) : new Date(),
         details: v.details || '',
         evidenceUrl: v.evidenceUrl || '',
         metadata: v.metadata || {},
         warningIndex: v.warningIndex,
+        rawTimestamp: v.timestamp,
       }));
+      const newViolations = incomingViolations.filter((v: any) => {
+        if (!v.rawTimestamp && existingTypesWithoutTimestamp.has(v.type)) {
+          return false;
+        }
+        return !existingKeys.has(`${v.type}_${v.timestamp.getTime()}`);
+      });
+      attempt.violations = [...existingViolations, ...newViolations];
       attempt.tabSwitchCount = attempt.violations.filter(
         (v) => v.type === 'tab_switch',
       ).length;
@@ -1605,7 +1623,7 @@ export class AssessmentsService {
         ? attempt.violations.length * penaltyPerViolation
         : 0;
 
-      for (const v of dto.violations) {
+      for (const v of newViolations) {
         this.logger.warn({
           event: 'ASSESSMENT_VIOLATION_RECORDED',
           assessmentId: assessment.id,
@@ -1692,6 +1710,32 @@ export class AssessmentsService {
     // NEW-003: Idempotent submission: if already submitted, return the final scorecard
     if (attempt.status === 'submitted' || attempt.status === 'auto_submitted') {
       return this.getStudentResult(assessment.id, studentUser);
+    }
+
+    if (attempt.status === 'evaluating') {
+      throw new ConflictException(
+        'Assessment submission is currently being evaluated. Please wait.',
+      );
+    }
+
+    // Atomic CAS transition: in_progress -> evaluating to prevent duplicate concurrent evaluations
+    if (attempt.status === 'in_progress') {
+      if (typeof this.attemptRepo.update === 'function') {
+        const transitionResult = await this.attemptRepo.update(
+          { id: attempt.id, status: 'in_progress' },
+          { status: 'evaluating' as any },
+        );
+        if (transitionResult && transitionResult.affected === 0) {
+          const rechecked = await this.attemptRepo.findOne({ where: { id: attempt.id } });
+          if (rechecked?.status === 'submitted' || rechecked?.status === 'auto_submitted') {
+            return this.getStudentResult(assessment.id, studentUser);
+          }
+          throw new ConflictException(
+            'Assessment submission is currently being evaluated. Please wait.',
+          );
+        }
+      }
+      attempt.status = 'evaluating' as any;
     }
 
     // Accept before the deadline; execution may finish after it.
@@ -1915,6 +1959,14 @@ export class AssessmentsService {
     );
 
     const existingViolations = Array.isArray(attempt.violations) ? attempt.violations : [];
+    const existingTypesWithoutTimestamp = new Set(
+      existingViolations.filter((v: any) => !v.timestamp).map((v: any) => v.type),
+    );
+    const existingKeys = new Set(
+      existingViolations
+        .filter((v: any) => v.timestamp)
+        .map((v: any) => `${v.type}_${new Date(v.timestamp).getTime()}`),
+    );
     const clientViolations = (dto.violations || []).map((v: any) => ({
       type: v.type,
       timestamp: v.timestamp ? new Date(v.timestamp) : new Date(),
@@ -1922,8 +1974,15 @@ export class AssessmentsService {
       evidenceUrl: v.evidenceUrl || '',
       metadata: v.metadata || {},
       warningIndex: v.warningIndex,
+      rawTimestamp: v.timestamp,
     }));
-    const violations = clientViolations.length >= existingViolations.length ? clientViolations : existingViolations;
+    const newClientViolations = clientViolations.filter((v: any) => {
+      if (!v.rawTimestamp && existingTypesWithoutTimestamp.has(v.type)) {
+        return false;
+      }
+      return !existingKeys.has(`${v.type}_${v.timestamp.getTime()}`);
+    });
+    const violations = [...existingViolations, ...newClientViolations];
 
     const penaltyPerViolation =
       Number(assessment.proctoring?.violationPenaltyMarks) || 0;
@@ -2321,9 +2380,14 @@ export class AssessmentsService {
     const url = await this.s3Service.uploadBase64Image(dto.image, 'proctoring', `capture-${dto.type}`);
     const objectKey = decodeURIComponent(new URL(url).pathname.replace(/^\/+/, ''));
 
-    const captures = Array.isArray((attempt as any).captures) ? (attempt as any).captures : [];
-    (attempt as any).captures = [...captures, { type: dto.type, url, objectKey, timestamp: capturedAt, filename: dto.filename }];
-    await this.attemptRepo.save(attempt);
+    // Reload fresh attempt state after S3 upload so any student responses saved while upload was in flight are preserved
+    const freshAttempt = await this.attemptRepo.findOne({
+      where: { id: attempt.id },
+    });
+    const targetAttempt = freshAttempt || attempt;
+    const captures = Array.isArray((targetAttempt as any).captures) ? (targetAttempt as any).captures : [];
+    (targetAttempt as any).captures = [...captures, { type: dto.type, url, objectKey, timestamp: capturedAt, filename: dto.filename }];
+    await this.attemptRepo.save(targetAttempt);
 
     return {
       success: true,

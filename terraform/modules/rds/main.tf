@@ -55,7 +55,7 @@ resource "aws_db_parameter_group" "postgres" {
 
   parameter {
     name         = "max_connections"
-    value        = "50"
+    value        = "200"
     apply_method = "pending-reboot"
   }
 
