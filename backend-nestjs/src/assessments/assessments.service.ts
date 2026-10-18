@@ -1635,7 +1635,20 @@ export class AssessmentsService {
       }
     }
 
-    await this.attemptRepo.save(attempt);
+    // Reload fresh attempt state right before saving so any proctoring captures or background
+    // telemetry saved while saveProgress was processing are fully preserved
+    const freshAttempt = await this.attemptRepo.findOne({
+      where: { id: attempt.id },
+    });
+    const targetAttempt = freshAttempt || attempt;
+    targetAttempt.responses = attempt.responses;
+    targetAttempt.timeSpentSeconds = attempt.timeSpentSeconds;
+    targetAttempt.violations = attempt.violations;
+    targetAttempt.tabSwitchCount = attempt.tabSwitchCount;
+    targetAttempt.fullscreenExitCount = attempt.fullscreenExitCount;
+    targetAttempt.proctoringPenalty = attempt.proctoringPenalty;
+
+    await this.attemptRepo.save(targetAttempt);
     return { success: true, message: 'Progress saved successfully.' };
   }
 
@@ -2386,7 +2399,9 @@ export class AssessmentsService {
     });
     const targetAttempt = freshAttempt || attempt;
     const captures = Array.isArray((targetAttempt as any).captures) ? (targetAttempt as any).captures : [];
-    (targetAttempt as any).captures = [...captures, { type: dto.type, url, objectKey, timestamp: capturedAt, filename: dto.filename }];
+    const updatedCaptures = [...captures, { type: dto.type, url, objectKey, timestamp: capturedAt, filename: dto.filename }];
+    (targetAttempt as any).captures = updatedCaptures;
+
     await this.attemptRepo.save(targetAttempt);
 
     return {

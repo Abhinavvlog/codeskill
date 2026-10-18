@@ -111,12 +111,18 @@ export function useOtpInput({
     completed.current = onComplete;
   }, [onComplete]);
 
-  useEffect(() => {
+  // Synchronously adjust state during render when prop length changes to eliminate cascaded effect re-renders
+  const [prevLength, setPrevLength] = useState(length);
+  if (prevLength !== length) {
+    setPrevLength(length);
     setChars((prev) =>
       prev.length === length
         ? prev
         : Array.from({ length }, (_, i) => prev[i] ?? ""),
     );
+  }
+
+  useEffect(() => {
     refs.current.length = length;
   }, [length]);
 

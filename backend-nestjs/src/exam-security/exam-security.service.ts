@@ -27,6 +27,7 @@ export class ExamSecurityService {
     candidateId: string,
     clientBody: any,
     headers?: Record<string, string | string[] | undefined>,
+    requestUrl?: string,
   ) {
     if (!assessmentId) throw new BadRequestException('Invalid assessment ID');
 
@@ -38,7 +39,7 @@ export class ExamSecurityService {
     const security = (assessment as any).securityPolicy;
     const isSecureMode = security && security.secureExamMode !== 'DISABLED';
 
-    // Verify SEB request authenticity
+    // Verify SEB request authenticity via genuine SEB headers and user-agent
     const sebReqHash =
       (headers?.['x-safeexambrowser-requesthash'] as string) ||
       (headers?.['x-safeexambrowser-confighash'] as string) ||
@@ -47,9 +48,8 @@ export class ExamSecurityService {
     const isSebUserAgent = /SEB|SafeExamBrowser/i.test(userAgent);
     const hasSebHeader = Boolean(sebReqHash);
 
-    const clientType = (clientBody.isSEB || hasSebHeader || isSebUserAgent) ? 'SEB' : 'BROWSER';
-    const clientVersion = clientBody.clientVersion || 'UNKNOWN';
-    const configKey = clientBody.configKey;
+    const clientType = (hasSebHeader || isSebUserAgent) ? 'SEB' : 'BROWSER';
+    const clientVersion = clientBody?.clientVersion || 'UNKNOWN';
 
     if (security?.requireSEB) {
       if (clientType !== 'SEB') {
@@ -58,19 +58,54 @@ export class ExamSecurityService {
         );
       }
 
-      // If assessment defines an approved configKey, verify it
+      // If assessment defines an approved configKey, verify it cryptographically via headers (ISSUE-SEC-001 & ISSUE-SEC-002)
       if (security.configKey) {
         const expectedConfigKey = String(security.configKey).trim();
-        const clientSentKey = String(configKey || '').trim();
-        const hasMatchingKey = clientSentKey && clientSentKey === expectedConfigKey;
-        const hasMatchingHash =
-          sebReqHash &&
-          typeof sebReqHash === 'string' &&
-          (sebReqHash === expectedConfigKey ||
-            sebReqHash.toLowerCase() ===
-              crypto.createHash('sha256').update(assessment.id + expectedConfigKey).digest('hex'));
+        if (!sebReqHash) {
+          throw new ForbiddenException(
+            'Safe Exam Browser configuration key mismatch. Please download the official exam configuration.',
+          );
+        }
 
-        if (!hasMatchingKey && !hasMatchingHash) {
+        const candidateUrls = [
+          requestUrl,
+          headers?.['x-seb-request-url'] as string,
+          headers?.referer as string,
+          `/exam-security/${assessment.id}/secure-session/init`,
+        ].filter(Boolean) as string[];
+
+        const validCandidateHashes: string[] = [
+          crypto.createHash('sha256').update(assessment.id + expectedConfigKey).digest('hex'),
+          crypto.createHmac('sha256', expectedConfigKey).update(assessment.id).digest('hex'),
+        ];
+
+        for (const url of candidateUrls) {
+          validCandidateHashes.push(
+            crypto.createHash('sha256').update(url + expectedConfigKey).digest('hex'),
+            crypto.createHmac('sha256', expectedConfigKey).update(url).digest('hex'),
+          );
+          try {
+            const parsed = new URL(url, 'http://localhost');
+            validCandidateHashes.push(
+              crypto.createHash('sha256').update(parsed.pathname + expectedConfigKey).digest('hex'),
+            );
+          } catch {
+            // ignore url parse error
+          }
+        }
+
+        const cleanSentHash = String(sebReqHash).trim().toLowerCase();
+        const hasValidHash = validCandidateHashes.some((expected) => {
+          try {
+            const bufA = Buffer.from(cleanSentHash, 'utf8');
+            const bufB = Buffer.from(expected.toLowerCase(), 'utf8');
+            return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+          } catch {
+            return false;
+          }
+        });
+
+        if (!hasValidHash) {
           throw new ForbiddenException(
             'Safe Exam Browser configuration key mismatch. Please download the official exam configuration.',
           );
@@ -108,7 +143,7 @@ export class ExamSecurityService {
         secureMode: security?.secureExamMode || 'DISABLED',
         clientType,
         clientVersion,
-        configKey,
+        configKey: security?.configKey || clientBody?.configKey || null,
         expiresAt,
         startedAt: new Date(),
         lastHeartbeatAt: new Date(),

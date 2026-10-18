@@ -1,6 +1,7 @@
 jest.mock('@nestjs/typeorm', () => ({ InjectRepository: () => () => {} }));
 
 import { ForbiddenException } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { ExamSecurityService } from './exam-security.service';
 
 describe('ExamSecurityService (ISSUE-SEC-001 Hardening)', () => {
@@ -42,7 +43,7 @@ describe('ExamSecurityService (ISSUE-SEC-001 Hardening)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('rejects connection when assessment requires specific configKey and client provides mismatched key', async () => {
+  it('rejects connection when assessment requires specific configKey and client provides plaintext body key without authentic SEB header hash (ISSUE-SEC-002)', async () => {
     assessmentRepo.findOne.mockResolvedValue({
       id: 'asmt-1',
       securityPolicy: {
@@ -55,13 +56,35 @@ describe('ExamSecurityService (ISSUE-SEC-001 Hardening)', () => {
       service.initSecureSession(
         'asmt-1',
         'cand-1',
-        { isSEB: true, configKey: 'wrong-key' },
+        { isSEB: true, configKey: 'secret-exam-config-key-12345' },
         { 'user-agent': 'SafeExamBrowser/3.3.0' },
       ),
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('accepts genuine SEB connection and returns a cryptographically signed HMAC token (not mock string)', async () => {
+  it('rejects connection when SEB header hash is mismatched or invalid', async () => {
+    assessmentRepo.findOne.mockResolvedValue({
+      id: 'asmt-1',
+      securityPolicy: {
+        requireSEB: true,
+        configKey: 'secret-exam-config-key-12345',
+      },
+    });
+
+    await expect(
+      service.initSecureSession(
+        'asmt-1',
+        'cand-1',
+        { isSEB: true },
+        {
+          'user-agent': 'SafeExamBrowser/3.3.0',
+          'x-safeexambrowser-requesthash': 'invalidhash1234567890abcdef1234567890abcdef1234567890abcdef12345678',
+        },
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('accepts genuine SEB connection with valid URL request hash and returns cryptographically signed HMAC token', async () => {
     assessmentRepo.findOne.mockResolvedValue({
       id: 'asmt-1',
       durationMinutes: 60,
@@ -72,11 +95,21 @@ describe('ExamSecurityService (ISSUE-SEC-001 Hardening)', () => {
     });
     sessionRepo.findOne.mockResolvedValue(null);
 
+    const fullUrl = 'https://exam.codeskill.io/exam-security/asmt-1/secure-session/init';
+    const validSebHash = crypto
+      .createHash('sha256')
+      .update(fullUrl + 'approved-config-key')
+      .digest('hex');
+
     const res = await service.initSecureSession(
       'asmt-1',
       'cand-1',
-      { isSEB: true, configKey: 'approved-config-key' },
-      { 'user-agent': 'SafeExamBrowser/3.3.0' },
+      { isSEB: true },
+      {
+        'user-agent': 'SafeExamBrowser/3.3.0',
+        'x-safeexambrowser-requesthash': validSebHash,
+      },
+      fullUrl,
     );
 
     expect(res.success).toBe(true);
