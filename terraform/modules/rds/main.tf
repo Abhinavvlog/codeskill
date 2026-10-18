@@ -53,9 +53,10 @@ resource "aws_db_parameter_group" "postgres" {
   family      = "postgres${local.major_version}"
   description = "Tuned PostgreSQL parameters for CodeSkill micro database"
 
+  # Hardened for 1 GiB RAM db.t4g.micro to prevent Linux kernel OOM termination (ISSUE-INFRA-002)
   parameter {
     name         = "max_connections"
-    value        = "200"
+    value        = "100"
     apply_method = "pending-reboot"
   }
 
