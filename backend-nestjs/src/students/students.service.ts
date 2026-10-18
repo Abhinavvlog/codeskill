@@ -17,6 +17,7 @@ import * as xlsx from 'xlsx';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { QueryStudentsDto } from './dto/query-students.dto';
+import { encryptTemporaryPassword } from './utils/credential-crypto.util';
 
 @Injectable()
 export class StudentsService {
@@ -779,7 +780,7 @@ export class StudentsService {
         uid: u.uid,
         email: u.email,
         name: u.name,
-        temporaryPassword: rawPassword,
+        temporaryPassword: encryptTemporaryPassword(rawPassword),
         status: 'pending',
         retryCount: 0,
         createdBy: adminUser?.id || adminUser?._id,
@@ -916,7 +917,7 @@ export class StudentsService {
         uid: student.uid,
         email: student.email,
         name: student.name,
-        temporaryPassword: tempPass,
+        temporaryPassword: encryptTemporaryPassword(tempPass),
         status: 'queued',
         retryCount: 0,
       });

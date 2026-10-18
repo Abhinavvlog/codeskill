@@ -3,6 +3,7 @@ import {
   Post,
   Param,
   Body,
+  Headers,
   UseGuards,
   HttpCode,
 } from '@nestjs/common';
@@ -21,11 +22,13 @@ export class ExamSecurityController {
     @Param('assessmentId') assessmentId: string,
     @CurrentUser('id') userId: string,
     @Body() body: any,
+    @Headers() headers: Record<string, string | undefined>,
   ) {
     return this.examSecurityService.initSecureSession(
       assessmentId,
       userId,
       body,
+      headers,
     );
   }
 
