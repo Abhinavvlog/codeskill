@@ -4,7 +4,6 @@ import MentorGratitude from '@/components/skill-development/MentorGratitude';
 import {
   ArrowDownRight,
   ArrowLeft,
-  ArrowRight,
   BookOpenCheck,
   Compass,
   Lightbulb,
@@ -71,7 +70,7 @@ export default function SkillDevelopmentPage() {
         className="pointer-events-none absolute -top-56 left-1/2 h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-primary/10 blur-[120px]"
       />
 
-      <div className="relative mx-auto max-w-6xl px-5 py-14 sm:px-8 sm:py-20 lg:py-24">
+      <div className="relative mx-auto max-w-screen-2xl px-5 py-14 sm:px-8 sm:py-20 lg:py-24">
         <Link
           href="/"
           className="mb-10 inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/70 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
@@ -96,57 +95,47 @@ export default function SkillDevelopmentPage() {
         <MentorGratitude />
 
         <section
-          className="mx-auto mt-14 max-w-screen-2xl rounded-[2rem] border border-emerald-900/10 bg-emerald-50/70 p-5 shadow-sm dark:border-emerald-100/10 dark:bg-emerald-950/15 sm:mt-16 sm:p-8 lg:p-10 2xl:p-12"
+          className="mx-auto mt-14 max-w-screen-2xl rounded-[2rem] border border-emerald-900/10 bg-card/90 p-5 shadow-sm dark:border-emerald-100/10 sm:mt-16 sm:p-8 lg:p-10 2xl:p-12"
           aria-labelledby="team-title"
         >
-          <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.17em] text-emerald-700 dark:text-emerald-300">
-                <UsersRound className="h-4 w-4" aria-hidden="true" />
-                Our developers &amp; contributors
-              </span>
-              <h2 id="team-title" className="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">
+          <div className="mb-8 text-center sm:mb-10">
+            <span className="inline-flex items-center gap-3 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300 sm:text-sm">
+              <UsersRound className="h-5 w-5" aria-hidden="true" />
+              <span className="h-5 w-px bg-primary/50" aria-hidden="true" />
+              Our developers &amp; contributors
+            </span>
+            <h2 id="team-title" className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
                 Meet the Team Behind CodeSkill
-              </h2>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
-                The people building practical, hands-on learning experiences for CodeSkill.
-              </p>
-            </div>
+            </h2>
+            <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base lg:text-lg">
+              The team building practical, hands-on learning experiences.
+            </p>
+            <span className="mx-auto mt-5 block h-1 w-12 rounded-full bg-primary" aria-hidden="true" />
           </div>
 
-          <div
-            className="-mx-1 overflow-x-auto overscroll-x-contain px-1 pb-3 [scrollbar-color:rgba(5,150,105,0.35)_transparent] [scrollbar-width:thin]"
-            aria-label="Team portraits; scroll horizontally to view all nine members"
-            tabIndex={0}
-            style={{ scrollSnapType: 'x mandatory' }}
-          >
-          <div className="grid min-w-[1240px] grid-cols-9 gap-2 sm:gap-3 2xl:min-w-0 2xl:gap-4">
+          <div className="grid grid-cols-3 gap-x-2 gap-y-6 sm:grid-cols-3 sm:gap-x-4 md:grid-cols-5 xl:grid-cols-9 xl:gap-x-2 2xl:gap-x-4" aria-label="CodeSkill team members">
             {teamMembers.map((member) => (
               <article
                 key={member.image}
-                className="group flex min-w-0 snap-center flex-col items-center px-1 py-3 text-center transition duration-300 hover:-translate-y-1 sm:px-1.5"
+                className="group flex min-w-0 flex-col items-center px-0.5 py-3 text-center transition duration-300 hover:-translate-y-1 sm:px-1"
               >
-                <div className="relative h-36 w-[5.5rem] shrink-0 overflow-hidden rounded-2xl bg-muted shadow-md transition duration-300 group-hover:shadow-lg sm:h-40 sm:w-24 xl:h-48 xl:w-28 2xl:h-52 2xl:w-32">
+                <div className="relative aspect-[4/5] w-full max-w-[11rem] shrink-0 overflow-hidden rounded-2xl bg-muted shadow-md transition duration-300 group-hover:shadow-lg">
                   <Image
                     src={member.image}
                     alt={`Portrait of ${member.name}`}
                     fill
-                    sizes="(max-width: 639px) 88px, (max-width: 1279px) 96px, (max-width: 1535px) 112px, 128px"
+                    sizes="(max-width: 639px) 28vw, (max-width: 767px) 20vw, (max-width: 1279px) 18vw, 11rem"
                     quality={82}
                     className={`object-cover transition duration-500 group-hover:scale-[1.035] ${member.name === 'Shadab' ? 'object-[44%_center]' : 'object-center'}`}
                   />
                 </div>
-                <div className="mt-4 flex min-h-[4.5rem] w-full flex-col items-center justify-start gap-2">
-                  <h3 className="w-full text-sm font-extrabold leading-snug tracking-tight text-foreground sm:text-base 2xl:text-lg">{member.name}</h3>
-                  <p className="max-w-full rounded-full bg-primary/10 px-2.5 py-1.5 text-xs font-bold leading-snug text-primary sm:text-[13px] 2xl:text-sm">{member.role}</p>
+                <div className="mt-4 flex min-h-[4.5rem] w-full flex-col items-center gap-2">
+                  <h3 className="w-full text-sm font-extrabold leading-snug tracking-tight text-foreground sm:text-base lg:text-lg">{member.name}</h3>
+                  <span className="h-0.5 w-7 rounded-full bg-primary" aria-hidden="true" />
+                  <p className="text-xs font-semibold leading-snug text-primary sm:text-sm">{member.role}</p>
                 </div>
               </article>
             ))}
-          </div>
-          </div>
-          <div className="mt-1 flex items-center justify-center gap-2 text-[11px] font-medium text-muted-foreground sm:hidden">
-            <span>Swipe to see all 9 members</span>
-            <ArrowRight className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300" aria-hidden="true" />
           </div>
         </section>
 
