@@ -278,6 +278,17 @@
   :root {
     color-scheme: light;
 
+    /* Shared product tokens. Color tokens below are overridden only in dark mode. */
+    --ds-space-1: 4px;
+    --ds-space-2: 8px;
+    --ds-space-3: 12px;
+    --ds-space-4: 16px;
+    --ds-space-6: 24px;
+    --ds-space-8: 32px;
+    --ds-radius-card: 12px;
+    --ds-radius-control: 8px;
+    --ds-motion-fast: 180ms ease;
+
     /* Light Mode: PAGE: #F8F8F6 | SURFACES: #FFFFFF | SECONDARY: #F4F4F2 | TEXT: #111111 / #525252 */
     --background: 210 40% 98%;       /* #F8F8F6 soft warm off-white page */
     --foreground: 222 47% 11%;         /* #111111 primary text */
@@ -327,27 +338,41 @@
   .dark {
     color-scheme: dark;
 
-    /* Dark Mode: Deep Charcoal, Off-White, Dark Gray Borders */
-    --background: 222 47% 7%;         /* #0a0a0a */
-    --foreground: 210 40% 96%;        /* #ededed */
+    /* Gemini-style charcoal palette. Keep shared surface colors in one place. */
+    --cs-bg: #131314;
+    --cs-header: #171718;
+    --cs-surface: #1e1f20;
+    --cs-hover: #282a2c;
+    --cs-raised: #2d2f31;
+    --cs-border: #333537;
+    --cs-border-strong: #444746;
+    --cs-text: #e3e3e3;
+    --cs-text-secondary: #c4c7c5;
+    --cs-text-muted: #8e918f;
+    --cs-brand: #22c55e;
+    --cs-warning: #facc15;
+    --cs-danger: #ef4444;
 
-    --card: 222 39% 10%;               /* #141414 */
-    --card-foreground: 210 40% 96%;
+    --background: 240 2.56% 7.65%;
+    --foreground: 0 0% 89%;
 
-    --popover: 222 39% 10%;
-    --popover-foreground: 210 40% 96%;
+    --card: 210 3.23% 12.16%;
+    --card-foreground: 0 0% 89%;
 
-    --primary: 145 70% 48%;           /* #fafafa */
-    --primary-foreground: 222 47% 10%;
+    --popover: 210 3.23% 12.16%;
+    --popover-foreground: 0 0% 89%;
 
-    --secondary: 217 33% 15%;         /* #1f1f1f */
-    --secondary-foreground: 210 40% 96%;
+    --primary: 145 70% 48%;
+    --primary-foreground: 240 2.56% 7.65%;
 
-    --muted: 217 33% 15%;             /* #1f1f1f */
-    --muted-foreground: 215 20% 68%;  /* #999999 */
+    --secondary: 210 4.76% 16.47%;
+    --secondary-foreground: 0 0% 89%;
 
-    --accent: 145 30% 15%;
-    --accent-foreground: 145 70% 68%;
+    --muted: 210 4.76% 16.47%;
+    --muted-foreground: 140 1.1% 56.3%;
+
+    --accent: 210 4.76% 16.47%;
+    --accent-foreground: 140 2.5% 77.8%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
@@ -358,18 +383,18 @@
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 215 28% 19%;            /* #2e2e2e */
-    --input: 215 28% 22%;
-    --skeleton: 0 0% 14%;
-    --btn-border: 0 0% 18%;
+    --border: 210 3.77% 20.78%;
+    --input: 210 3.77% 20.78%;
+    --skeleton: 210 3.23% 12.16%;
+    --btn-border: 210 2.17% 27.25%;
     --ring: 145 70% 48%;
 
     /* Sidebar tokens */
-    --sidebar: 222 44% 8%;
-    --sidebar-foreground: 210 40% 96%;
-    --sidebar-border: 215 28% 17%;
-    --sidebar-accent: 145 30% 15%;
-    --sidebar-accent-foreground: 145 70% 68%;
+    --sidebar: 240 2.56% 7.65%;
+    --sidebar-foreground: 0 0% 89%;
+    --sidebar-border: 210 3.77% 20.78%;
+    --sidebar-accent: 210 4.76% 16.47%;
+    --sidebar-accent-foreground: 140 2.5% 77.8%;
   }
 
   * {
@@ -437,6 +462,281 @@
     *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
   }
 }
+
+/*
+ * Older screens still use Tailwind's named palettes directly. Remap those
+ * surfaces only while dark mode is active so all pages share the charcoal
+ * tokens without changing their markup, routes, or light theme.
+ */
+html.dark [class*="bg-blue-"],
+html.dark [class*="bg-indigo-"],
+html.dark [class*="bg-violet-"],
+html.dark [class*="bg-purple-"],
+html.dark [class*="bg-sky-"],
+html.dark [class*="bg-cyan-"],
+html.dark [class*="bg-teal-"],
+html.dark [class*="bg-pink-"],
+html.dark [class*="bg-orange-"] {
+  background-color: var(--cs-raised);
+}
+
+html.dark [class*="bg-slate-950"],
+html.dark [class*="bg-gray-950"],
+html.dark [class*="bg-zinc-950"],
+html.dark [class*="bg-neutral-950"],
+html.dark [class*="bg-blue-950"],
+html.dark [class*="bg-indigo-950"],
+html.dark [class*="bg-violet-950"],
+html.dark [class*="bg-purple-950"],
+html.dark [class*="bg-sky-950"],
+html.dark [class*="bg-cyan-950"],
+html.dark [class*="bg-teal-950"] {
+  background-color: var(--cs-bg);
+}
+
+html.dark [class*="bg-slate-900"],
+html.dark [class*="bg-slate-800"],
+html.dark [class*="bg-gray-900"],
+html.dark [class*="bg-gray-800"],
+html.dark [class*="bg-zinc-900"],
+html.dark [class*="bg-zinc-800"],
+html.dark [class*="bg-neutral-900"],
+html.dark [class*="bg-neutral-800"],
+html.dark [class*="bg-blue-900"],
+html.dark [class*="bg-blue-800"],
+html.dark [class*="bg-indigo-900"],
+html.dark [class*="bg-indigo-800"],
+html.dark [class*="bg-violet-900"],
+html.dark [class*="bg-violet-800"],
+html.dark [class*="bg-purple-900"],
+html.dark [class*="bg-purple-800"],
+html.dark [class*="bg-sky-900"],
+html.dark [class*="bg-sky-800"],
+html.dark [class*="bg-cyan-900"],
+html.dark [class*="bg-cyan-800"],
+html.dark [class*="bg-teal-900"],
+html.dark [class*="bg-teal-800"],
+html.dark [class*="bg-white/"] {
+  background-color: var(--cs-surface);
+}
+
+html.dark [class*="bg-slate-700"],
+html.dark [class*="bg-gray-700"],
+html.dark [class*="bg-zinc-700"],
+html.dark [class*="bg-neutral-700"],
+html.dark [class*="bg-blue-700"],
+html.dark [class*="bg-indigo-700"],
+html.dark [class*="bg-violet-700"],
+html.dark [class*="bg-purple-700"],
+html.dark [class*="bg-sky-700"],
+html.dark [class*="bg-cyan-700"],
+html.dark [class*="bg-teal-700"] {
+  background-color: var(--cs-hover);
+}
+
+html.dark [class*="bg-slate-600"],
+html.dark [class*="bg-gray-600"],
+html.dark [class*="bg-zinc-600"],
+html.dark [class*="bg-blue-600"],
+html.dark [class*="bg-indigo-600"],
+html.dark [class*="bg-violet-600"],
+html.dark [class*="bg-purple-600"],
+html.dark [class*="bg-sky-600"],
+html.dark [class*="bg-cyan-600"],
+html.dark [class*="bg-teal-600"] {
+  background-color: var(--cs-raised);
+}
+
+/* Keep translucent decorative washes translucent after removing their hue. */
+html.dark [class*="bg-blue-"][class*="/"],
+html.dark [class*="bg-indigo-"][class*="/"],
+html.dark [class*="bg-violet-"][class*="/"],
+html.dark [class*="bg-purple-"][class*="/"],
+html.dark [class*="bg-sky-"][class*="/"],
+html.dark [class*="bg-cyan-"][class*="/"],
+html.dark [class*="bg-teal-"][class*="/"],
+html.dark [class*="bg-pink-"][class*="/"],
+html.dark [class*="bg-orange-"][class*="/"] {
+  background-color: color-mix(in srgb, var(--cs-raised) 12%, transparent);
+}
+
+html.dark [class*="border-slate-"],
+html.dark [class*="border-gray-"],
+html.dark [class*="border-zinc-"],
+html.dark [class*="border-neutral-"],
+html.dark [class*="border-blue-"],
+html.dark [class*="border-indigo-"],
+html.dark [class*="border-violet-"],
+html.dark [class*="border-purple-"],
+html.dark [class*="border-sky-"],
+html.dark [class*="border-cyan-"],
+html.dark [class*="border-teal-"],
+html.dark [class*="border-pink-"],
+html.dark [class*="border-orange-"],
+html.dark [class*="border-white/"] {
+  border-color: var(--cs-border);
+}
+
+html.dark [class*="text-slate-50"],
+html.dark [class*="text-slate-100"],
+html.dark [class*="text-slate-200"],
+html.dark [class*="text-gray-50"],
+html.dark [class*="text-gray-100"],
+html.dark [class*="text-gray-200"],
+html.dark [class*="text-zinc-50"],
+html.dark [class*="text-zinc-100"],
+html.dark [class*="text-zinc-200"],
+html.dark [class*="text-neutral-50"],
+html.dark [class*="text-neutral-100"],
+html.dark [class*="text-neutral-200"] {
+  color: var(--cs-text);
+}
+
+html.dark [class*="text-slate-300"],
+html.dark [class*="text-gray-300"],
+html.dark [class*="text-zinc-300"],
+html.dark [class*="text-neutral-300"],
+html.dark [class*="text-blue-"],
+html.dark [class*="text-indigo-"],
+html.dark [class*="text-violet-"],
+html.dark [class*="text-purple-"],
+html.dark [class*="text-sky-"],
+html.dark [class*="text-cyan-"],
+html.dark [class*="text-teal-"],
+html.dark [class*="text-pink-"],
+html.dark [class*="text-orange-"] {
+  color: var(--cs-text-secondary);
+}
+
+html.dark [class*="text-slate-400"],
+html.dark [class*="text-slate-500"],
+html.dark [class*="text-slate-600"],
+html.dark [class*="text-gray-400"],
+html.dark [class*="text-gray-500"],
+html.dark [class*="text-gray-600"],
+html.dark [class*="text-zinc-400"],
+html.dark [class*="text-zinc-500"],
+html.dark [class*="text-zinc-600"],
+html.dark [class*="text-neutral-400"],
+html.dark [class*="text-neutral-500"],
+html.dark [class*="text-neutral-600"] {
+  color: var(--cs-text-muted);
+}
+
+/* Neutralize blue/purple gradients in legacy dark surfaces while preserving
+   green brand and yellow/red status treatments. */
+html.dark [class*="dark:from-blue-"],
+html.dark [class*="dark:from-indigo-"],
+html.dark [class*="dark:from-violet-"],
+html.dark [class*="dark:from-purple-"],
+html.dark [class*="dark:from-sky-"],
+html.dark [class*="dark:from-cyan-"],
+html.dark [class*="dark:from-teal-"],
+html.dark [class*="dark:to-blue-"],
+html.dark [class*="dark:to-indigo-"],
+html.dark [class*="dark:to-violet-"],
+html.dark [class*="dark:to-purple-"],
+html.dark [class*="dark:to-sky-"],
+html.dark [class*="dark:to-cyan-"],
+html.dark [class*="dark:to-teal-"] {
+  background-image: linear-gradient(135deg, var(--cs-surface), var(--cs-surface));
+}
+
+/* Neutralize the non-brand gradients used in legacy Admin avatars. */
+html.dark .admin-shell [class*="from-blue-"],
+html.dark .admin-shell [class*="from-indigo-"],
+html.dark .admin-shell [class*="from-violet-"],
+html.dark .admin-shell [class*="from-purple-"],
+html.dark .admin-shell [class*="from-sky-"],
+html.dark .admin-shell [class*="from-cyan-"],
+html.dark .admin-shell [class*="from-teal-"],
+html.dark .admin-shell [class*="to-blue-"],
+html.dark .admin-shell [class*="to-indigo-"],
+html.dark .admin-shell [class*="to-violet-"],
+html.dark .admin-shell [class*="to-purple-"],
+html.dark .admin-shell [class*="to-sky-"],
+html.dark .admin-shell [class*="to-cyan-"],
+html.dark .admin-shell [class*="to-teal-"] {
+  background-image: linear-gradient(135deg, var(--cs-raised), var(--cs-surface));
+}
+
+html.dark .monaco-editor,
+html.dark .monaco-editor .monaco-editor-background,
+html.dark .monaco-editor .margin {
+  background-color: var(--cs-surface) !important;
+}
+html.dark .monaco-editor .margin {
+  background-color: var(--cs-bg) !important;
+}
+html.dark .monaco-editor .line-numbers { color: var(--cs-text-muted) !important; }
+
+.dark .codeskill-problem-workspace .workspace-topbar {
+  color: var(--cs-text);
+  border-color: var(--cs-border);
+  background-color: var(--cs-header);
+}
+.dark .codeskill-problem-workspace .workspace-topbar a { color: var(--cs-text-secondary); }
+.dark .codeskill-problem-workspace .workspace-topbar a:hover { color: var(--cs-text); background: var(--cs-hover); }
+.dark .codeskill-problem-workspace .workspace-language-chip { color: var(--cs-text-secondary); background: var(--cs-surface); border-color: var(--cs-border); }
+.dark .codeskill-problem-workspace .workspace-panels { background: var(--cs-bg); }
+.dark .codeskill-problem-workspace .workspace-pane { border-color: var(--cs-border); background-color: var(--cs-surface); }
+.dark .codeskill-problem-workspace .workspace-pane > div:first-child,
+.dark .codeskill-problem-workspace .workspace-editor-pane > div:first-child,
+.dark .codeskill-problem-workspace .workspace-output-pane > div:first-child { background: var(--cs-header); border-color: var(--cs-border); }
+.dark .codeskill-problem-workspace .workspace-activity-rail { background: var(--cs-bg); border-color: var(--cs-border); }
+.dark .codeskill-problem-workspace .workspace-activity-rail button { color: var(--cs-text-muted); }
+.dark .codeskill-problem-workspace .workspace-activity-rail button:hover { color: var(--cs-brand); background: rgb(34 197 94 / 0.1); }
+.dark .codeskill-problem-workspace .workspace-resize-handle:hover { background: var(--cs-brand); }
+
+.dark .admin-sidebar {
+  color: var(--cs-text-secondary);
+  border-color: var(--cs-border);
+  background: var(--cs-bg);
+  box-shadow: none;
+}
+
+.dark .admin-sidebar > div:first-child {
+  border-color: var(--cs-border);
+  background: var(--cs-header);
+}
+
+.dark .admin-sidebar > div:first-child :is(span, p) { color: var(--cs-text); }
+.dark .admin-sidebar > div:first-child p { color: var(--cs-text-muted); }
+.dark .admin-sidebar-scroll { scrollbar-color: var(--cs-border-strong) transparent; }
+.dark .admin-nav-link { color: var(--cs-text-secondary); }
+.dark .admin-nav-link svg { color: var(--cs-text-muted); }
+.dark .admin-nav-link:hover { color: var(--cs-text); background: var(--cs-hover); }
+.dark .admin-nav-link:hover svg { color: var(--cs-text); }
+.dark .admin-nav-link[class*="bg-primary"] {
+  color: var(--cs-text);
+  border-color: rgb(34 197 94 / 0.22);
+  background: rgb(34 197 94 / 0.1);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.025);
+}
+.dark .admin-nav-link[class*="bg-primary"] svg { color: #4ade80; }
+.dark .admin-subnav { border-color: var(--cs-border); }
+.dark .admin-subnav-link { color: var(--cs-text-muted); }
+.dark .admin-subnav-link:hover { color: var(--cs-text); background: var(--cs-hover); }
+.dark .admin-subnav-link[class*="bg-primary"] { color: #86efac; background: rgb(34 197 94 / 0.1); }
+.dark .admin-sidebar-scroll > div:not(:first-child) { color: var(--cs-text-muted); }
+.dark .admin-sidebar-scroll nav:last-child a { color: var(--cs-text-secondary); }
+.dark .admin-sidebar-scroll nav:last-child a:hover { color: var(--cs-text); background: var(--cs-hover); }
+.dark .admin-shell > div > header { border-color: var(--cs-border); background: var(--cs-header); box-shadow: none; }
+.dark .admin-main {
+  border-color: var(--cs-border);
+  background: radial-gradient(ellipse at 97% 0%, rgb(34 197 94 / 0.035), transparent 32rem), var(--cs-bg);
+  box-shadow: none;
+}
+.dark .admin-main :is(.stat-card, .action-tile, .activity-section, [data-slot="card"], article):hover {
+  box-shadow: 0 10px 26px -22px rgb(0 0 0 / 0.6);
+}
+
+html.dark,
+html.dark body {
+  scrollbar-color: var(--cs-border-strong) var(--cs-bg);
+}
+html.dark ::-webkit-scrollbar-track { background: var(--cs-bg); }
+html.dark ::-webkit-scrollbar-thumb { background: var(--cs-border-strong); }
 
 @layer utilities {
   @keyframes gradient {
