@@ -96,7 +96,7 @@ export default function SkillDevelopmentPage() {
         <MentorGratitude />
 
         <section
-          className="mx-auto mt-14 max-w-6xl rounded-[2rem] border border-emerald-900/10 bg-emerald-50/70 p-5 shadow-sm dark:border-emerald-100/10 dark:bg-emerald-950/15 sm:mt-16 sm:p-8 lg:p-10"
+          className="mx-auto mt-14 max-w-screen-2xl rounded-[2rem] border border-emerald-900/10 bg-emerald-50/70 p-5 shadow-sm dark:border-emerald-100/10 dark:bg-emerald-950/15 sm:mt-16 sm:p-8 lg:p-10 2xl:p-12"
           aria-labelledby="team-title"
         >
           <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
@@ -120,25 +120,25 @@ export default function SkillDevelopmentPage() {
             tabIndex={0}
             style={{ scrollSnapType: 'x mandatory' }}
           >
-          <div className="grid min-w-[900px] grid-cols-9 gap-2 sm:gap-3 lg:min-w-0 lg:gap-2 xl:gap-3">
+          <div className="grid min-w-[1240px] grid-cols-9 gap-2 sm:gap-3 2xl:min-w-0 2xl:gap-4">
             {teamMembers.map((member) => (
               <article
                 key={member.image}
-                className="group flex min-w-0 snap-center flex-col items-center px-1.5 py-3 text-center transition duration-300 hover:-translate-y-1"
+                className="group flex min-w-0 snap-center flex-col items-center px-1 py-3 text-center transition duration-300 hover:-translate-y-1 sm:px-1.5"
               >
-                <div className="relative h-32 w-20 shrink-0 overflow-hidden rounded-2xl bg-muted shadow-md transition duration-300 group-hover:shadow-lg sm:h-36 sm:w-[5.5rem] lg:h-40 lg:w-24 xl:h-44 xl:w-28">
+                <div className="relative h-36 w-[5.5rem] shrink-0 overflow-hidden rounded-2xl bg-muted shadow-md transition duration-300 group-hover:shadow-lg sm:h-40 sm:w-24 xl:h-48 xl:w-28 2xl:h-52 2xl:w-32">
                   <Image
                     src={member.image}
                     alt={`Portrait of ${member.name}`}
                     fill
-                    sizes="(max-width: 639px) 80px, (max-width: 1023px) 88px, 112px"
+                    sizes="(max-width: 639px) 88px, (max-width: 1279px) 96px, (max-width: 1535px) 112px, 128px"
                     quality={82}
                     className={`object-cover transition duration-500 group-hover:scale-[1.035] ${member.name === 'Shadab' ? 'object-[44%_center]' : 'object-center'}`}
                   />
                 </div>
-                <div className="mt-4 flex min-h-[3.75rem] flex-col items-center justify-start gap-1">
-                  <h3 className="w-full text-xs font-bold leading-snug tracking-tight text-foreground sm:text-sm lg:text-[15px]">{member.name}</h3>
-                  <p className="w-full text-[11px] font-semibold leading-snug text-primary sm:text-xs lg:text-[13px]">{member.role}</p>
+                <div className="mt-4 flex min-h-[4.5rem] w-full flex-col items-center justify-start gap-2">
+                  <h3 className="w-full text-sm font-extrabold leading-snug tracking-tight text-foreground sm:text-base 2xl:text-lg">{member.name}</h3>
+                  <p className="max-w-full rounded-full bg-primary/10 px-2.5 py-1.5 text-xs font-bold leading-snug text-primary sm:text-[13px] 2xl:text-sm">{member.role}</p>
                 </div>
               </article>
             ))}
