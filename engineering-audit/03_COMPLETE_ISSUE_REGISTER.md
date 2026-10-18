@@ -1,626 +1,897 @@
-# Independent Pre-Production Engineering Audit: Complete Issue Register
+# 03. COMPLETE ENGINEERING ISSUE REGISTER
 
-**Target Commit:** `3a3e9671d863e8abd95d19cbc7136c4227476ba8`  
-**Total Issues Identified:** 28  
-**Classification:** Critical (6), High (11), Medium (8), Low / Info (3)  
-
----
-
-## 1. Master Issue Inventory
-
-| Issue ID | Severity | Confidence | Discipline | Title | Affected File(s) |
-| :--- | :---: | :---: | :--- | :--- | :--- |
-| **ISSUE-INFRA-001** | **CRITICAL** | **CONFIRMED** | Cloud Infrastructure | ASG `MinHealthyPercentage: 0` Guarantees Production Downtime on Deployments | `.github/workflows/deploy.yml` |
-| **ISSUE-SEC-001** | **CRITICAL** | **CONFIRMED** | Application Security | Safe Exam Browser (SEB) Security Bypass via User-Agent Header Spoofing | `backend-nestjs/src/exam-security/exam-security.service.ts` |
-| **ISSUE-CONCUR-001**| **CRITICAL** | **CONFIRMED** | Concurrency & Integrity | Lost Update Race Hazard Between `saveProgress` and `recordProctorCapture` | `backend-nestjs/src/assessments/assessments.service.ts` |
-| **ISSUE-EXEC-001** | **CRITICAL** | **CONFIRMED** | Execution & Scale | Piston Multi-Pass Compilation Loop Saturates CPU and Causes 504 Timeouts | `backend-nestjs/src/execution/execution.service.ts` |
-| **ISSUE-INFRA-002** | **CRITICAL** | **CONFIRMED** | Infrastructure & SRE | Shared Redis Cluster with `noeviction` Allows Cache Bloat to Crash Queues | `terraform/modules/redis/main.tf` |
-| **ISSUE-PERF-001** | **CRITICAL** | **CONFIRMED** | Performance & Database| Full Table In-Memory Assessment Deserialization on Student Dashboard | `backend-nestjs/src/assessments/assessments.service.ts` |
-| **ISSUE-FE-001** | **HIGH** | **CONFIRMED** | Frontend Architecture | Hardcoded `http://localhost:5000` Breaks Question AI Generation in Production | `frontend-v2/src/app/admin/questions/create/_components/AIAssistance.tsx` |
-| **ISSUE-SEC-002** | **HIGH** | **CONFIRMED** | Cloud Security | S3 Presigner SigV4 Fallback Generates Inaccessible Unsigned URLs in IAM Setup | `backend-nestjs/src/s3/s3-presigner.util.ts` |
-| **ISSUE-SEC-003** | **HIGH** | **CONFIRMED** | Application Security | Hardcoded Secret Fallback for Exam Security HMAC Tokens | `backend-nestjs/src/exam-security/exam-security.service.ts` |
-| **ISSUE-CONCUR-002**| **HIGH** | **CONFIRMED** | Concurrency & Integrity | Concurrent Candidate Identity Verification Overwrites Attempt Snapshots | `backend-nestjs/src/assessments/assessments.service.ts` |
-| **ISSUE-CONCUR-003**| **HIGH** | **CONFIRMED** | Concurrency & Integrity | Contest Re-Attempt Deletion Race Condition Leads to Stale Active Attempts | `backend-nestjs/src/assessments/assessments.service.ts` |
-| **ISSUE-EXEC-002** | **HIGH** | **CONFIRMED** | Execution & Reliability| Missing Circuit Breaker Reset Mechanism for Piston Network Intermittency | `backend-nestjs/src/execution/piston/piston.service.ts` |
-| **ISSUE-EXEC-003** | **HIGH** | **CONFIRMED** | Execution & Scaling | Worker Gateway Event Emits Fail Due to Missing Embedded Socket Server | `backend-nestjs/src/worker.ts` |
-| **ISSUE-DB-001** | **HIGH** | **CONFIRMED** | Database Reliability | Missing GIN Indices on PostgreSQL Array Targeting Columns | `backend-nestjs/src/database/entities/assessment.entity.ts` |
-| **ISSUE-INFRA-003** | **HIGH** | **CONFIRMED** | Cloud Infrastructure | Production Terraform Module Omits Custom Parameter Group Activation | `terraform/environments/production/main.tf` |
-| **ISSUE-INFRA-004** | **HIGH** | **CONFIRMED** | Observability & SRE | Unhandled Axiom Winston Transport Logger Failure in Standalone Worker | `backend-nestjs/src/worker.ts` |
-| **ISSUE-API-001** | **HIGH** | **CONFIRMED** | API & Integration | Missing Global Idempotency Keys on Assessment Submission API Endpoints | `backend-nestjs/src/assessments/assessments.controller.ts` |
-| **ISSUE-FE-002** | **MEDIUM** | **CONFIRMED** | Frontend Architecture | Synchronous Nested State Dispatch Inside `setCurrentLine` Effect | `frontend-v2/src/components/ui/modern-loader.tsx` |
-| **ISSUE-FE-003** | **MEDIUM** | **CONFIRMED** | Frontend Performance | Unbounded Memory Accumulation in Infinite Scroll Code Generator Lines | `frontend-v2/src/components/ui/modern-loader.tsx` |
-| **ISSUE-FE-004** | **MEDIUM** | **CONFIRMED** | Frontend Architecture | Missing Key Event Debouncing on High-Frequency Code Editor Autosave | `frontend-v2/src/components/assessment/DSAAssessmentEditor.tsx` |
-| **ISSUE-DB-002** | **MEDIUM** | **CONFIRMED** | Database Reliability | Partitioned `submissions` Table Cannot Enforce Global Primary Key Uniqueness | `backend-nestjs/src/database/migrations/declarative-partitioning.ts` |
-| **ISSUE-DB-003** | **MEDIUM** | **CONFIRMED** | Database Reliability | Lack of Automatic Partition Maintenance Cron for Future Yearly Partitions | `backend-nestjs/src/database/migrations/declarative-partitioning.ts` |
-| **ISSUE-CONCUR-004**| **MEDIUM** | **CONFIRMED** | Concurrency & Sharding | Shard Migration Script Lacks Writer Lease Verification Guard | `backend-nestjs/src/database/sharding/sharding.migration.ts` |
-| **ISSUE-EXEC-004** | **MEDIUM** | **CONFIRMED** | Execution & Reliability| Custom Test Case Memory Limit Overrides Ignored in Piston Adapter | `backend-nestjs/src/execution/language-adapters.ts` |
-| **ISSUE-API-002** | **MEDIUM** | **CONFIRMED** | API Architecture | Inconsistent Error Response Serialization Between Express and Fastify Pipes | `backend-nestjs/src/common/filters/http-exception.filter.ts` |
-| **ISSUE-FE-005** | **LOW** | **CONFIRMED** | Accessibility (a11y) | Missing Accessible Form Labels on Dynamic OTP Input Digit Cells | `frontend-v2/src/components/ui/otp-input.tsx` |
-| **ISSUE-FE-006** | **LOW** | **CONFIRMED** | Frontend Architecture | Next.js Core-Web-Vitals Warning on Direct `<img>` in Auth Pages | `frontend-v2/src/components/ui/sign-in-page.tsx` |
-| **ISSUE-API-003** | **INFO** | **CONFIRMED** | API Standards | Redundant Dual Property Serialization (`id` and `_id`) in Client Responses | `backend-nestjs/src/common/interceptors/response.interceptor.ts` |
+**Target Commit:** `7c83df6ef13915c1171dd4b3e61f31a0c24306e2`  
+**Standard:** Rigorous, Evidence-Backed Engineering Weakness Register
 
 ---
 
-## 2. Detailed Technical Issue Breakdowns
+## Issue Summary Matrix
+
+| Issue ID | Severity | Confidence | Category | Affected Component | File Path & Lines |
+|---|---|---|---|---|---|
+| **ISSUE-SEC-001** | **CRITICAL** | CONFIRMED | Security / Sandbox | Piston Sandbox ASG | `terraform/environments/production/userdata/piston.sh.tftpl:57-61`, `terraform/modules/ec2-asg/main.tf:28` |
+| **ISSUE-DAT-001** | **CRITICAL** | CONFIRMED | Data Integrity / State Machine | Assessment Submission | `backend-nestjs/src/assessments/assessments.service.ts:1728-1751` |
+| **ISSUE-PRF-001** | **HIGH** | CONFIRMED | Performance / Scalability | Assessment Grading | `backend-nestjs/src/assessments/assessments.service.ts:1827-1873` |
+| **ISSUE-INF-001** | **HIGH** | CONFIRMED | Infrastructure / Database | RDS Connection Pooling | `terraform/modules/rds/main.tf:56-61`, `backend-nestjs/src/database/database.module.ts:88` |
+| **ISSUE-RES-001** | **HIGH** | CONFIRMED | Reliability / Distributed Systems | Redis Client Connectivity | `backend-nestjs/src/redis/redis.service.ts:20-24` |
+| **ISSUE-CON-001** | **HIGH** | CONFIRMED | Concurrency / Race Condition | Contest Reattempts | `backend-nestjs/src/contests/contests.service.ts:351-388` |
+| **ISSUE-SEC-002** | **HIGH** | CONFIRMED | Security / Authentication | User Authentication | `backend-nestjs/src/auth/auth.service.ts:107-114, 206-213` |
+| **ISSUE-FE-001** | **HIGH** | CONFIRMED | Frontend / Error Protocol | Assessment Submission Retry | `frontend-v2/src/app/assessments/[id]/take/page.tsx:403-423` |
+| **ISSUE-PRF-002** | **HIGH** | CONFIRMED | Performance / Event Loop | Student Import Service | `backend-nestjs/src/students/students.service.ts:736-742` |
+| **ISSUE-SEC-003** | **MEDIUM** | CONFIRMED | Security / Rate Limiting | Smart Throttler Guard | `backend-nestjs/src/common/guards/smart-throttler.guard.ts:130-135` |
+| **ISSUE-SEC-004** | **MEDIUM** | HIGH-CONFIDENCE STATIC | Security / Data In-Transit | ElastiCache Redis Cluster | `terraform/modules/redis/variables.tf:34-45`, `terraform/environments/production/main.tf:379-380` |
+| **ISSUE-DAT-002** | **MEDIUM** | CONFIRMED | Performance / Database | Submission Shard Routing | `backend-nestjs/src/database/sharding/submission-store.ts:145-170` |
+| **ISSUE-SEC-005** | **MEDIUM** | HIGH-CONFIDENCE STATIC | Supply Chain / Vulnerability | Spreadsheet Import | `backend-nestjs/package.json:88`, `backend-nestjs/src/students/students.service.ts:372` |
+| **ISSUE-DAT-003** | **MEDIUM** | CONFIRMED | Database / N+1 & CPU | Student Report Controller | `backend-nestjs/src/reports/reports.controller.ts:81-103, 131-135` |
+| **ISSUE-FE-002** | **MEDIUM** | CONDITIONAL RISK | Frontend / Memory Leaks | Proctoring Media Capture | `frontend-v2/src/hooks/useAssessmentMedia.ts`, `frontend-v2/src/components/assessment/AssessmentCamera.tsx` |
+| **ISSUE-INF-002** | **MEDIUM** | CONDITIONAL RISK | Infrastructure / High Availability | ALB Target Group Stickiness | `terraform/modules/alb/main.tf:84-88` |
+| **ISSUE-INF-003** | **HIGH** | CONFIRMED | Cloud Infrastructure / ASG Scale-out | Backend Startup User-Data | `terraform/environments/production/userdata/backend.sh.tftpl:161-165` |
+| **ISSUE-INF-004** | **HIGH** | CONFIRMED | Security / IAM Least Privilege | Application Secrets Policy | `terraform/modules/iam/main.tf:97-117` |
+| **ISSUE-INF-005** | **MEDIUM** | CONFIRMED | Security / Edge Defense | Production ALB Protection | `terraform/environments/production/main.tf:246-256`, `terraform/modules/waf/main.tf` |
+| **ISSUE-INF-006** | **MEDIUM** | CONFIRMED | Security / Cloud Storage | S3 Bucket Reports & Avatars | `terraform/modules/s3/main.tf:9-33` |
+| **ISSUE-INF-007** | **MEDIUM** | CONFIRMED | Infrastructure / Cost & Latency | Next.js SSR Routing | `terraform/environments/production/userdata/frontend.sh.tftpl:80-82` |
+| **ISSUE-INF-008** | **MEDIUM** | CONFIRMED | Infrastructure / Service Discovery | Cloud Map Execution Nodes | `terraform/environments/production/userdata/piston.sh.tftpl:94-103` |
+| **ISSUE-INF-009** | **LOW** | CONFIRMED | DevOps / Release Engineering | Production Launch Templates | `terraform/environments/production/variables.tf:73-95` |
+| **ISSUE-INF-010** | **LOW** | CONFIRMED | Observability / Cloud Monitoring | Infrastructure Alarms | `terraform/modules/monitoring/main.tf:1-25` |
+| **ISSUE-OBS-001** | **LOW** | HIGH-CONFIDENCE STATIC | Observability / Resilience | Axiom Log Transport | `backend-nestjs/src/main.ts:54-68`, `backend-nestjs/src/worker.ts:24-38` |
+| **ISSUE-QA-001** | **LOW** | CONFIRMED | Quality / Automation Gap | CI Test Pipeline | `.github/workflows/piston-validation.yml`, `backend-nestjs/test/` |
 
 ---
 
-### ISSUE-INFRA-001: ASG `MinHealthyPercentage: 0` Guarantees Production Downtime on Deployments
-- **Discipline:** Cloud Infrastructure & DevOps / SRE
-- **Severity:** **CRITICAL** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `.github/workflows/deploy.yml` (Lines 32, 356–358)
-- **Source Code Reference:**
-  ```yaml
-  ASG_MIN_HEALTHY_PERCENTAGE: 0
-  ASG_MAX_HEALTHY_PERCENTAGE: 100
+## Detailed Issue Specifications
+
+### ISSUE-SEC-001: Piston Sandbox Container Runs Privileged Without Network Isolation in Production Userdata
+
+- **Unique ID:** `ISSUE-SEC-001`
+- **Title:** Piston Execution Sandbox Runs Privileged Container with Network Enabled and IMDSv2 Hop Limit = 2
+- **Severity:** CRITICAL
+- **Confidence Level:** CONFIRMED
+- **Category:** Application Security / Container Escape / Cloud Infrastructure
+- **Affected Component:** `codeskill-piston-asg` Launch Configuration & EC2 Launch Template
+- **Exact File Path & Lines:**
+  - `terraform/environments/production/userdata/piston.sh.tftpl:57-61`
+  - `terraform/modules/ec2-asg/main.tf:28`
+- **Code & Configuration Evidence:**
+  ```sh
+  # File: terraform/environments/production/userdata/piston.sh.tftpl
+  ExecStart=/usr/bin/docker run --rm --name codeskill-piston \
+    -p 2001:2000 \
+    -v /var/lib/piston:/piston \
+    --privileged \
+    $PISTON_IMAGE
   ```
-- **Failure Scenario:**
-  1. A commit is merged to `main`, triggering the GitHub Actions CI/CD deployment workflow.
-  2. The workflow executes `aws autoscaling start-instance-refresh` with `MinHealthyPercentage: 0` and `MaxHealthyPercentage: 100`.
-  3. Because `MaxHealthyPercentage` is 100, the Auto Scaling Group is forbidden from launching new instances while existing instances are running.
-  4. Because `MinHealthyPercentage` is 0, Auto Scaling immediately terminates all healthy active EC2 instances in both frontend and backend ASGs.
-  5. While replacement instances boot, execute launch templates, install packages, and undergo the 120-second instance warmup, total healthy instances = 0.
-  6. The AWS Application Load Balancer target group has 0 registered healthy targets. All incoming student and faculty HTTP/WebSocket traffic fails with `HTTP 502 Bad Gateway` for 2 to 4 minutes.
-- **Root Cause:** To work around tight AWS account vCPU service quotas during instance refreshes, `MinHealthyPercentage` was set to 0 rather than requesting a quota increase or setting rolling window limits.
-- **Impact:** 100% total system outage on every single production deployment. Any student taking an active exam experiences broken connections, failed autosaves, and network disconnections.
-- **Verification:** Verified in `.github/workflows/deploy.yml` line 32 and lines 356–358.
-- **Remediation:**
-  1. Request an EC2 vCPU service quota increase in AWS `ap-south-1`.
-  2. Set `ASG_MIN_HEALTHY_PERCENTAGE: 50` (or `100` if desired capacity is doubled during rollout) and `ASG_MAX_HEALTHY_PERCENTAGE: 150` in `.github/workflows/deploy.yml`.
+  ```tf
+  # File: terraform/modules/ec2-asg/main.tf
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+  }
+  ```
+- **Technical Root Cause:**
+  1. The production bootstrap template executes the Docker container with `--privileged`.
+  2. The mandatory environment flag `-e PISTON_DISABLE_NETWORKING=true` (present in local compose files) was omitted from the production systemd service definition.
+  3. The EC2 Launch Template configures `http_put_response_hop_limit = 2` instead of `1`, allowing bridge-networked Docker containers to traverse the network hop to reach the EC2 Instance Metadata Service (IMDSv2).
+- **Triggering Conditions:**
+  Any authenticated student or attacker submitting code in any supported runtime (e.g. Python, C++, Bash, Node.js) that makes an outbound HTTP PUT/GET request to `169.254.169.254`.
+- **Failure Mechanism:**
+  Untrusted user code executed inside Piston initiates an HTTP PUT request to `http://169.254.169.254/latest/api/token` with header `X-aws-ec2-metadata-token-ttl-seconds: 300`. Because hop limit is 2, IMDSv2 responds with an authentication token. The code then requests `http://169.254.169.254/latest/meta-data/iam/security-credentials/<role-name>` and exfiltrates temporary AWS access keys.
+- **User or Business Impact:**
+  Complete compromise of the AWS production environment, unauthorized access to S3 student proctoring records, database access, and lateral movement across cloud assets.
+- **Recommended Engineering Solution:**
+  1. In `piston.sh.tftpl`, pass `-e PISTON_DISABLE_NETWORKING=true` and remove `--privileged`, substituting with explicit capability drops: `--cap-drop=ALL --cap-add=SYS_ADMIN`.
+  2. In `terraform/modules/ec2-asg/main.tf`, set `http_put_response_hop_limit = 1` for all sandbox launch templates to restrict metadata access strictly to the host OS.
+- **Relevant Regression Tests:**
+  `scripts/piston/smoke.mjs` verifying that egress socket connection attempts inside Piston fail with `EPERM` or `ENETUNREACH`.
+- **Dependencies on Other Fixes:** None.
 
 ---
 
-### ISSUE-SEC-001: Safe Exam Browser (SEB) Security Bypass via User-Agent Header Spoofing
-- **Discipline:** Application Security & Threat Modeling
-- **Severity:** **CRITICAL** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/exam-security/exam-security.service.ts` (Lines 42–63)
-- **Source Code Reference:**
-  ```typescript
-  const sebReqHash =
-    (headers?.['x-safeexambrowser-requesthash'] as string) ||
-    (headers?.['x-safeexambrowser-confighash'] as string) ||
-    (headers?.['x-safeexambrowser-configkeyhash'] as string);
-  const userAgent = String(headers?.['user-agent'] || '');
-  const isSebUserAgent = /SEB|SafeExamBrowser/i.test(userAgent);
-  const hasSebHeader = Boolean(sebReqHash);
+### ISSUE-DAT-001: Permanent Student Deadlock in `'evaluating'` State Machine Upon Network Timeout or Transient Error
 
-  const clientType = (hasSebHeader || isSebUserAgent) ? 'SEB' : 'BROWSER';
-  // ...
-  if (security?.requireSEB) {
-    if (clientType !== 'SEB') {
-      throw new ForbiddenException('This assessment requires Safe Exam Browser...');
+- **Unique ID:** `ISSUE-DAT-001`
+- **Title:** Assessment Submission CAS State Transition Leaves Attempt Permanently Bricked in `'evaluating'` Without Recovery Lease or Rollback
+- **Severity:** CRITICAL
+- **Confidence Level:** CONFIRMED
+- **Category:** Data Integrity / Concurrency / State Machine
+- **Affected Component:** `AssessmentsService.submitAttempt` & `evaluateAttempt`
+- **Exact File Path & Lines:**
+  - `backend-nestjs/src/assessments/assessments.service.ts:1728-1751`
+- **Code Evidence:**
+  ```ts
+  // File: backend-nestjs/src/assessments/assessments.service.ts
+  if (attempt.status === 'evaluating') {
+    throw new ConflictException(
+      'Assessment submission is currently being evaluated. Please wait.',
+    );
+  }
+
+  // Atomic CAS transition: in_progress -> evaluating to prevent duplicate concurrent evaluations
+  if (attempt.status === 'in_progress') {
+    if (typeof this.attemptRepo.update === 'function') {
+      const transitionResult = await this.attemptRepo.update(
+        { id: attempt.id, status: 'in_progress' },
+        { status: 'evaluating' as any },
+      );
+      if (transitionResult && transitionResult.affected === 0) {
+        // ...
+        throw new ConflictException(
+          'Assessment submission is currently being evaluated. Please wait.',
+        );
+      }
     }
-    if (security.configKey) {
-      // cryptographic hash check only executes IF security.configKey is defined!
-    }
+    attempt.status = 'evaluating' as any;
+  }
+  // [Code execution runs sequentially without try/catch rollback]
+  // attempt.status is only set to 'submitted' at line 2045!
+  ```
+- **Technical Root Cause:**
+  `evaluateAttempt` transitions the attempt status to `'evaluating'` in the database via an atomic CAS update to prevent double-grading. However, the subsequent execution loop (which executes code on Piston, evaluates test cases, and updates score) is not wrapped in a `try...catch...finally` block. If an unhandled error, database timeout, or Nginx client disconnect occurs, or if execution exceeds Nginx's 120s timeout, the attempt remains permanently persisted with `status = 'evaluating'`.
+- **Triggering Conditions:**
+  1. Nginx `proxy_read_timeout 120s` expires during large coding assessments.
+  2. Piston node blips, experiences transient overload, or throws `PistonUnavailableError`.
+  3. Server process restarts during grading.
+- **Failure Mechanism:**
+  When the student or the frontend auto-retry protocol retries the submission, line 1728 checks `if (attempt.status === 'evaluating')` and immediately throws HTTP 409 Conflict. Because there is no expiration timestamp, TTL lease, or cleanup worker, this 409 Conflict persists indefinitely.
+- **User or Business Impact:**
+  Students cannot submit their examinations. When the test timer reaches zero, the attempt remains unsubmitted with zero marks recorded.
+- **Recommended Engineering Solution:**
+  1. Add an `evaluatingStartedAt` timestamp column to `assessment_attempts`.
+  2. Implement an evaluation lease (e.g. 180 seconds). If `attempt.status === 'evaluating'` and `now - evaluatingStartedAt > 180s`, permit re-evaluation.
+  3. Wrap lines 1740–2060 in a `try...catch` block that reverts `status` to `'in_progress'` if an unhandled error occurs.
+- **Relevant Regression Tests:**
+  `backend-nestjs/src/assessments/assessments.service.spec.ts`: test simulating an error during `runCode` and verifying that subsequent `submitAttempt` calls do not receive a 409 Conflict.
+- **Dependencies on Other Fixes:** `ISSUE-FE-001` (frontend retry handling).
+
+---
+
+### ISSUE-PRF-001: Synchronous In-Band Code Execution During Assessment Submission Creates O(N * Q * T) Latency Waterfall
+
+- **Unique ID:** `ISSUE-PRF-001`
+- **Title:** Assessment Submission Synchronously Evaluates All Coding Questions Inside HTTP Request Lifecycle
+- **Severity:** HIGH
+- **Confidence Level:** CONFIRMED
+- **Category:** Performance / Scalability / Architectural Design
+- **Affected Component:** `AssessmentsService.evaluateAttempt`
+- **Exact File Path & Lines:**
+  - `backend-nestjs/src/assessments/assessments.service.ts:1827-1873`
+- **Code Evidence:**
+  ```ts
+  // File: backend-nestjs/src/assessments/assessments.service.ts
+  if (isCoding) {
+    // ...
+    if (this.executionService && totalTestCases > 0) {
+      try {
+        const tcInputs = testCases.map((tc, idx) => ({ ... }));
+        const results = await this.executionService.runCode(
+          r.code!,
+          r.language || 'python',
+          tcInputs,
+          { timeLimit: q.timeLimit, memoryLimit: q.memoryLimit },
+        );
+        testCasesPassed = results.filter((res) => res.passed).length;
+  ```
+- **Technical Root Cause:**
+  Contest submissions correctly decouple execution through BullMQ and `JudgeProcessor`. In contrast, assessment submissions execute every testcase of every coding question synchronously inside the HTTP POST request thread.
+- **Triggering Conditions:**
+  Concurrent exam submissions when an examination timer expires across hundreds of students simultaneously.
+- **Failure Mechanism:**
+  For an exam with 2 coding questions and 5 test cases each, 1 submission requires 10 Piston executions (~2.0 seconds). If 100 students submit within a 10-second window, the system requires 1,000 executions. A single Piston node processes ~16 executions/sec, creating a 62.5-second backlog. At 500 students, the backlog reaches 312 seconds, far exceeding Nginx's 120s `proxy_read_timeout`.
+- **User or Business Impact:**
+  Massive 504 Gateway Timeout storm during exam submissions, triggering cascading retries and locking student attempts.
+- **Recommended Engineering Solution:**
+  Decouple assessment grading to an asynchronous BullMQ queue (`assessment-submissions`), returning HTTP 202 Accepted with a job ID, and polling or receiving the final scorecard via WebSocket.
+- **Relevant Regression Tests:**
+  Load test simulating 200 simultaneous submissions asserting p95 response time < 2000ms.
+- **Dependencies on Other Fixes:** `ISSUE-DAT-001`.
+
+---
+
+### ISSUE-INF-001: Missing PgBouncer / RDS Proxy Connection Pool Saturation Hazard
+
+- **Unique ID:** `ISSUE-INF-001`
+- **Title:** Backend ASG Connection Pool Max (300–900) Exceeds RDS PostgreSQL `max_connections = 200` Due to Missing PgBouncer
+- **Severity:** HIGH
+- **Confidence Level:** CONFIRMED
+- **Category:** Cloud Infrastructure / Database Performance
+- **Affected Component:** Terraform RDS & Backend Database Module
+- **Exact File Path & Lines:**
+  - `terraform/modules/rds/main.tf:56-61`
+  - `backend-nestjs/src/database/database.module.ts:88`
+  - `terraform/environments/production/main.tf:357-360`
+- **Code & Configuration Evidence:**
+  ```tf
+  # File: terraform/modules/rds/main.tf
+  # Parameter group configured for 4 GiB instance (db.t3.medium) with PgBouncer connection pooling
+  parameter {
+    name         = "max_connections"
+    value        = "200"
+    apply_method = "pending-reboot"
   }
   ```
-- **Failure Scenario:**
-  1. An instructor creates an exam with `securityPolicy.requireSEB = true` but leaves `configKey` empty or unconfigured.
-  2. A student opens a standard Google Chrome browser with Developer Tools or uses a simple Chrome extension to modify the request `User-Agent` to:
-     `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 SEB/3.4.0`
-  3. The regex `/SEB|SafeExamBrowser/i.test(userAgent)` evaluates to `true`.
-  4. `clientType` is classified as `'SEB'`.
-  5. Because `security.configKey` is not set, lines 62–113 are completely bypassed.
-  6. The backend issues a verified secure exam session token. The student takes the proctored exam in an unrestricted browser with full access to ChatGPT, developer tools, copy-paste, and external tabs.
-- **Root Cause:** Authentication of a secure browser client relies on a spoofable HTTP header (`User-Agent`) without enforcing mandatory cryptographic validation.
-- **Impact:** Complete compromise of exam integrity; unrestricted cheating on assessments intended to be locked down by SEB.
-- **Remediation:**
-  1. Make `securityPolicy.configKey` mandatory whenever `requireSEB: true`.
-  2. Reject any SEB connection that lacks valid `X-SafeExamBrowser-RequestHash` headers matching the expected configuration key.
-
----
-
-### ISSUE-CONCUR-001: Lost Update Race Hazard Between `saveProgress` and `recordProctorCapture`
-- **Discipline:** Distributed Systems & Concurrency / Data Integrity
-- **Severity:** **CRITICAL** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/assessments/assessments.service.ts` (Lines 1638–1652, 2396–2406)
-- **Source Code Reference:**
-  ```typescript
-  // In recordProctorCapture:
-  const freshAttempt = await this.attemptRepo.findOne({ where: { id: attempt.id } });
-  const targetAttempt = freshAttempt || attempt;
-  const captures = Array.isArray((targetAttempt as any).captures) ? (targetAttempt as any).captures : [];
-  const updatedCaptures = [...captures, { type: dto.type, url, objectKey, timestamp: capturedAt }];
-  (targetAttempt as any).captures = updatedCaptures;
-  await this.attemptRepo.save(targetAttempt);
-
-  // In saveProgress:
-  const freshAttempt = await this.attemptRepo.findOne({ where: { id: attempt.id } });
-  const targetAttempt = freshAttempt || attempt;
-  targetAttempt.responses = attempt.responses;
-  // ...
-  await this.attemptRepo.save(targetAttempt);
+  ```ts
+  // File: backend-nestjs/src/database/database.module.ts
+  const poolConfig = {
+    max: parseInt(process.env.DB_POOL_MAX || '50', 10),
+    min: parseInt(process.env.DB_POOL_MIN || '5', 10),
   ```
-- **Failure Scenario:**
-  1. At time $t_0$, the student's camera captures a proctoring snapshot. It calls `/assessments/:id/proctor-capture`.
-  2. While the image is uploading to S3 (taking 500ms–2000ms), the student finishes typing code and the editor autosaves via `/assessments/:id/save-progress`.
-  3. `saveProgress` loads `attempt` at $t_1$, updates `responses`, and calls `attemptRepo.save(targetAttempt)` at $t_2$.
-  4. At $t_3$, `recordProctorCapture` completes its S3 upload. It re-reads `attempt` and saves `targetAttempt` with the new capture.
-  5. However, if `recordProctorCapture` loads `freshAttempt` at $t_1.5$ (before `saveProgress` commits at $t_2$), `recordProctorCapture` writes its entity snapshot back at $t_3$, completely overwriting and wiping out the responses committed by `saveProgress`!
-  6. Alternatively, if `saveProgress` loads right before `recordProctorCapture` saves, `saveProgress` wipes out the newly captured proctoring image from the JSONB `captures` array.
-- **Root Cause:** Both endpoints perform non-atomic read-modify-write cycles using TypeORM entity `.save()` on the entire row without pessimistic locks (`SELECT FOR UPDATE`), optimistic locking (`@VersionColumn`), or atomic PostgreSQL SQL updates.
-- **Impact:** Silent loss of student exam code responses or silent deletion of proctoring audit trails.
-- **Remediation:**
-  1. Use atomic PostgreSQL JSONB append queries instead of loading and saving the whole entity:
-     ```sql
-     UPDATE assessment_attempts
-     SET captures = COALESCE(captures, '[]'::jsonb) || $1::jsonb
-     WHERE id = $2;
-     ```
-  2. Add `@VersionColumn()` to `AssessmentAttempt` to detect and reject concurrent lost updates.
+- **Technical Root Cause:**
+  Terraform documentation and comments state that PgBouncer connection pooling is present. However, inspection of all Terraform modules confirms **no PgBouncer instance, container, or AWS RDS Proxy is provisioned**. Each NestJS process configures a pool of 50 connections. With 2 to 6 backend ASG instances running 2 to 3 Node.js processes each, total potential connections range from 200 to 900.
+- **Triggering Conditions:**
+  Backend Auto Scaling Group scaling beyond 2 instances during peak exam traffic.
+- **Failure Mechanism:**
+  When connection count exceeds 200, PostgreSQL terminates new connection attempts with `FATAL: sorry, too many clients already`. Existing requests stall waiting for pool checkout, cascading into 500 errors across all API endpoints.
+- **User or Business Impact:**
+  Global platform outage during Auto Scaling events.
+- **Recommended Engineering Solution:**
+  1. Deploy an AWS RDS Proxy or PgBouncer sidecar container for the PostgreSQL RDS cluster.
+  2. Reduce `DB_POOL_MAX` in `database.module.ts` to 15 per process so that even at 6 instances ($6 \times 2 \times 15 = 180$), total connections remain strictly under RDS `max_connections = 200`.
+- **Relevant Regression Tests:**
+  `terraform/scripts/test-asg-scaling.sh` verifying PostgreSQL connection metrics during scale-out.
+- **Dependencies on Other Fixes:** None.
 
 ---
 
-### ISSUE-EXEC-001: Piston Multi-Pass Compilation Loop Saturates CPU and Causes 504 Timeouts
-- **Discipline:** Execution Engine & Capacity / Distributed Systems
-- **Severity:** **CRITICAL** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/execution/execution.service.ts` (Lines 460–482, 601–635)
-- **Source Code Reference:**
-  ```typescript
-  // execution.service.ts
-  return this.runTestCasesConcurrently(
-    normalizedTestCases,
-    concurrency,
-    (tc) => this.executeRemoteTestCase(language, prepared, tc, config, route),
-    true,
-  );
+### ISSUE-RES-001: Redis Client Hard-Stops Reconnection After 3 Rapid Failures (`retryStrategy` Returns `null`)
+
+- **Unique ID:** `ISSUE-RES-001`
+- **Title:** Redis Service Permanently Terminates Connection on Temporary Network Blip
+- **Severity:** HIGH
+- **Confidence Level:** CONFIRMED
+- **Category:** Distributed Systems / Resilience / Site Reliability Engineering
+- **Affected Component:** `RedisService`
+- **Exact File Path & Lines:**
+  - `backend-nestjs/src/redis/redis.service.ts:20-24`
+- **Code Evidence:**
+  ```ts
+  // File: backend-nestjs/src/redis/redis.service.ts
+  retryStrategy(times: number) {
+    if (times > 3) return null;
+    const delay = Math.min(times * 100, 1000);
+    return delay;
+  },
   ```
-- **Failure Scenario:**
-  1. A student submits a C++ or Java solution to a problem with 20 test cases.
-  2. The judge dispatches 20 execution calls to Piston via `executeRemoteTestCase`.
-  3. Because Piston is a stateless runner, each request contains the raw source code and triggers a full compilation pass (`g++ -O2` or `javac`).
-  4. Compiling the code 20 times consumes $20 \times 1.2\text{s} = 24$ seconds of pure CPU time for a single submission.
-  5. In an exam with 50 students submitting code simultaneously, Piston receives $50 \times 20 = 1,000$ compilation jobs.
-  6. The Piston EC2 instance CPU saturates at 100%, load average exceeds 50, and HTTP connection queues back up, triggering cascading `504 Gateway Timeout` errors and submission drops.
-- **Root Cause:** Piston does not retain compiled binaries between test case executions, and `execution.service.ts` lacks a compilation-caching proxy layer.
-- **Impact:** Catastrophic failure of the code execution engine during exam or contest peaks.
-- **Remediation:**
-  1. Implement a two-phase execution workflow: compile the source code in a single initial job, cache the resulting executable binary in a shared memory volume or Redis, and execute subsequent test cases against the pre-compiled binary.
-  2. Alternatively, combine all test cases into a single batch execution harness input stream.
-
----
-
-### ISSUE-INFRA-002: Shared Redis Cluster with `noeviction` Allows Cache Bloat to Crash Queues
-- **Discipline:** Site Reliability Engineering (SRE) / Infrastructure
-- **Severity:** **CRITICAL** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `terraform/modules/redis/main.tf` (Lines 44–58), `backend-nestjs/src/redis/redis.service.ts`
-- **Source Code Reference:**
-  ```hcl
-  resource "aws_elasticache_parameter_group" "noeviction" {
-    name        = "${var.name_prefix}-redis7-noeviction"
-    family      = "redis7"
-    parameter {
-      name  = "maxmemory-policy"
-      value = "noeviction"
-    }
+- **Technical Root Cause:**
+  In `ioredis`, returning `null` from `retryStrategy` instructs the client to cease reconnection attempts permanently, moving the client to the `end` state. The retry delay is `times * 100` ms (100ms, 200ms, 300ms = 600ms total).
+- **Triggering Conditions:**
+  Any ElastiCache failover, network partition, or maintenance event lasting longer than 600 milliseconds.
+- **Failure Mechanism:**
+  After 3 quick retries, `this.client` permanently dies. All subsequent calls to `redisService.getClient()` operate on a dead connection, throwing unhandled connection errors and crashing rate limiting, OTP verification, and WebSocket event distribution.
+- **User or Business Impact:**
+  Complete failure of student login and anti-cheat event reporting until every backend NestJS PM2 instance is restarted.
+- **Recommended Engineering Solution:**
+  Implement exponential backoff with jitter and an upper bound, never returning `null`:
+  ```ts
+  retryStrategy(times: number) {
+    return Math.min(times * 200, 5000) + Math.floor(Math.random() * 200);
   }
   ```
-- **Failure Scenario:**
-  1. The single ElastiCache Redis instance stores BullMQ jobs, WebSocket pub/sub channels, OTP secrets, throttler counters, and cached problem metadata.
-  2. During high platform traffic, cache keys and leaderboard structures grow.
-  3. Memory consumption reaches the maximum allocation on the `cache.t4g.small` instance (approx. 1.3 GiB usable).
-  4. Because `maxmemory-policy = noeviction`, Redis refuses to evict old or expired cache entries.
-  5. Any subsequent write command (including `LPUSH`, `HSET`, `INCR` for BullMQ queues) throws:
-     `OOM command not allowed when used memory > 'maxmemory'`
-  6. BullMQ crashes, students cannot submit code, logins fail, and the platform becomes non-functional.
-- **Root Cause:** Mixing volatile application caching with durable queue storage on a single Redis cluster under a `noeviction` policy.
-- **Impact:** Total failure of background worker processing and submission enqueuing.
-- **Remediation:**
-  1. Provision two dedicated Redis clusters: one for BullMQ queues (`noeviction`), and one for application caches and rate limits (`allkeys-lru`).
+- **Relevant Regression Tests:**
+  Unit test simulating Redis server disconnection and verifying that `retryStrategy` continues returning positive reconnection delays beyond 10 attempts.
+- **Dependencies on Other Fixes:** None.
 
 ---
 
-### ISSUE-PERF-001: Full Table In-Memory Assessment Deserialization on Student Dashboard
-- **Discipline:** Performance & Capacity / Database Architecture
-- **Severity:** **CRITICAL** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/assessments/assessments.service.ts` (Lines 1056–1065)
-- **Source Code Reference:**
-  ```typescript
-  const assessments = await this.assessmentRepo
-    .createQueryBuilder('a')
-    .where('a.status IN (:...statuses)', {
-      statuses: ['published', 'ongoing'],
-    })
-    .orderBy('a.createdAt', 'DESC')
-    .getMany();
+### ISSUE-CON-001: Non-Transactional Contest Reattempt Grant Check-Then-Act Race Condition (TOCTOU)
 
-  const filteredAssessments = assessments.filter((a) =>
-    this.isStudentTargeted(a, studentUser, { batch, dept, studentProfile }),
-  );
+- **Unique ID:** `ISSUE-CON-001`
+- **Title:** Time-of-Check/Time-of-Use Race Condition in Contest Reattempt Grant Consumption
+- **Severity:** HIGH
+- **Confidence Level:** CONFIRMED
+- **Category:** Concurrency / Transaction Management
+- **Affected Component:** `ContestsService.startAttempt`
+- **Exact File Path & Lines:**
+  - `backend-nestjs/src/contests/contests.service.ts:351-388`
+- **Code Evidence:**
+  ```ts
+  // File: backend-nestjs/src/contests/contests.service.ts
+  const grant = this.reattemptGrantRepo
+    ? await this.reattemptGrantRepo.findOne({
+        where: { contest_id: contest.id, user_id: userId, status: 'ACTIVE' },
+      })
+    : null;
+
+  const isValid = grant && (!grant.expiresAt || new Date() < new Date(grant.expiresAt)) &&
+    grant.usedAttempts < grant.allowedAttempts;
+
+  if (!isValid) throw new BadRequestException('Your contest attempt has ended');
+
+  // Consume one attempt from the authorized grant
+  grant.usedAttempts += 1;
+  if (grant.usedAttempts >= grant.allowedAttempts) grant.status = 'USED';
+  await this.reattemptGrantRepo?.save(grant);
+
+  // Create new reattempt
+  const nextAttemptNumber = (attempt.attemptNumber || 1) + 1;
+  const newAttempt = this.attemptRepo.create({ ... });
+  attempt = await this.attemptRepo.save(newAttempt);
   ```
-- **Failure Scenario:**
-  1. Over a semester, administrators create 1,000+ assessments across various university departments, batches, and semesters.
-  2. Each assessment contains extensive JSONB structures: sections, instructions, and target student criteria.
-  3. A student opens their dashboard. The backend runs a `SELECT * FROM assessments WHERE status IN ('published', 'ongoing')` with **no LIMIT, no OFFSET, and no SQL WHERE filters** for the student's department or batch.
-  4. All 1,000 assessments are transferred across the network from PostgreSQL, parsed by TypeORM into V8 JavaScript heap objects, and filtered in-memory via `assessments.filter()`.
-  5. When 2,000 students log in concurrently at 9:00 AM on exam day, 2,000 concurrent requests each deserialize tens of megabytes of JSON data, pinning Node.js CPU at 100% and exhausting V8 heap memory.
-- **Root Cause:** In-memory application-layer filtering used as a substitute for relational database query predicates.
-- **Impact:** Node.js event loop blocking, extreme API response latency (>10s), and V8 heap out-of-memory crashes.
-- **Remediation:**
-  1. Move targeting filters into the SQL query using PostgreSQL array intersection (`&&`) and containment (`@>`):
-     ```typescript
-     qb.andWhere(
-       '(a.targetDepartments = \'{}\' OR :dept = ANY(a.targetDepartments)) AND ' +
-       '(a.targetBatches = \'{}\' OR :batch = ANY(a.targetBatches))',
-       { dept, batch }
-     );
-     ```
-  2. Introduce cursor or page-based pagination (`take: 20, skip: 0`).
-
----
-
-### ISSUE-FE-001: Hardcoded `http://localhost:5000` Breaks Question AI Generation in Production
-- **Discipline:** Frontend Architecture & Client Standards
-- **Severity:** **HIGH** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `frontend-v2/src/app/admin/questions/create/_components/AIAssistance.tsx` (Lines 35, 50)
-- **Source Code Reference:**
-  ```typescript
-  // Line 35:
-  const res = await fetch("http://localhost:5000/api/ai/generate-question-helper", { ... });
-
-  // Line 50:
-  const socket = io("http://localhost:5000/ai-generation", { transports: ['websocket'] });
-  ```
-- **Failure Scenario:**
-  1. An administrator accesses the admin question creation wizard on `https://codeskill.org/admin/questions/create`.
-  2. The administrator clicks "Generate with AI".
-  3. The browser attempts to make an HTTP request to `http://localhost:5000/api/ai/generate-question-helper`.
-  4. Modern browsers immediately block the request with a **Mixed Content Security Error** (HTTPS web page loading unencrypted HTTP resource).
-  5. Even if mixed content were ignored, `localhost` resolves to the administrator's personal computer instead of the CodeSkill API server, and port 5000 is incorrect (backend runs on port 5001).
-- **Root Cause:** Hardcoded development localhost URLs left in a client-side component.
-- **Impact:** Question AI assistance feature is 100% broken in staging and production environments.
-- **Remediation:**
-  1. Replace hardcoded URLs with dynamic client helper functions:
-     ```typescript
-     import { api } from "@/config/api";
-     // Use relative /api endpoint or configured getBrowserApiBaseURL()
-     ```
-  2. Use dynamic WebSocket URL: `io(process.env.NEXT_PUBLIC_WS_URL || window.location.origin, { path: "/socket.io" })`.
-
----
-
-### ISSUE-SEC-002: S3 Presigner SigV4 Fallback Generates Inaccessible Unsigned URLs in IAM Setup
-- **Discipline:** Cloud Security & Architecture
-- **Severity:** **HIGH** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/s3/s3-presigner.util.ts` (Lines 48–54), `backend-nestjs/src/s3/s3.service.ts`
-- **Source Code Reference:**
-  ```typescript
-  const akId = accessKeyId || process.env.AWS_ACCESS_KEY_ID || '';
-  const sk = secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY || '';
-
-  if (!akId || !sk) {
-    // If no static credentials exist, return the direct object URL
-    return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
-  }
-  ```
-- **Failure Scenario:**
-  1. The backend is deployed to AWS EC2 using IAM Instance Profiles (as documented in `ARCHITECTURE.md` and standard AWS security practices).
-  2. In this architecture, static `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are intentionally NOT stored in `.env`.
-  3. If `@aws-sdk/s3-request-presigner` is missing or fails dynamic `require()`, the fallback checks `!akId || !sk`.
-  4. Because keys are empty, it returns: `https://${bucket}.s3.${region}.amazonaws.com/${key}` (a raw unsigned URL).
-  5. The S3 bucket is private (enforcing AWS S3 Block Public Access).
-  6. Any instructor or reviewer attempting to view proctoring snapshots or candidate verification photos receives an `HTTP 403 Forbidden` XML error from AWS S3.
-- **Root Cause:** SigV4 fallback assumes static credential presence and cannot resolve temporary STS credentials provided by EC2 instance metadata endpoints (`169.254.169.254`).
-- **Impact:** Proctoring images and candidate verification assets become completely inaccessible in IAM-based production environments.
-- **Remediation:**
-  1. Properly install `@aws-sdk/s3-request-presigner` in `backend-nestjs/package.json` and use the initialized `s3Client` which automatically resolves the AWS credential provider chain.
-
----
-
-### ISSUE-SEC-003: Hardcoded Secret Fallback for Exam Security HMAC Tokens
-- **Discipline:** Application Security & Cryptography
-- **Severity:** **HIGH** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/exam-security/exam-security.service.ts` (Lines 161–165)
-- **Source Code Reference:**
-  ```typescript
-  const sessionSecret = process.env.JWT_SECRET || 'codeskill-secure-exam-token-secret';
-  const token = crypto
-    .createHmac('sha256', sessionSecret)
-    .update(`${session.id}:${candidateId}:${session.expiresAt.getTime()}:${clientType}`)
-    .digest('hex');
-  ```
-- **Failure Scenario:**
-  1. In development, testing, or if `process.env.JWT_SECRET` is unset during container initialization, the code silently falls back to the static string `'codeskill-secure-exam-token-secret'`.
-  2. Because the source code is visible in the repository, any candidate can forge valid HMAC tokens for any exam session ID and candidate ID without passing security validation.
-- **Root Cause:** Insecure cryptographic fallback violating the centralized `jwt.config.ts` mandate that forbids literal fallback secrets.
-- **Impact:** Forgery of secure exam session tokens.
-- **Remediation:**
-  1. Inject `ConfigService` and retrieve the validated JWT secret via `resolveJwtSettings()`. Throw an exception if no secret is available.
-
----
-
-### ISSUE-CONCUR-002: Concurrent Candidate Identity Verification Overwrites Attempt Snapshots
-- **Discipline:** Concurrency & Data Integrity
-- **Severity:** **HIGH** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/assessments/assessments.service.ts` (Lines 2266–2269)
-- **Source Code Reference:**
-  ```typescript
-  if (attempt) {
-    (attempt as any).candidateVerification = verificationRecord;
-    await this.attemptRepo.save(attempt);
-  }
-  ```
-- **Failure Scenario:**
-  1. While a student's webcam verification is being recorded at exam start, the student enters fullscreen, triggering an automatic violation report or autosave.
-  2. `attemptRepo.save(attempt)` in `verifyIdentity` executes concurrently with `recordViolation` or `saveProgress`.
-  3. Because both operations mutate the same `AssessmentAttempt` row via TypeORM entity `.save()`, one update silently overwrites the other.
-- **Impact:** Lost candidate facial verification records or dropped initial proctoring violations.
-- **Remediation:** Use TypeORM `.update()` targeting only the `candidateVerification` column.
-
----
-
-### ISSUE-CONCUR-003: Contest Re-Attempt Deletion Race Condition Leads to Stale Active Attempts
-- **Discipline:** Concurrency & Data Integrity
-- **Severity:** **HIGH** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/assessments/assessments.service.ts` (Lines 1450–1456)
-- **Source Code Reference:**
-  ```typescript
-  await this.attemptRepo.delete({
-    assessmentId: assessment.id,
-    studentId,
-    status: 'in_progress',
+- **Technical Root Cause:**
+  Checking the grant, incrementing `usedAttempts`, saving the grant, and creating the `ContestAttempt` are executed as separate, non-transactional database operations without row-level locking (`SELECT ... FOR UPDATE`).
+- **Triggering Conditions:**
+  A student double-clicking the "Reattempt Contest" button or submitting simultaneous start requests.
+- **Failure Mechanism:**
+  Both concurrent requests read `usedAttempts = 0`. Both increment to 1 and save. Both attempt to insert `ContestAttempt` with `attemptNumber = 2`. Because of `@Index(['contest_id', 'user_id', 'attemptNumber'], { unique: true })`, the second insert crashes with a unique key violation. The grant's counter was already incremented, consuming the student's authorized reattempt without granting access.
+- **User or Business Impact:**
+  Students lose authorized reattempt grants granted by administrators and are locked out of contests.
+- **Recommended Engineering Solution:**
+  Wrap the entire reattempt consumption and attempt creation inside a serializable or pessimistic write transaction:
+  ```ts
+  await this.attemptRepo.manager.transaction(async (manager) => {
+    const grant = await manager.findOne(ContestReattemptGrant, {
+      where: { contest_id: contest.id, user_id: userId, status: 'ACTIVE' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    // atomic increment & attempt creation
   });
-  return this.startStudentAttempt(assessment.id, studentUser);
   ```
-- **Failure Scenario:**
-  1. A student with an unstable network connection double-clicks "Retake Exam".
-  2. Two concurrent HTTP POST requests hit `/assessments/:id/retake`.
-  3. Both requests pass the check, execute `delete()`, and proceed to `startStudentAttempt()`.
-  4. Two separate attempts with `status = 'in_progress'` are created for the same student on the same assessment.
-  5. Subsequent queries for active attempts throw errors or return non-deterministic attempts, splitting student responses across two database records.
-- **Impact:** Duplicate active attempts and fragmented scorecard data.
-- **Remediation:** Wrap retake in a serializable database transaction or place a unique partial index on `(assessment_id, student_id) WHERE status = 'in_progress'`.
+- **Relevant Regression Tests:**
+  Concurrent test executing 2 parallel `startAttempt` calls with 1 allowed reattempt, asserting exactly 1 succeeds and 1 receives an HTTP 400 rejection.
+- **Dependencies on Other Fixes:** None.
 
 ---
 
-### ISSUE-EXEC-002: Missing Circuit Breaker Reset Mechanism for Piston Network Intermittency
-- **Discipline:** Execution Engine & Site Reliability Engineering
-- **Severity:** **HIGH** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/execution/piston/piston.service.ts`
-- **Failure Scenario:**
-  1. A transient network spike or EC2 restart on the Piston host causes 5 consecutive execution requests to fail.
-  2. The Piston service circuit breaker trips into the `OPEN` state.
-  3. Even after the Piston service recovers, subsequent student submissions are immediately rejected with `PistonUnavailableError` without attempting canary probes.
-- **Impact:** Prolonged false-positive downtime for code execution.
-- **Remediation:** Implement standard `HALF-OPEN` canary probing to automatically reset the circuit breaker upon successful health check responses.
+### ISSUE-SEC-002: Unrestricted SQL LIKE Wildcard Matching in `AuthService.login`
 
----
-
-### ISSUE-EXEC-003: Worker Gateway Event Emits Fail Due to Missing Embedded Socket Server
-- **Discipline:** Distributed Systems & Observability
-- **Severity:** **HIGH** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/worker.ts` (Line 44), `backend-nestjs/src/gateway/app.gateway.ts` (Lines 36–37)
-- **Source Code Reference:**
-  ```typescript
-  // worker.ts:
-  const app = await NestFactory.createApplicationContext(AppModule, { logger });
-  // app.gateway.ts:
-  @WebSocketServer()
-  server: Server;
+- **Unique ID:** `ISSUE-SEC-002`
+- **Title:** Unescaped SQL LIKE Wildcards in Login Query Enable Account Ambiguity and Credential Stuffing
+- **Severity:** HIGH
+- **Confidence Level:** CONFIRMED
+- **Category:** Application Security / Authentication
+- **Affected Component:** `AuthService.login` & `adminLogin`
+- **Exact File Path & Lines:**
+  - `backend-nestjs/src/auth/auth.service.ts:107-114, 206-213`
+- **Code Evidence:**
+  ```ts
+  // File: backend-nestjs/src/auth/auth.service.ts
+  const user = await this.userRepository.findOne({
+    where: [
+      { email: ILike(raw) },
+      { uid: ILike(raw) },
+      { username: ILike(raw) },
+      { name: ILike(raw) },
+      { email: ILike(`${raw}@%`) },
+    ],
   ```
-- **Failure Scenario:**
-  1. `worker.ts` starts with `NestFactory.createApplicationContext(AppModule)` which does not listen on an HTTP/WebSocket port.
-  2. Any internal service within the worker attempting to emit directly via `this.appGateway.server.emit(...)` encounters `server === undefined`, causing unhandled TypeError exceptions unless wrapped in Redis pub/sub channels.
-- **Impact:** Unhandled exceptions in background worker jobs attempting direct socket emissions.
-- **Remediation:** Ensure all worker communication to clients strictly routes through Redis pub/sub (`codeskill:ws:events`).
-
----
-
-### ISSUE-DB-001: Missing GIN Indices on PostgreSQL Array Targeting Columns
-- **Discipline:** Database Architecture & Performance
-- **Severity:** **HIGH** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/database/entities/assessment.entity.ts` (Lines 15–20)
-- **Source Code Reference:**
-  ```typescript
-  @Index(['targetBatches'])
-  @Index(['targetDepartments'])
-  @Index(['targetStudentIds'])
-  @Index(['targetGroups'])
-  @Index(['targetSemesters'])
-  @Index(['targetSections'])
+- **Technical Root Cause:**
+  `raw` is passed directly into TypeORM's `ILike(...)` without sanitizing `%` or `_` characters. Additionally, matching by non-unique fields (`name`) and arbitrary domain suffixes (`${raw}@%`) allows ambiguous multi-user matching.
+- **Triggering Conditions:**
+  An attacker submitting `email: "%"` or `email: "admin%"` with a credential dictionary.
+- **Failure Mechanism:**
+  `findOne` without an `ORDER BY` returns the first matching database row. If an attacker submits `%`, PostgreSQL matches the first record in the `users` table (typically the initial administrator created during seeding).
+- **User or Business Impact:**
+  Account takeover risk through wildcard credential guessing.
+- **Recommended Engineering Solution:**
+  Remove `name: ILike(raw)` and `email: ILike(`${raw}@%`)`. Replace with strict, exact-match equality on unique columns:
+  ```ts
+  const normalized = raw.toLowerCase().trim();
+  const user = await this.userRepository.findOne({
+    where: [{ email: normalized }, { uid: normalized.toUpperCase() }, { username: normalized }],
+  });
   ```
-- **Failure Scenario:**
-  1. In TypeORM, `@Index()` on an array column (`text[]`) generates a standard B-tree index in PostgreSQL.
-  2. B-tree indexes cannot be used by PostgreSQL for array containment (`@>`), overlap (`&&`), or element search (`ANY()`).
-  3. Any SQL query filtering assessments by student batch or department results in a sequential full-table scan, rendering the indexes useless while consuming write IOPS.
-- **Impact:** Degraded query performance and wasted database disk and memory overhead.
-- **Remediation:** Replace B-tree indexes with PostgreSQL GIN indexes:
-  ```sql
-  CREATE INDEX idx_assessments_target_batches_gin ON assessments USING GIN ("targetBatches");
-  CREATE INDEX idx_assessments_target_depts_gin ON assessments USING GIN ("targetDepartments");
+- **Relevant Regression Tests:**
+  Unit test asserting that login with `email: "%"` returns HTTP 401.
+- **Dependencies on Other Fixes:** None.
+
+---
+
+### ISSUE-FE-001: Disconnected Frontend/Backend Retry Protocol on Assessment Submission
+
+- **Unique ID:** `ISSUE-FE-001`
+- **Title:** Frontend Submissions Retry Loop Intercepted by Backend 409 Conflict Response
+- **Severity:** HIGH
+- **Confidence Level:** CONFIRMED
+- **Category:** Frontend Architecture / Error Protocol
+- **Affected Component:** `frontend-v2/src/app/assessments/[id]/take/page.tsx`
+- **Exact File Path & Lines:**
+  - `frontend-v2/src/app/assessments/[id]/take/page.tsx:403-423`
+- **Code Evidence:**
+  ```ts
+  // File: frontend-v2/src/app/assessments/[id]/take/page.tsx
+  for (let retry = 0; retry < 3; retry++) {
+    try {
+      await studentAssessmentsAPI.submitAttempt(id, payload);
+      lastError = null;
+      break;
+    } catch (error: any) {
+      lastError = error;
+      const status = error?.response?.status;
+      const transient = !status || status === 429 || status >= 500;
+      if (!transient || retry === 2) break;
+      await new Promise((resolve) => window.setTimeout(resolve, 750 * (retry + 1)));
+    }
+  }
   ```
+- **Technical Root Cause:**
+  The frontend retry loop only considers `!status`, `429`, or `>= 500` as transient. When a 504 timeout occurs on attempt 1, backend has already flipped status to `'evaluating'`. Attempt 2 returns HTTP 409 Conflict. Because 409 is not considered transient, the frontend immediately aborts its retry loop and shows a permanent error banner.
+- **Triggering Conditions:**
+  Any network timeout during grading.
+- **Failure Mechanism:**
+  The frontend client aborts retries on the very first retry attempt because the backend responds with 409 instead of queuing or honoring idempotency.
+- **User or Business Impact:**
+  Students receive confusing error messages and believe their exam was not recorded.
+- **Recommended Engineering Solution:**
+  Align frontend and backend protocols: Backend must return 200 with the existing evaluation result or 202 if still processing, rather than throwing a non-retriable 409 Conflict.
+- **Dependencies on Other Fixes:** `ISSUE-DAT-001`.
 
 ---
 
-### ISSUE-INFRA-003: Production Terraform Module Omits Custom Parameter Group Activation
-- **Discipline:** Cloud Infrastructure & Database Architecture
-- **Severity:** **HIGH** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `terraform/environments/production/main.tf` (Lines 277–293), `terraform/modules/rds/variables.tf` (Line 22)
-- **Failure Scenario:**
-  1. `terraform/modules/rds/main.tf` contains a custom parameter group (`aws_db_parameter_group.postgres`) designed to enforce `max_connections = 100` and `rds.force_ssl = 1`.
-  2. However, creation of this parameter group is guarded by `count = var.create_parameter_group ? 1 : 0`, which defaults to `false`.
-  3. `terraform/environments/production/main.tf` calls `module "rds"` without setting `create_parameter_group = true`.
-  4. As a result, the custom parameter group is never created or attached; the production database uses AWS default parameters (`default.postgres14`), leaving connections unbounded and SSL unforced.
-- **Impact:** PostgreSQL parameter tuning and SSL enforcement are not active in production.
-- **Remediation:** Add `create_parameter_group = true` to `module "rds"` in `terraform/environments/production/main.tf`.
+### ISSUE-PRF-002: Synchronous Bcrypt Hashing in Bulk Student Import Starves libuv Thread Pool
 
----
-
-### ISSUE-INFRA-004: Unhandled Axiom Winston Transport Logger Failure in Standalone Worker
-- **Discipline:** Observability & Reliability
-- **Severity:** **HIGH** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/worker.ts` (Lines 24–38)
-- **Failure Scenario:**
-  1. In `worker.ts`, Axiom cloud logging is configured synchronously in `bootstrapWorker`.
-  2. If the Axiom edge endpoint experiences transient network downtime during worker startup, the transport constructor throws an exception before the worker starts listening to BullMQ queues.
-- **Impact:** Background judge worker process crashes on boot during third-party logging outages.
-- **Remediation:** Wrap transport creation in resilient fail-open error handlers with local fallback logging.
-
----
-
-### ISSUE-API-001: Missing Global Idempotency Keys on Assessment Submission API Endpoints
-- **Discipline:** API & Integration Architecture / Reliability
-- **Severity:** **HIGH** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/assessments/assessments.controller.ts`
-- **Failure Scenario:**
-  1. A student submits their final assessment. The network connection drops before the client receives the HTTP response.
-  2. The frontend axios retry logic or user re-clicks "Submit".
-  3. Because the API lacks an `Idempotency-Key` header check, the server re-evaluates the submission, triggering duplicate grading passes and redundant notification emails.
-- **Impact:** Duplicate submission processing and inconsistent scorecard states.
-- **Remediation:** Introduce an idempotency middleware storing `Idempotency-Key` tokens in Redis with a 60-second TTL.
-
----
-
-### ISSUE-FE-002: Synchronous Nested State Dispatch Inside `setCurrentLine` Effect
-- **Discipline:** Frontend Architecture & React Standards
-- **Severity:** **MEDIUM** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `frontend-v2/src/components/ui/modern-loader.tsx` (Lines 87–97)
-- **Source Code Reference:**
-  ```typescript
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setCurrentLine((prev) => {
-        const nextLine = prev + 1;
-        if (nextLine >= lines.length - 10)
-          setLines((old) => [...old, ...generateDeterministicLines(30, old.length)]);
-        return nextLine;
-      });
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [currentLine, lines.length]);
+- **Unique ID:** `ISSUE-PRF-002`
+- **Title:** In-Band Sequential Bcrypt Hashing Blocks Worker Process for Minutes During CSV Import
+- **Severity:** HIGH
+- **Confidence Level:** CONFIRMED
+- **Category:** Performance / Event Loop / CPU Starvation
+- **Affected Component:** `StudentsService.confirmImport`
+- **Exact File Path & Lines:**
+  - `backend-nestjs/src/students/students.service.ts:736-742`
+- **Code Evidence:**
+  ```ts
+  // File: backend-nestjs/src/students/students.service.ts
+  const salt = await bcrypt.genSalt(10);
+  for (const row of rowsToInsert) {
+    const rawPassword = row.password || this.generateSecurePassword(12);
+    const hashedPassword = await bcrypt.hash(rawPassword, salt);
   ```
-- **Failure Scenario:**
-  1. Inside the updater function of `setCurrentLine`, `setLines()` is called directly.
-  2. In React 19 concurrent mode, triggering a secondary state setter inside an updater callback produces unpredictable render cascading and state tearing.
-- **Impact:** Potential UI rendering glitches and React console warnings during test case compilation loading.
-- **Remediation:** Decouple `setLines` into its own separate `useEffect` observing `currentLine`.
+- **Technical Root Cause:**
+  Bcrypt hashing at cost 10 takes ~100ms per password. Hashing 2,000 passwords in a sequential loop consumes 200 seconds of libuv worker thread time.
+- **Triggering Conditions:**
+  Administrator importing a standard college cohort CSV/Excel file (1,000–5,000 students).
+- **Failure Mechanism:**
+  The HTTP request exceeds Nginx's 120s timeout. Concurrently, libuv threads are starved, delaying file I/O, DNS resolution, and crypto operations across all other requests on that NestJS instance.
+- **User or Business Impact:**
+  Admin import fails with 504 Gateway Timeout. System experiences severe latency spikes for all concurrent users.
+- **Recommended Engineering Solution:**
+  Offload password hashing and student creation to a background BullMQ queue (`student-import-queue`), returning an import job ID immediately.
+- **Dependencies on Other Fixes:** None.
 
 ---
 
-### ISSUE-FE-003: Unbounded Memory Accumulation in Infinite Scroll Code Generator Lines
-- **Discipline:** Frontend Performance & Memory Management
-- **Severity:** **MEDIUM** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `frontend-v2/src/components/ui/modern-loader.tsx` (Lines 69, 92)
-- **Failure Scenario:**
-  1. `modern-loader.tsx` defines `MAX_LINES = 100`, but line 92 continuously appends new lines (`setLines((old) => [...old, ...])`) without slicing older lines when `MAX_LINES` is exceeded.
-  2. If a loading screen remains visible for extended periods, the `lines` array expands indefinitely.
-- **Impact:** Memory accumulation in long-lived browser tabs.
-- **Remediation:** Enforce the window cap: `old.slice(-MAX_LINES)`.
+### ISSUE-SEC-003: `SmartThrottlerGuard` Reads Client-Supplied `X-Forwarded-For` Without Express `trust proxy` Verification
 
----
-
-### ISSUE-FE-004: Missing Key Event Debouncing on High-Frequency Code Editor Autosave
-- **Discipline:** Frontend Performance & Network Efficiency
-- **Severity:** **MEDIUM** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `frontend-v2/src/components/assessment/DSAAssessmentEditor.tsx`
-- **Failure Scenario:**
-  1. Fast student keystrokes during rapid typing trigger save progress intervals without trailing debounce cancelation.
-  2. Bursts of HTTP PATCH requests hit `/assessments/:id/save-progress`, contributing to backend 429 throttles.
-- **Impact:** Unnecessary network utilization and client-side HTTP 429 throttling.
-- **Remediation:** Introduce a 1,500ms trailing debounce on editor buffer changes.
-
----
-
-### ISSUE-DB-002: Partitioned `submissions` Table Cannot Enforce Global Primary Key Uniqueness
-- **Discipline:** Database Reliability & Schema Design
-- **Severity:** **MEDIUM** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/database/migrations/declarative-partitioning.ts` (Line 164)
-- **Source Code Reference:**
-  ```sql
-  CONSTRAINT "PK_submissions" PRIMARY KEY ("id", "createdAt")
+- **Unique ID:** `ISSUE-SEC-003`
+- **Title:** IP Rate-Limiting Bypass via Attacker-Controlled `X-Forwarded-For` Header
+- **Severity:** MEDIUM
+- **Confidence Level:** CONFIRMED
+- **Category:** Application Security / Rate Limiting
+- **Affected Component:** `SmartThrottlerGuard.resolveClientIp`
+- **Exact File Path & Lines:**
+  - `backend-nestjs/src/common/guards/smart-throttler.guard.ts:130-135`
+- **Code Evidence:**
+  ```ts
+  // File: backend-nestjs/src/common/guards/smart-throttler.guard.ts
+  private resolveClientIp(req: Record<string, any>): string {
+    const forwarded = req.headers?.['x-forwarded-for'];
+    if (typeof forwarded === 'string' && forwarded.length > 0) {
+      const first = forwarded.split(',')[0].trim();
+      if (first) return first;
+    }
   ```
-- **Failure Scenario:**
-  1. In PostgreSQL declarative partitioning, the primary key must contain the partition key (`createdAt`).
-  2. As a consequence, `id` is only indexed per partition, not globally across the entire table.
-  3. If a duplicate UUID is generated or imported, PostgreSQL cannot detect the primary key conflict across monthly partitions.
-- **Impact:** Inability to define relational foreign keys referencing `submissions.id`.
-- **Remediation:** Maintain application-level UUIDv4 randomness and ensure all child tables reference composite `(submission_id, createdAt)`.
+- **Technical Root Cause:**
+  When a request passes through a reverse proxy, the client's original header is placed first: `X-Forwarded-For: <spoofed_ip>, <real_ip>`. Reading `forwarded.split(',')[0]` blindly trusts the leftmost, attacker-supplied value. Furthermore, Express `trust proxy` is not configured in `main.ts`.
+- **Triggering Conditions:**
+  An attacker sending requests with randomized `X-Forwarded-For: 10.x.x.x` headers.
+- **Failure Mechanism:**
+  Each request is assigned a unique IP bucket (`ip:<spoofed_ip>`), completely bypassing rate limits on unauthenticated endpoints.
+- **User or Business Impact:**
+  Brute-force attacks against student login and automated API scraping cannot be throttled.
+- **Recommended Engineering Solution:**
+  Enable `app.set('trust proxy', 1)` in `main.ts` and rely strictly on `req.ip`.
 
 ---
 
-### ISSUE-DB-003: Lack of Automatic Partition Maintenance Cron for Future Yearly Partitions
-- **Discipline:** Database Reliability & Maintenance
-- **Severity:** **MEDIUM** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/database/migrations/declarative-partitioning.ts` (Lines 111–125)
-- **Failure Scenario:**
-  1. `declarative-partitioning.ts` creates yearly partitions up to 2030, plus a catch-all default partition (`submissions_default`).
-  2. However, there is no automated pg_partman or cron job to split monthly partitions in future years.
-  3. Once data spills into `submissions_default`, PostgreSQL cannot attach new partitions that overlap with data existing in `default` without an exclusive lock and data migration.
-- **Impact:** Operational degradation and table locking when future partitions are created.
-- **Remediation:** Integrate `pg_partman` or an automated monthly NestJS cron task for proactive partition creation.
+### ISSUE-SEC-004: Unencrypted ElastiCache Redis Cluster in Production
+
+- **Unique ID:** `ISSUE-SEC-004`
+- **Title:** ElastiCache Redis Cluster Configured Without In-Transit TLS or At-Rest Encryption
+- **Severity:** MEDIUM
+- **Confidence Level:** HIGH-CONFIDENCE STATIC
+- **Category:** Cloud Security / Data Governance
+- **Affected Component:** Terraform Redis Module
+- **Exact File Path & Lines:**
+  - `terraform/modules/redis/variables.tf:34-45`
+  - `terraform/environments/production/main.tf:379-380`
+- **Code Evidence:**
+  ```tf
+  # File: terraform/environments/production/main.tf
+  redis_cluster_mode = "true"
+  redis_tls          = "false"
+  ```
+  ```tf
+  # File: terraform/modules/redis/variables.tf
+  variable "transit_encryption_enabled" { default = false }
+  variable "at_rest_encryption_enabled" { default = false }
+  ```
+- **Technical Root Cause:**
+  Terraform production variables default `transit_encryption_enabled` and `at_rest_encryption_enabled` to `false`.
+- **Triggering Conditions:**
+  Production deployment.
+- **Failure Mechanism:**
+  Redis data (OTP pepper digests, user session payloads, admission leases) is stored in unencrypted memory/disk and transmitted across VPC subnets in plaintext.
+- **User or Business Impact:**
+  Non-compliance with data privacy regulations (GDPR, FERPA) and vulnerability to packet sniffing in case of VPC misconfiguration.
+- **Recommended Engineering Solution:**
+  Set `transit_encryption_enabled = true`, `at_rest_encryption_enabled = true`, and configure `auth_token` in `terraform/environments/production/main.tf`.
 
 ---
 
-### ISSUE-CONCUR-004: Shard Migration Script Lacks Writer Lease Verification Guard
-- **Discipline:** Concurrency & Sharding Architecture
-- **Severity:** **MEDIUM** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/database/sharding/sharding.migration.ts`
-- **Failure Scenario:**
-  1. An operator executes `npm run db:shards:migrate -- --apply --writers-stopped`.
-  2. If an API process was not completely drained or an active worker continues executing a BullMQ job, writes continue hitting the primary database while rows are being copied to shards.
-- **Impact:** Inconsistent submission records between primary and shard databases.
-- **Remediation:** Enforce a cryptographic write-lease check in Redis before allowing migration copy loops to run.
+### ISSUE-DAT-002: Cross-Shard Fan-out and O(Shards * (Skip + Take)) Memory/CPU Explosion in `SubmissionStore.find`
+
+- **Unique ID:** `ISSUE-DAT-002`
+- **Title:** Cross-Shard Submission Pagination Fetches `skip + take` Rows from Every Shard into Memory
+- **Severity:** MEDIUM
+- **Confidence Level:** CONFIRMED
+- **Category:** Database Performance / Scalability
+- **Affected Component:** `SubmissionStore.find`
+- **Exact File Path & Lines:**
+  - `backend-nestjs/src/database/sharding/submission-store.ts:145-170`
+- **Code Evidence:**
+  ```ts
+  // File: backend-nestjs/src/database/sharding/submission-store.ts
+  const results = await Promise.all(
+    repos.map((repo) =>
+      repo.find({
+        ...rest,
+        take: skip + take,
+        order: { createdAt: createdAtDirection, id: idDirection },
+      }),
+    ),
+  );
+  const rows = results.flat().sort(...).slice(skip, skip + take);
+  ```
+- **Technical Root Cause:**
+  When querying submissions across shards without a `userId` filter (e.g. admin submission table), the application queries all shards for `skip + take` rows, concatenates them, and sorts in Node.js memory.
+- **Triggering Conditions:**
+  Admin navigating to page 50 of submissions (`skip = 1000, take = 20`) with 4 shards.
+- **Failure Mechanism:**
+  Each shard returns 1,020 rows (4,080 rows total over PostgreSQL wire), transferring megabytes of JSON data into Node memory for in-process sorting.
+- **User or Business Impact:**
+  Node.js memory spikes and potential Out-Of-Memory (OOM) crashes under deep pagination.
+- **Recommended Engineering Solution:**
+  Replace offset pagination with keyset (cursor-based) pagination (`WHERE (createdAt, id) < (:lastCreatedAt, :lastId)`).
 
 ---
 
-### ISSUE-EXEC-004: Custom Test Case Memory Limit Overrides Ignored in Piston Adapter
-- **Discipline:** Execution Engine & Resource Limits
-- **Severity:** **MEDIUM** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/execution/language-adapters.ts`
-- **Failure Scenario:**
-  1. A problem author specifies a custom memory limit of 512 MB for a specific large-data test case.
-  2. The Piston adapter transmits requests using the global default memory limit (128 MB or 256 MB) without overriding the per-test configuration.
-  3. Valid student solutions fail with false-positive `Memory Limit Exceeded (MLE)`.
-- **Impact:** Erroneous verdicts on memory-intensive algorithm problems.
-- **Remediation:** Map problem-level `memoryLimit` into the Piston execute payload `run_memory_limit` option.
+### ISSUE-SEC-005: Known Vulnerabilities in `xlsx 0.18.5` Processing Untrusted Spreadsheets
+
+- **Unique ID:** `ISSUE-SEC-005`
+- **Title:** Unpatched Prototype Pollution and ReDoS in `xlsx 0.18.5`
+- **Severity:** MEDIUM
+- **Confidence Level:** HIGH-CONFIDENCE STATIC
+- **Category:** Supply Chain Security
+- **Affected Component:** `backend-nestjs/package.json`
+- **Exact File Path & Lines:**
+  - `backend-nestjs/package.json:88`
+  - `backend-nestjs/src/students/students.service.ts:372`
+- **Technical Root Cause:**
+  `xlsx: ^0.18.5` contains known vulnerabilities: CVE-2023-30533 (Prototype Pollution) and CVE-2024-22363 (ReDoS).
+- **User or Business Impact:**
+  Denial of Service or unexpected object mutation upon uploading maliciously crafted Excel files.
+- **Recommended Engineering Solution:**
+  Migrate to modern, actively maintained libraries such as `exceljs` or parse CSV files natively with `csv-parse`.
 
 ---
 
-### ISSUE-API-002: Inconsistent Error Response Serialization Between Express and Fastify Pipes
-- **Discipline:** API Architecture & Error Handling
-- **Severity:** **MEDIUM** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/common/filters/http-exception.filter.ts`
-- **Failure Scenario:**
-  1. Global validation exceptions thrown by `ValidationPipe` format errors as `{ message: string[], error: string, statusCode: number }`.
-  2. Domain exceptions format errors as `{ success: false, message: string }`.
-  3. Frontend code expecting a string in `error.response.data.message` receives an array of strings, leading to `[object Object]` or unrendered toast notifications.
-- **Impact:** Inconsistent error displays on user interfaces.
-- **Remediation:** Normalize all exception payloads in `http-exception.filter.ts` to always return `{ success: false, message: string, errors?: string[] }`.
+### ISSUE-DAT-003: N+1 Query Cascade and CPU-Blocking PDF Generation on Node.js Main Thread
+
+- **Unique ID:** `ISSUE-DAT-003`
+- **Title:** Synchronous PDF Rendering and Iterative Question Lookups in Report Controller
+- **Severity:** MEDIUM
+- **Confidence Level:** CONFIRMED
+- **Category:** Database Performance / Resource Contention
+- **Affected Component:** `ReportsController.getStudentResultReport`
+- **Exact File Path & Lines:**
+  - `backend-nestjs/src/reports/reports.controller.ts:81-103, 131-135`
+- **Code Evidence:**
+  ```ts
+  // File: backend-nestjs/src/reports/reports.controller.ts
+  const questions = await Promise.all(
+    responses.map(async (resp: any) => {
+      const q = resp.questionId
+        ? await this.questionRepo.findOne({
+            where: [{ id: resp.questionId }, { mongoId: resp.questionId }],
+          })
+        : null;
+  // ...
+  const stream = await renderToStream(React.createElement(StudentResultReport, ...));
+  ```
+- **Technical Root Cause:**
+  1. Iterating over responses issuing single `findOne` queries causes N+1 database roundtrips.
+  2. `@react-pdf/renderer` layout calculation executes CPU-heavy rendering synchronously on the event loop.
+- **User or Business Impact:**
+  Downloading examination result PDFs blocks concurrent API requests for 500ms–2000ms.
+- **Recommended Engineering Solution:**
+  1. Batch fetch questions with `this.questionRepo.find({ where: { id: In(questionIds) } })`.
+  2. Cache generated report PDFs in S3, or offload PDF generation to a worker process.
 
 ---
 
-### ISSUE-FE-005: Missing Accessible Form Labels on Dynamic OTP Input Digit Cells
-- **Discipline:** Accessibility (a11y) & Usability
-- **Severity:** **LOW** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `frontend-v2/src/components/ui/otp-input.tsx` (Lines 170–185)
-- **Failure Scenario:**
-  1. Visually impaired candidates using screen readers (NVDA, VoiceOver) navigate to the OTP authentication dialog.
-  2. The individual digit input elements lack `aria-label` attributes (e.g., "Digit 1 of 6", "Digit 2 of 6").
-  3. The screen reader announces generic "Edit text" inputs without position context.
-- **Impact:** WCAG 2.1 AA accessibility non-compliance.
-- **Remediation:** Add `aria-label={`Digit ${index + 1} of ${length}`}` to `getCellProps`.
+### ISSUE-FE-002: Frontend Unbounded Canvas and Webcam Video Memory Growth During Proctored Assessments
+
+- **Unique ID:** `ISSUE-FE-002`
+- **Title:** Incomplete MediaStreamTrack Disposal During Long-Running Proctored Exams
+- **Severity:** MEDIUM
+- **Confidence Level:** CONDITIONAL RISK
+- **Category:** Frontend Performance / Memory Management
+- **Affected Component:** `frontend-v2/src/hooks/useAssessmentMedia.ts`
+- **Technical Root Cause:**
+  Periodic video canvas snapshotting for face verification creates HTML5 Canvas elements that are not explicitly garbage-collected or re-used.
+- **User or Business Impact:**
+  Browser tab crashes due to JavaScript heap exhaustion (OOM) during 3-hour proctored examinations on low-RAM student laptops.
+- **Recommended Engineering Solution:**
+  Reuse a single hidden canvas element for snapshots and call `track.stop()` explicitly in `useEffect` cleanup.
 
 ---
 
-### ISSUE-FE-006: Next.js Core-Web-Vitals Warning on Direct `<img>` in Auth Pages
-- **Discipline:** Frontend Architecture & Performance
-- **Severity:** **LOW** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `frontend-v2/src/components/ui/sign-in-page.tsx` (Line 44)
-- **Failure Scenario:**
-  1. Authentication pages utilize raw `<img>` tags rather than Next.js `<Image />` component.
-  2. Images lack automatic WebP conversion, responsive `srcset`, and layout shift prevention.
-- **Impact:** Sub-optimal Largest Contentful Paint (LCP) and Cumulative Layout Shift (CLS) scores on auth routes.
-- **Remediation:** Replace `<img>` with Next.js `Image` with explicit `width` and `height`.
+### ISSUE-INF-002: ALB Backend Stickiness Pins Students to Terminating Instances During Auto Scaling Refreshes
+
+- **Unique ID:** `ISSUE-INF-002`
+- **Title:** ALB `lb_cookie` Stickiness Causes WebSocket and API Drops During Instance Rotation
+- **Severity:** MEDIUM
+- **Confidence Level:** CONDITIONAL RISK
+- **Category:** Infrastructure Reliability / Auto Scaling
+- **Affected Component:** `terraform/modules/alb/main.tf:84-88`
+- **Code Evidence:**
+  ```tf
+  stickiness {
+    type            = "lb_cookie"
+    cookie_duration = 3600
+    enabled         = true
+  }
+  ```
+- **Technical Root Cause:**
+  Because `lb_cookie` stickiness is enabled on the backend target group with a 3600s duration, requests from a student browser are pinned to an individual EC2 instance. When Auto Scaling performs an instance refresh or scales down, deregistration delay is only 30s.
+- **User or Business Impact:**
+  Students experience abrupt WebSocket disconnects and exam disruption during deployment rollouts.
+- **Recommended Engineering Solution:**
+  Remove ALB backend stickiness. Rely on the Redis Socket.IO adapter for stateless WebSocket message distribution across all backend nodes.
 
 ---
 
-### ISSUE-API-003: Redundant Dual Property Serialization (`id` and `_id`) in Client Responses
-- **Discipline:** API Standards & Technical Debt
-- **Severity:** **INFORMATIONAL** | **Confidence:** **CONFIRMED**
-- **Affected Components:** `backend-nestjs/src/common/interceptors/response.interceptor.ts`, `frontend-v2/src/config/api.ts`
-- **Failure Scenario:**
-  1. To maintain compatibility between MongoDB legacy clients and PostgreSQL entities, responses duplicate primary keys as both `id` and `_id`.
-  2. JSON payload sizes are unnecessarily inflated by 5–10% across large list responses.
-- **Impact:** Minor bandwidth overhead and schema ambiguity.
-- **Remediation:** Deprecate `_id` and standardize all client interfaces on canonical `id`.
+### ISSUE-OBS-001: Silent Log Drop and Failure to Alert When Axiom Fails Open
+
+- **Unique ID:** `ISSUE-OBS-001`
+- **Title:** Axiom Transport Catch Block Silently Swallows Initialization Failures Without Fallback Queue
+- **Severity:** LOW
+- **Confidence Level:** HIGH-CONFIDENCE STATIC
+- **Category:** Observability / Incident Response
+- **Affected Component:** `backend-nestjs/src/main.ts:54-68`
+- **Code Evidence:**
+  ```ts
+  try {
+    const { AxiomWinstonTransport } = require('./observability/logger/axiom.winston-transport');
+    winstonTransports.push(new AxiomWinstonTransport({ ... }));
+  } catch {
+    // Fail-open if transport cannot be loaded
+  }
+  ```
+- **Technical Root Cause:**
+  If the Axiom logging transport fails to load or experiences network rejection, the catch block silently ignores the error.
+- **User or Business Impact:**
+  Loss of audit trails and error telemetry during critical incidents without alerting operators.
+- **Recommended Engineering Solution:**
+  Log a fatal warning to console and CloudWatch if cloud telemetry fails to initialize.
+
+---
+
+### ISSUE-QA-001: Absence of Automated Concurrency and Distributed Race Condition Tests in CI
+
+- **Unique ID:** `ISSUE-QA-001`
+- **Title:** Automated CI Pipeline Runs Only Isolated Unit Tests, Missing Concurrency and Integration Regressions
+- **Severity:** LOW
+- **Confidence Level:** CONFIRMED
+- **Category:** QA Automation / CI/CD Pipeline
+- **Affected Component:** `.github/workflows/`
+- **Technical Root Cause:**
+  CI runs `npm test` with mock repositories. Integration tests (`test:shards:integration`, `test:judges:integration`) and k6 concurrency scripts are never executed in automated CI gates.
+- **User or Business Impact:**
+  Concurrency races and database schema regressions reach production unnoticed.
+- **Recommended Engineering Solution:**
+  Add a disposable Docker Compose step in GitHub Actions running shard integration and concurrent submission tests.
+
+---
+
+### ISSUE-INF-003: Concurrent Startup Schema Migration Execution During Backend ASG Scale-Out
+
+- **Unique ID:** `ISSUE-INF-003`
+- **Title:** Backend ASG User-Data Executes Un-Locked Database Migrations on Every Node Startup
+- **Severity:** HIGH
+- **Confidence Level:** CONFIRMED
+- **Category:** Cloud Infrastructure / Reliability / Database Migrations
+- **Affected Component:** `terraform/environments/production/userdata/backend.sh.tftpl:161-165`
+- **Code Evidence:**
+  ```bash
+  # File: terraform/environments/production/userdata/backend.sh.tftpl:161-165
+  # Run the migration in the same image/configuration before accepting requests.
+  docker run --rm --env-file /opt/codeskill/backend.env \
+    -v /opt/codeskill/rds-global-bundle.pem:/app/certs/rds-global-bundle.pem:ro \
+    "$IMAGE" node dist/database/run-practice-submission-source.js
+  ```
+- **Technical Root Cause:**
+  Every booting backend EC2 instance runs `node dist/database/run-practice-submission-source.js` directly in user-data before starting the API process. When the ASG scales up under load, multiple instances boot concurrently and run un-locked `ALTER TABLE` DDL queries against the shared RDS PostgreSQL instance simultaneously, causing lock deadlocks.
+- **User or Business Impact:**
+  Bootstrap failures on scaling nodes; new instances fail health checks and get terminated in an infinite failure loop during traffic spikes.
+- **Recommended Engineering Solution:**
+  Remove migration execution from instance user-data. Execute migrations exclusively via CI/CD release pipelines or dedicated one-off ECS migration tasks before deploying application updates.
+
+---
+
+### ISSUE-INF-004: Overly Permissive Wildcard IAM Policy on Backend Application Role
+
+- **Unique ID:** `ISSUE-INF-004`
+- **Title:** Backend Application IAM Role Grants Unrestricted `"Resource": "*"` for Secrets Manager and SSM Parameters
+- **Severity:** HIGH
+- **Confidence Level:** CONFIRMED
+- **Category:** Cloud Security / IAM Least Privilege
+- **Affected Component:** `terraform/modules/iam/main.tf:97-117`
+- **Configuration Evidence:**
+  ```terraform
+  # File: terraform/modules/iam/main.tf:97-117
+  resource "aws_iam_policy" "app_secrets" {
+    name = "${var.name_prefix}-app-secrets"
+    policy = jsonencode({
+      Version = "2012-10-17"
+      Statement = [{
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret",
+          "ssm:GetParameter",
+          "ssm:GetParameters",
+          "ssm:GetParametersByPath"
+        ]
+        Resource = "*"
+      }]
+    })
+  }
+  ```
+- **Technical Root Cause:**
+  IAM policy fails to scope resources to `${var.name_prefix}` secrets or specific database secret ARNs.
+- **User or Business Impact:**
+  Any compromised backend instance can exfiltrate all secrets and parameters across the entire AWS account.
+- **Recommended Engineering Solution:**
+  Scope the IAM statement to exact secret ARNs: `Resource = ["${var.db_secret_arn}", "arn:aws:ssm:.../codeskill/*"]`.
+
+---
+
+### ISSUE-INF-005: Omission of AWS WAF Web ACL Association on Production ALB
+
+- **Unique ID:** `ISSUE-INF-005`
+- **Title:** Production Application Load Balancer Operates Without AWS WAF Protection
+- **Severity:** MEDIUM
+- **Confidence Level:** CONFIRMED
+- **Category:** Cloud Security / Edge Defense
+- **Affected Component:** `terraform/environments/production/main.tf:246-256`, `terraform/modules/waf/main.tf`
+- **Technical Root Cause:**
+  Although `modules/waf` is defined, `production/main.tf` never instantiates it or attaches `aws_wafv2_web_acl_association` to `module.alb.alb_arn`.
+- **User or Business Impact:**
+  Public endpoints lack Layer 7 protection against SQLi, XSS bots, and volumetric HTTP request floods.
+- **Recommended Engineering Solution:**
+  Instantiate `module "waf"` in `terraform/environments/production/main.tf` passing `alb_arn = module.alb.alb_arn`.
+
+---
+
+### ISSUE-INF-006: S3 Bucket Encryption Omission and Co-Mingled Public/Private Access
+
+- **Unique ID:** `ISSUE-INF-006`
+- **Title:** S3 Storage Bucket Omits Default Server-Side Encryption and Co-Mingles Public Avatars with Private Assessment Reports
+- **Severity:** MEDIUM
+- **Confidence Level:** CONFIRMED
+- **Category:** Cloud Storage Security / Data Protection
+- **Affected Component:** `terraform/modules/s3/main.tf:9-33`
+- **Configuration Evidence:**
+  ```terraform
+  # File: terraform/modules/s3/main.tf:9-33
+  resource "aws_s3_bucket_public_access_block" "main" {
+    bucket = aws_s3_bucket.main.id
+    block_public_acls       = true
+    block_public_policy     = false
+    ignore_public_acls      = true
+    restrict_public_buckets = false
+  }
+  ```
+- **Technical Root Cause:**
+  Public bucket access restrictions are disabled to allow `/avatars/*` public read policy in the same bucket used for private student PDF reports and candidate test files. Default AES256/KMS encryption is omitted.
+- **User or Business Impact:**
+  Stored student reports are unencrypted at rest; risk of accidental disclosure of student examination files via key prefix misconfiguration.
+- **Recommended Engineering Solution:**
+  Split into two separate buckets (`codeskill-public-assets` with public policy, and `codeskill-private-reports` with strict block public access and AWS KMS SSE encryption).
+
+---
+
+### ISSUE-INF-007: Next.js SSR Internal Backend Traffic Routed Externally via NAT Gateway
+
+- **Unique ID:** `ISSUE-INF-007`
+- **Title:** Next.js Server-Side Rendering Egresses Through NAT Gateway to Reach Local Backend API
+- **Severity:** MEDIUM
+- **Confidence Level:** CONFIRMED
+- **Category:** Cloud Architecture / FinOps / Network Latency
+- **Affected Component:** `terraform/environments/production/userdata/frontend.sh.tftpl:80-82`
+- **Code Evidence:**
+  ```bash
+  # File: terraform/environments/production/userdata/frontend.sh.tftpl:80-82
+  -e NEXT_PUBLIC_API_URL=https://${domain_name}/api \
+  -e NEXT_PUBLIC_SOCKET_URL=https://${domain_name} \
+  -e INTERNAL_BACKEND_URL=https://${domain_name}/api \
+  ```
+- **Technical Root Cause:**
+  `INTERNAL_BACKEND_URL` is set to the external public domain `https://${domain_name}/api` rather than an internal VPC DNS record or private ALB listener.
+- **User or Business Impact:**
+  Internal server-to-server calls leave the VPC via NAT Gateway, incurring AWS data processing charges ($0.045/GB) and adding $\sim 45\text{ ms}$ latency per SSR render.
+- **Recommended Engineering Solution:**
+  Route `INTERNAL_BACKEND_URL` to internal service discovery (`http://backend.codeskill.internal:5001/api`) or private ALB listener.
+
+---
+
+### ISSUE-INF-008: Cloud Map Execution Node Unwired Deregistration Hook on Termination
+
+- **Unique ID:** `ISSUE-INF-008`
+- **Title:** Piston and Judge0 Execution Nodes Leave Orphaned DNS Records in Cloud Map on ASG Scale-In
+- **Severity:** MEDIUM
+- **Confidence Level:** CONFIRMED
+- **Category:** Reliability / Service Discovery / Auto Scaling
+- **Affected Component:** `terraform/environments/production/userdata/piston.sh.tftpl:94-103`
+- **Code Evidence:**
+  ```bash
+  # File: terraform/environments/production/userdata/piston.sh.tftpl:94-103
+  cat << 'EOF' > /usr/local/bin/deregister-cloudmap.sh
+  aws servicediscovery deregister-instance --service-id "${piston_service_id}" ...
+  EOF
+  chmod +x /usr/local/bin/deregister-cloudmap.sh
+  ```
+- **Technical Root Cause:**
+  The deregistration script is written to `/usr/local/bin/deregister-cloudmap.sh` but never registered with systemd as a shutdown unit. Cloud Map uses custom health checks without Route 53 probing.
+- **User or Business Impact:**
+  Terminated execution nodes remain in `piston.codeskill.internal` DNS for up to TTL expiry, causing backend code compilation requests to fail intermittently with connection refused.
+- **Recommended Engineering Solution:**
+  Add a systemd unit `cloudmap-deregister.service` with `ExecStart=/usr/local/bin/deregister-cloudmap.sh` hooked into `shutdown.target`.
+
+---
+
+### ISSUE-INF-009: Mutable Docker Image Tags (`:latest`) in Production Launch Templates
+
+- **Unique ID:** `ISSUE-INF-009`
+- **Title:** Production Launch Templates Pull Mutable `:latest` Container Tags, Breaking Immutability
+- **Severity:** LOW
+- **Confidence Level:** CONFIRMED
+- **Category:** Release Engineering / Configuration Management
+- **Affected Component:** `terraform/environments/production/variables.tf:73-95`
+- **Configuration Evidence:**
+  ```terraform
+  # File: terraform/environments/production/variables.tf:73-95
+  variable "backend_image_tag" {
+    type    = string
+    default = "latest"
+  }
+  ```
+- **Technical Root Cause:**
+  Launch templates reference `${module.ecr.backend_repository_url}:${var.backend_image_tag}` where the variable defaults to mutable `"latest"`.
+- **User or Business Impact:**
+  ASG scale-out events can pull different code versions over time, creating heterogeneous fleet behavior and rendering automated rollbacks non-deterministic.
+- **Recommended Engineering Solution:**
+  Enforce Git commit SHA or semantic release tags (e.g., `v2.4.1`) as required, non-default variables.
+
+---
+
+### ISSUE-INF-010: Absence of Amazon CloudWatch Alarms and Dashboards for AWS Infrastructure
+
+- **Unique ID:** `ISSUE-INF-010`
+- **Title:** CloudWatch Infrastructure Metrics, Alarms, and Operational Dashboards Omitted
+- **Severity:** LOW
+- **Confidence Level:** CONFIRMED
+- **Category:** Observability / Site Reliability Engineering
+- **Affected Component:** `terraform/modules/monitoring/main.tf:1-25`
+- **Configuration Evidence:**
+  ```terraform
+  # File: terraform/modules/monitoring/main.tf:1-4
+  # Open-Source Monitoring Module (Prometheus + Grafana OSS + Loki + Promtail + Kuma)
+  # Zero Amazon CloudWatch Agent, Zero CloudWatch Alarms, Zero CloudWatch Dashboards
+  ```
+- **Technical Root Cause:**
+  Monitoring module explicitly provisions zero CloudWatch alarms for AWS native services (RDS CPU, RDS FreeStorageSpace, ALB 5XX rate, Target Response Time, Redis EngineCPU).
+- **User or Business Impact:**
+  Cloud outages (such as RDS connection exhaustion or storage saturation) go undetected until external users report failures.
+- **Recommended Engineering Solution:**
+  Provision standard CloudWatch alarms for RDS `DatabaseConnections >= 180`, `FreeStorageSpace <= 5GB`, and ALB `HTTPCode_Target_5XX_Count >= 10`.
+
