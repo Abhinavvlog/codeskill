@@ -1,12 +1,13 @@
-# Reconstructed System Architecture & Technical Analysis
+# Reconstructed System Architecture & Technical Analysis (Commit `b846d107`)
 
 **Target Repository:** CodeSkill Platform  
-**Commit Hash:** `2d89bd45`  
+**Commit Inspected:** `b846d107`  
 **Auditor:** Principal Software Architect & Distributed Systems Engineer  
+**Output Location:** `engineering-audit/`  
 
 ---
 
-## 1. System Inventory & Runtime Stack
+## 1. System Inventory & Runtime Stack (Post-PR #95)
 
 | Subsystem | Framework / Technology | Version / Runtime | Architectural Pattern |
 | :--- | :--- | :--- | :--- |
@@ -16,12 +17,12 @@
 | **Submission Shards** | PostgreSQL (Optional multi-shard) | PostgreSQL 15+ | Tenant/User Sharding with dedicated `SubmissionStore` |
 | **Cache, Queues & PubSub** | Redis (ElastiCache / Docker), BullMQ | Redis 7.x | Queue broker for code execution, Socket.IO adapter, Throttle store |
 | **Execution Sandboxes** | Piston Execution Engine, Docker CLI | Piston API / Docker Isolation | Ephemeral Container Execution & Resource Cgroup Limiting |
-| **Storage & Media** | AWS S3 / Compatible Object Storage | AWS SDK v3 | Bucket storage for avatars, submissions, proctoring webcam frames |
+| **Storage & Media** | AWS S3 / Compatible Object Storage | AWS SDK v3 (`@aws-sdk/client-s3`) | Bucket storage for avatars, submissions, proctoring webcam frames |
 | **Cloud Infrastructure** | Terraform, AWS (VPC, ALB, ECS/ASG, RDS, ElastiCache) | Terraform >= 1.0 | Infrastructure-as-Code with dev and production environments |
 
 ---
 
-## 2. System Context & Component Architecture
+## 2. Reconstructed System Architecture & Mermaid Diagrams
 
 ### 2.1 System Context Diagram (C4 Level 1)
 
@@ -31,20 +32,20 @@ flowchart TD
     Admin["Instructor / Administrator"]
     SEB["Safe Exam Browser (SEB Client)"]
 
-    subgraph Platform["CodeSkill Production Platform"]
+    subgraph Platform["CodeSkill Production Platform (Commit b846d107)"]
         Cloudflare["Cloudflare / WAF (CDN & Edge SSL)"]
         ALB["AWS Application Load Balancer"]
         FE["Next.js Frontend (SSR & Static Assets)"]
         API["NestJS Backend API (Port 5001)"]
         Judge["Worker / Judge Process (BullMQ Consumer)"]
-        Postgres[("PostgreSQL Primary DB")]
-        Redis[("Redis (Queues, Cache, PubSub)")]
+        Postgres[("PostgreSQL Primary DB (max_conn=200)")]
+        Redis[("Redis (Queues, Cache, PubSub, noeviction)")]
         Shards[("PostgreSQL Shards (Optional)")]
     end
 
     subgraph External["External Ecosystem & Providers"]
         Piston["Piston Code Execution Cluster"]
-        S3["AWS S3 Bucket (Storage)"]
+        S3["AWS S3 Bucket (app_storage)"]
         SES["AWS Simple Email Service (SES)"]
         GoogleOAuth["Google OAuth 2.0 Provider"]
         ClaudeGemini["Anthropic Claude / Google Gemini API (AI Pet)"]
@@ -72,176 +73,77 @@ flowchart TD
 
 ---
 
-### 2.2 Component Architecture Diagram (C4 Level 2)
-
-```mermaid
-flowchart LR
-    subgraph ClientTier["Client Tier (frontend-v2)"]
-        UI["React 19 / Next.js App Router"]
-        Monaco["Monaco Code Editor"]
-        AntiCheatHooks["useAntiCheatMaster / useProctorCapture"]
-        State["Zustand Stores & React Context"]
-    end
-
-    subgraph APITier["Backend API Tier (backend-nestjs)"]
-        Controllers["NestJS REST & WS Controllers"]
-        Guards["JwtAuthGuard, RolesGuard, ThrottleGuard"]
-        Services["Domain Services (Assessments, Contests, Submissions)"]
-        TypeORM["TypeORM Data Access Layer"]
-        QueueProducer["BullMQ Queue Producer ('submissions')"]
-    end
-
-    subgraph WorkerTier["Execution / Worker Tier"]
-        WorkerProcess["Worker Daemon (PROCESS_ROLE=judge)"]
-        BullMQProcessor["JudgeProcessor (BullMQ Worker)"]
-        PistonClient["Piston Client / Docker Adapter"]
-    end
-
-    subgraph StorageTier["Data & Cache Tier"]
-        PGPrimary[("PostgreSQL 16 Primary")]
-        RedisStore[("Redis 7.2 (Queues + State)")]
-        S3Bucket[("AWS S3 Asset Bucket")]
-    end
-
-    ClientTier -->|HTTP REST /api/*| Guards
-    ClientTier -->|WSS Socket.IO| Controllers
-    Guards --> Controllers
-    Controllers --> Services
-    Services --> TypeORM
-    Services --> QueueProducer
-    TypeORM --> PGPrimary
-    QueueProducer --> RedisStore
-    RedisStore --> BullMQProcessor
-    BullMQProcessor --> PistonClient
-    BullMQProcessor --> PGPrimary
-    Services --> S3Bucket
-```
-
----
-
-## 3. Core Request Lifecycles & Sequence Diagrams
-
-### 3.1 Authentication & Token Lifecycle Flow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as Client Browser
-    participant API as Auth Controller & Service
-    participant DB as PostgreSQL (Users Table)
-    participant Redis as Redis (Session & OTP)
-
-    User->>API: POST /api/auth/login { email, password }
-    API->>DB: findOne({ email })
-    alt User Not Found or Inactive
-        API-->>User: 401 Unauthorized
-    else Valid Credentials
-        API->>API: Argon2.verify(password, user.passwordHash)
-        API->>DB: Increment tokenVersion or verify activeAccount
-        API->>API: Generate Access Token (15m, signed with JWT_SECRET)
-        API->>API: Generate Refresh Token (7d, signed with JWT_REFRESH_SECRET)
-        API->>DB: Save hashed refresh token (refreshTokenHash)
-        API-->>User: 200 OK { accessToken, refreshToken, userProfile }
-    end
-
-    Note over User, API: Token Refresh Cycle
-    User->>API: POST /api/auth/refresh { refreshToken }
-    API->>API: Verify JWT signature & expiration
-    API->>DB: Fetch user by ID, verify tokenVersion matches
-    API->>API: Argon2.verify(refreshToken, user.refreshTokenHash)
-    API->>API: Issue rotated Access & Refresh tokens
-    API->>DB: Update refreshTokenHash
-    API-->>User: 200 OK { accessToken, refreshToken }
-```
-
----
-
-### 3.2 Submission Processing & Code Judging Sequence
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Student as Student Browser
-    participant API as SubmissionsController
-    participant Store as SubmissionStore (Primary or Shard)
-    participant Redis as Redis (BullMQ 'submissions')
-    participant Worker as JudgeProcessor (Worker)
-    participant Piston as Piston Sandbox Engine
-    participant Gate as Gateway (Socket.IO)
-
-    Student->>API: POST /api/submissions/submit { problemId, code, language }
-    API->>API: Validate problem & student eligibility
-    API->>Store: INSERT submission (status: 'PENDING', verdict: 'QUEUED')
-    API->>Redis: Add Job to BullMQ 'submissions' queue { submissionId, userId, code }
-    API-->>Student: 201 Created { submissionId, status: 'QUEUED' }
-
-    Note over Redis, Worker: Asynchronous Dequeue
-    Worker->>Redis: Poll / Fetch next job
-    Worker->>Store: UPDATE submission status: 'PROCESSING'
-    Worker->>Store: Fetch problem test cases (Authoritative execution problem)
-
-    loop For Each Test Case
-        Worker->>Piston: POST /api/v2/execute { language, version, files: [{ content: code }], stdin }
-        Piston-->>Worker: Execution result { stdout, stderr, exitCode, memory, time }
-        Worker->>Worker: Compare stdout with expected output (Token / Exact match)
-    end
-
-    Worker->>Store: UPDATE submission (status: 'COMPLETED', verdict: 'ACCEPTED'|'WRONG_ANSWER')
-    Worker->>Gate: Emit socket event 'submissionUpdated' (room: user_userId)
-    Gate-->>Student: Push notification: Real-time verdict
-```
-
----
-
-### 3.3 Assessment Attempt Concurrency Flow (Revealing Race Conditions)
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Candidate as Candidate Browser
-    participant API as AssessmentsController
-    participant DB as PostgreSQL (assessment_attempts)
-
-    par Routine Auto-Save Progress (Every 30s)
-        Candidate->>API: POST /api/assessments/:id/progress { responses: { q1: 'code_draft_v2' } }
-        API->>DB: SELECT * FROM assessment_attempts WHERE id = :attemptId (Read State A)
-    and High-Frequency Proctor Capture (Every 15s)
-        Candidate->>API: POST /api/assessments/:id/proctor-capture { imageFrameUrl }
-        API->>DB: SELECT * FROM assessment_attempts WHERE id = :attemptId (Read State A)
-    end
-
-    Note over API, DB: Critical Race Condition: No DB Lock or Atomic JSON Query
-    API->>API: Process Proctor Capture: attempt.captures.push(frame)
-    API->>DB: UPDATE assessment_attempts SET captures = :newCaptures (Writes State A + captures)
-
-    API->>API: Process Progress Save: attempt.responses = :newResponses
-    API->>DB: UPDATE assessment_attempts SET responses = :newResponses (Writes State A + responses, OVERWRITING CAPTURES)
-    Note over DB: If Save reads first and writes second, it clobbers proctor captures.<br/>If Capture reads first and writes second, it CLOBBERS STUDENT ANSWERS!
-```
-
----
-
-## 4. Single Points of Failure (SPOF) Analysis
+### 2.2 Component Architecture & Failure Propagation Diagram
 
 ```mermaid
 flowchart TD
-    subgraph SPOF["Identified Architectural Single Points of Failure"]
-        S1["Single Redis Instance / Cluster<br/><b>Impact:</b> Total outage of job queue, logins (throttles), Socket.IO"]
-        S2["Single RDS PostgreSQL Primary<br/><b>Impact:</b> Read/write outage for entire platform"]
-        S3["Worker Socket.IO Gateway Missing Server<br/><b>Impact:</b> Worker cannot emit real-time verdicts independently"]
-        S4["Unbounded Piston Cluster Compilations<br/><b>Impact:</b> Execution queue saturation and system stall"]
-        S5["RDS Hardcoded 50 Connection Limit<br/><b>Impact:</b> Immediate database rejection upon API horizontal scale"]
+    subgraph Compute["Application Compute"]
+        API["NestJS API Process"]
+        Worker["Judge Worker Process"]
     end
+
+    subgraph State["State & Message Brokers"]
+        PG["PostgreSQL Primary DB<br/><b>Constraint:</b> 200 conns on 1GB RAM"]
+        Redis["Shared Redis Cluster<br/><b>Constraint:</b> noeviction policy"]
+        S3["AWS S3 Bucket<br/><b>Issue:</b> Missing presigner in node_modules"]
+    end
+
+    subgraph Sandbox["Execution Sandboxes"]
+        Piston["Piston Execution Host<br/><b>Issue:</b> N-times compilation multiplier"]
+    end
+
+    API -->|1. Import s3.service.ts| S3
+    S3 -.->|Module Not Found TS2307| Fail1["API Fails to Compile / Start!"]
+
+    API -->|2. Concurrent saveProgress & capture| PG
+    PG -.->|Un-locked save() clobber| Fail2["Student Code Wiped Out!"]
+
+    API -->|3. Spike in submissions| Worker
+    Worker -->|4. Loop test cases| Piston
+    Piston -.->|O(N) Compilations| Fail3["Piston 100% CPU Saturation!"]
+
+    Worker -->|5. Queue growth & Cache keys| Redis
+    Redis -.->|noeviction OOM| Fail4["Redis Refuses All Writes!"]
 ```
 
-1. **Single Redis ElastiCache Instance (No Multi-AZ Failover in Default Dev/Prod):**
-   - Redis manages: (1) BullMQ job processing, (2) User session tracking, (3) OTP verification, (4) Throttler rate limiting, and (5) WebSockets pub/sub.
-   - If Redis undergoes failover or memory saturation under `noeviction`, all authentication, submission, and notification channels fail simultaneously.
-2. **PostgreSQL Connection Pool Sizing Mismatch:**
-   - RDS parameter group restricts `max_connections` to 50.
-   - API server pool defaults to 50; Judge worker process defaults to 50.
-   - Any autoscaling event instantly exhausts PostgreSQL connection slots, bringing down all active transactions with `FATAL: remaining connection slots are reserved for non-replication superuser connections`.
-3. **Decoupled Worker Socket.IO Emission:**
-   - In production when `PROCESS_ROLE=judge` is deployed as a standalone PM2/Docker service, the NestJS `Gateway` is not attached to an active HTTP/WS listening server. Worker-side verdict push notifications fail to reach connected clients, requiring clients to poll.
-4. **Shared Database Entity for Assessment State and Telemetry:**
-   - The `assessment_attempts` table stores critical academic records (user answers) alongside high-frequency ephemeral telemetry (`captures` and `violations`). High-frequency proctoring updates lock or overwrite candidate exam submissions.
+---
+
+### 2.3 Assessment Concurrency Flow: Why the PR #95 Fix is Incomplete
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Candidate as Student Typing Code
+    actor Proctor as Background Webcam Poller
+    participant API as API Server (NestJS)
+    participant DB as PostgreSQL (assessment_attempts)
+
+    Note over Candidate, Proctor: Simultaneous Save and Proctor Capture Events
+    Candidate->>API: POST /assessments/:id/progress { responses: { q1: "new code" } }
+    API->>DB: saveProgress: SELECT * FROM assessment_attempts (Read Attempt A0)
+
+    Proctor->>API: POST /assessments/:id/proctor-capture { image: base64 }
+    API->>API: recordProctorCapture: S3 upload completes...
+    API->>DB: recordProctorCapture: SELECT * FROM assessment_attempts (Fresh Read Attempt A0)
+    
+    Note over API, DB: Both requests now hold Attempt A0 in memory!
+    API->>DB: recordProctorCapture: UPDATE assessment_attempts SET captures = [c1...c99]
+    DB-->>API: 200 OK (Capture saved)
+
+    API->>DB: saveProgress: UPDATE assessment_attempts SET responses = { q1: "new code" }, captures = [c1...c98]
+    DB-->>API: 200 OK
+    Note over DB: saveProgress writes back its in-memory entity,<br/>WHICH STILL CONTAINS THE STALE CAPTURES ARRAY!<br/>Capture c99 is CLOBBERED AND LOST.
+```
+
+---
+
+## 3. Single Points of Failure (SPOF) Analysis
+
+1. **Uninstalled S3 Presigner Dependency (NEW SPOF):**
+   - The backend cannot start or compile cleanly because `@aws-sdk/s3-request-presigner` is missing from `node_modules`. Any clean deployment or CI build fails at the compile stage.
+2. **Shared Single Redis Instance with `noeviction`:**
+   - BullMQ persistent queues, login rate limits, and Socket.IO adapters share a single Redis instance configured with `noeviction`. Once memory limits are reached, all authentication and task processing freezes.
+3. **Piston Cluster Single Node Saturation:**
+   - Stateless Piston instances execute $T$ compilations for a single submission with $T$ test cases. Under 20 concurrent student submissions, Piston is bombarded with 300+ full compiler invocations, saturating host CPU.
+4. **RDS PostgreSQL Memory Pressure under 200 Connections:**
+   - `terraform/modules/rds/main.tf` raised `max_connections` from 50 to 200 on `db.t4g.micro` (1 GiB RAM). If connections approach 200, PostgreSQL memory consumption ($200 \times \text{work\_mem} + \text{shared\_buffers}$) exceeds 1 GiB, causing Linux Out-Of-Memory (OOM) killer to terminate the PostgreSQL daemon.

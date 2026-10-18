@@ -1,43 +1,57 @@
-# Infrastructure, Cloud Architecture & Site Reliability Engineering (SRE) Audit
+# Infrastructure, Cloud Architecture & Site Reliability Engineering (SRE) Audit (Commit `b846d107`)
 
 **Audit Date:** October 18, 2026  
-**Audited Target:** CodeSkill Platform (Terraform, AWS, PM2, Docker)  
-**Commit:** `2d89bd45`  
+**Audited Target:** CodeSkill Infrastructure (Terraform, AWS, PM2, Docker)  
+**Commit Inspected:** `b846d107`  
 **Auditor:** Site Reliability Engineer (SRE) & Cloud DevOps Principal  
+**Output Location:** `engineering-audit/`  
 
 ---
 
-## 1. Infrastructure Topology & Cloud Asset Overview
+## 1. Cloud Topology & Infrastructure Definition
 
-The production infrastructure is defined in Terraform (`terraform/environments/production/` and `terraform/modules/`):
+The production infrastructure is defined in Terraform (`terraform/environments/production/` and reusable modules in `terraform/modules/`):
 - **Networking:** Multi-AZ AWS VPC with public and private subnets, NAT Gateways, and security groups.
 - **Compute:** Auto Scaling Groups (ASG) running EC2 instances or ECS tasks for API and Frontend services.
 - **Load Balancing:** AWS Application Load Balancer (ALB) routing `/api/*` to NestJS and `/*` to Next.js.
-- **Relational Storage:** AWS RDS PostgreSQL (`db.t4g.micro` in dev, `db.t4g.small` in prod).
-- **In-Memory Cache & Broker:** AWS ElastiCache Redis 7.x (`cache.t4g.micro`).
-- **Object Storage:** AWS S3 (`app_storage` bucket) for user avatars, student submission code, and proctoring frames.
+- **Relational Storage:** AWS RDS PostgreSQL (`db.t4g.micro` with 1 GiB RAM).
+- **In-Memory Broker:** AWS ElastiCache Redis 7.x (`cache.t4g.micro`).
+- **Object Storage:** AWS S3 (`app_storage` bucket) for avatars, submissions, and proctoring snapshots.
 
 ---
 
-## 2. Critical Infrastructure Vulnerabilities & SRE Risks
+## 2. Re-Assessment of Recent Infrastructure Changes (PR #95)
 
-### 2.1 RDS PostgreSQL Connection Starvation (ISSUE-INFRA-002)
-- **Module:** `terraform/modules/rds/main.tf` (Lines 56–60)
-- **Configuration:**
-  ```hcl
-  parameter {
-    name  = "max_connections"
-    value = "50"
-  }
-  ```
-- **SRE Impact:** An ASG scaling policy triggers scale-out when API CPU hits 70%. When a second API instance launches, total application connection pools demand 150 connections (API 1: 50 + API 2: 50 + Worker: 50). The RDS database immediately rejects incoming requests, causing an instant cascading 500 outage across both API instances.
+### 2.1 Deduplicated Health Routing (Remediated)
+- **Previous Finding:** Competing health controllers in `src/health/health.controller.ts` and `src/observability/health/health.controller.ts` shadowed each other on `/api/health/live` and `/api/health/ready`.
+- **Status: REMEDIATED**
+  - In `HealthAndTelemetryController`, duplicate `@Get('health/live')` and `@Get('health/ready')` annotations were removed, leaving only `@Get('health/deep')`.
+  - ALB probes now route deterministically to the primary health module without router conflicts.
+
+### 2.2 Client Telemetry Route Corrected (Remediated)
+- **Previous Finding:** In `HealthAndTelemetryController`, `@Post('api/telemetry/client-events')` mounted at `/api/api/telemetry/client-events`, causing client beacons to 404.
+- **Status: REMEDIATED**
+  - Route annotation was changed to `@Post('telemetry/client-events')`.
+  - With NestJS global prefix `'api'`, client beacons to `/api/telemetry/client-events` return HTTP 204 No Content as expected.
+
+---
+
+## 3. Critical Infrastructure & Reliability Risks Remaining
+
+### 3.1 RDS PostgreSQL Memory Saturation under `max_connections = 200` (NEW HIGH RISK)
+- **Module:** `terraform/modules/rds/main.tf` (Line 58)
+- **Configuration:** `max_connections = "200"` on `instance_class = "db.t4g.micro"` (1 GiB RAM).
+- **SRE Risk:**
+  - Raising the connection limit without increasing RAM introduces severe stability risks.
+  - When connection demand spikes, PostgreSQL backend worker processes will allocate up to 1.8 GiB of RAM.
+  - The Linux kernel Out-Of-Memory (OOM) killer will terminate `postmaster`, crashing the database and causing immediate 500 errors across all active candidate sessions.
 - **Remediation:** 
-  1. Remove the restrictive parameter override or set it to dynamic proportional values (`GREATEST({DBInstanceClassMemory/9531392}, 100)`).
-  2. Provision **AWS RDS Proxy** to multiplex application connections efficiently.
+  - Upgrade the RDS instance class to `db.t4g.small` (2 GiB RAM) or `db.t4g.medium` (4 GiB RAM).
+  - Deploy **AWS RDS Proxy** to decouple application connection pools from physical database connections.
 
 ---
 
-### 2.2 Shared Redis Memory Exhaustion & Cascade Lockup (ISSUE-INFRA-003)
+### 3.2 Shared Redis Memory Exhaustion & Cascade Lockup (ISSUE-INFRA-001)
 - **Module:** `terraform/modules/redis/main.tf` (Lines 44–60)
 - **Configuration:**
   ```hcl
@@ -46,70 +60,31 @@ The production infrastructure is defined in Terraform (`terraform/environments/p
     value = "noeviction"
   }
   ```
-- **Failure Cascade:**
-  ```mermaid
-  flowchart TD
-      HighTraffic["Spike in Traffic / Submissions"] --> RedisFull["Redis Memory Exceeds 500MB (cache.t4g.micro)"]
-      RedisFull --> NoEvict["'noeviction' Policy Refuses All New Writes"]
-      NoEvict --> Fail1["BullMQ: Cannot enqueue new submissions"]
-      NoEvict --> Fail2["Throttler: Login rate limiting crashes"]
-      NoEvict --> Fail3["Socket.IO: Redis adapter fails to publish messages"]
-      NoEvict --> Fail4["Auth: OTP codes cannot be stored"]
-      Fail1 --> TotalOutage["Total Application Outage (Read-Only State)"]
-      Fail2 --> TotalOutage
-      Fail3 --> TotalOutage
-      Fail4 --> TotalOutage
-  ```
-- **Remediation:** Separate BullMQ into a persistent Redis cluster, and configure the caching/rate-limiting Redis with `maxmemory-policy = volatile-lru`.
+- **SRE Risk:**
+  - Single shared Redis instance handles BullMQ queues, login rate limiters, session caches, and Socket.IO adapters.
+  - When memory reaches capacity, `noeviction` rejects all write commands with `OOM command not allowed`.
+  - This halts user logins, OTP verifications, job enqueuing, and live updates simultaneously.
+- **Remediation:** Separate BullMQ into a persistent Redis cluster, and use a separate Redis instance with `volatile-lru` for caching and rate limiting.
 
 ---
 
-### 2.3 S3 Bucket Policy & Missing Presigned URLs (ISSUE-INFRA-001)
-- **Module:** `terraform/modules/s3/main.tf` (Lines 9–34) & `backend-nestjs/src/s3/s3.service.ts`
-- **Configuration:** The S3 bucket policy explicitly allows public `s3:GetObject` only for:
-  `Resource = "${aws_s3_bucket.app_storage.arn}/avatars/*"`
-- **Vulnerability:**
-  All other objects, including `proctoring/*` snapshots, are private. `S3Service` returns standard public HTTPS URLs (`https://bucket.s3.amazonaws.com/proctoring/...`) without generating AWS Presigned URLs.
-- **SRE Impact:** Administrative proctoring dashboards fail to render violation evidence and webcam captures, returning HTTP 403 Forbidden.
+### 3.3 Broken S3 Presigner Deployment (ISSUE-BUILD-001)
+- **Module:** `backend-nestjs/src/s3/s3.service.ts`
+- **Issue:** The code now invokes `getSignedUrl` from `@aws-sdk/s3-request-presigner`, but the dependency was not installed in `node_modules`.
+- **SRE Impact:** Automated CI/CD deployments and Docker container launches fail during build/startup, preventing deployments to production.
 
 ---
 
-## 3. Process Management & Worker Architecture (`ecosystem.config.js`)
-
-In production, the application is orchestrated using PM2:
-- **API Monolith (`main.ts`):** Starts with `instances: 'max'` or explicit thread counts.
-- **Judge Daemon (`worker.ts`):** Starts with `PROCESS_ROLE=judge`.
-- **Finding:** In `backend-nestjs/src/gateway/`, the Socket.IO `EventsGateway` is loaded by NestJS modules. When running in worker mode, there is no HTTP server attached to the gateway. Attempting to emit socket events directly from worker threads fails silently or logs warnings, breaking real-time verdict updates unless the Redis Socket.IO adapter is perfectly synchronized.
+### 3.4 Decoupled Worker Socket.IO Emission (ISSUE-OBS-001)
+- **Module:** `backend-nestjs/src/worker.ts` & `src/gateway/events.gateway.ts`
+- **Issue:** When running `PROCESS_ROLE=judge` as a standalone daemon, the worker lacks an attached HTTP server listener. Real-time verdict emissions depend entirely on the Redis adapter. If the adapter encounters network blips, push events are lost silently.
+- **Remediation:** Implement explicit fallback polling on the client and ensure workers publish verdicts to dedicated Redis pub/sub topics consumed by the API server.
 
 ---
 
-## 4. Health Probing & Route Shadowing (ISSUE-ROUT-001)
+## 4. SRE Recommendations
 
-### The Dual Health Controller Conflict
-In `AppModule`:
-1. `HealthModule` registers `@Get('health/live')` and `@Get('health/ready')` in `src/health/health.controller.ts`.
-2. `ObservabilityModule` ALSO registers `@Get('health/live')` and `@Get('health/ready')` in `src/observability/health/health.controller.ts`.
-
-### SRE Failure Mechanism
-- NestJS loads both controllers into the Express router. The controller loaded first intercepts all ALB health probe traffic.
-- If ALB probes hit Controller 1 (which only tests PostgreSQL), and Redis goes down, the pod reports **Healthy (200 OK)** even though BullMQ and authentication are dead.
-- If ALB probes hit Controller 2, probes check both DB and Redis.
-- This creates non-deterministic routing and failure detection depending on module load order.
-
----
-
-## 5. Backup, Disaster Recovery & Shard Coverage Gaps
-
-- **Script:** `scripts/backup.sh`
-- **Finding:** The backup script performs a `pg_dump` targeting only the primary database specified in `DATABASE_URL`.
-- **Coverage Gap:** If database sharding is active (`SUBMISSION_SHARDS`), shard databases `submission-shard-a`, `submission-shard-b`, etc., are **completely omitted** from backups. A disaster recovery restore will recover user profiles and problem statements but lose 100% of student submission history.
-
----
-
-## 6. SRE Recommendations & Action Items
-
-1. **Implement AWS RDS Proxy:** Buffer database connections between API servers and PostgreSQL.
-2. **Isolate Redis Clusters:** Decouple BullMQ persistent queues from rate-limiting/cache instances.
-3. **Canonical Terminus Health Controller:** Delete the redundant health controller and register a single, comprehensive `@nestjs/terminus` health check.
-4. **Update Backup Scripts:** Ensure `scripts/backup.sh` iterates through all shard connection strings in `SUBMISSION_SHARDS`.
-5. **Implement S3 Presigned URLs:** Update `S3Service` to sign GET requests for private bucket prefixes with 1-hour expiration.
+1. **Deploy AWS RDS Proxy:** Interpose a managed connection pooler between the API and RDS PostgreSQL.
+2. **Upgrade Database Instance Class:** Upgrade `db.t4g.micro` to `db.t4g.small` or higher.
+3. **Partition Redis Instances:** Decouple BullMQ persistent queues from rate-limiting/cache instances.
+4. **Automate Dependency Installation in CI:** Enforce `npm ci --legacy-peer-deps` in build containers to catch missing dependency imports before deployment.

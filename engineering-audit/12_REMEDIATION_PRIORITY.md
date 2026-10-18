@@ -1,157 +1,145 @@
-# Remediation Roadmap & Priority Engineering Plan
+# Remediation Roadmap & Priority Engineering Plan (Commit `b846d107`)
 
 **Audit Date:** October 18, 2026  
 **Audited Target:** CodeSkill Platform  
-**Commit:** `2d89bd45`  
+**Commit Inspected:** `b846d107`  
 **Auditor:** Principal Software Architect & Engineering Director  
+**Output Location:** `engineering-audit/`  
 
 ---
 
-## 1. Remediation Phase Overview & Dependency Hierarchy
+## 1. Remediation Phase Hierarchy & Dependency Sequence
 
-To ensure system stability and eliminate production-blocking risks without introducing regressions, remediation must follow a strictly ordered four-phase sequence:
+Remediation must proceed across four prioritized phases. No code should be deployed to production until Phase 1 and Phase 2 are fully completed and verified.
 
 ```mermaid
 flowchart TD
-    subgraph Phase1["Phase 1: Release Blockers (Data Loss & Security)"]
-        F1["F1: Decompose assessment_attempts (ISSUE-CONC-001)"]
-        F2["F2: Atomic submission lock & CAS (ISSUE-CONC-002)"]
-        F3["F3: Cryptographic SEB verification (ISSUE-SEC-001)"]
-        F4["F4: Remove client violation overwrite (ISSUE-SEC-002)"]
+    subgraph Gate1["Gate 1: Immediate Release Blockers"]
+        R1["R1: Install / Vendor @aws-sdk/s3-request-presigner (ISSUE-BUILD-001)"]
+        R2["R2: Fully Decompose assessment_attempts (ISSUE-CONC-001)"]
+        R3["R3: Standardize Safe Exam Browser Header Verification (ISSUE-SEC-001)"]
     end
 
-    subgraph Phase2["Phase 2: Infrastructure & SRE Hardening"]
-        F5["F5: S3 Presigned URLs for proctoring (ISSUE-INFRA-001)"]
-        F6["F6: Fix telemetry route prefix mismatch (ISSUE-OBS-001)"]
-        F7["F7: Consolidate health controllers (ISSUE-ROUT-001)"]
-        F8["F8: Secure Prometheus metrics IP check (ISSUE-SEC-003)"]
-        F9["F9: Eliminate plaintext passwords (ISSUE-SEC-004)"]
-        F10["F10: Right-size RDS pool & max_connections (ISSUE-INFRA-002)"]
+    subgraph Gate2["Gate 2: Infrastructure Stability & Memory Safety"]
+        R4["R4: Right-Size RDS Instance / Deploy RDS Proxy (ISSUE-INFRA-002)"]
+        R5["R5: Split Redis Clusters & Set volatile-lru (ISSUE-INFRA-001)"]
+        R6["R6: Route Contest Finalization through SubmissionStore (ISSUE-DATA-001)"]
     end
 
-    subgraph Phase3["Phase 3: Performance & Scalability"]
-        F11["F11: Piston batch compilation pipeline (ISSUE-PERF-001)"]
-        F12["F12: Redis cluster split & volatile-lru (ISSUE-INFRA-003)"]
-        F13["F13: Atomic discussion counters (ISSUE-DATA-001)"]
-        F14["F14: Redis-backed Pet rate limiter (ISSUE-PERF-002)"]
-        F15["F15: Automate dynamic partitioning (ISSUE-DB-002)"]
+    subgraph Gate3["Gate 3: Performance & Scalability"]
+        R7["R7: Implement Piston Single-Compile Pipeline (ISSUE-PERF-001)"]
+        R8["R8: Migrate Pet Rate Limiter to Redis (ISSUE-PERF-002)"]
     end
 
-    subgraph Phase4["Phase 4: Client & Quality Polish"]
-        F16["F16: TypeORM null: 'throw' safety (ISSUE-DB-001)"]
-        F17["F17: Fix React 19 render-ref warnings (ISSUE-FE-001)"]
-        F18["F18: Remove unreliable DevTools timing heuristics (ISSUE-SEC-005)"]
+    subgraph Gate4["Gate 4: Client & Quality Polish"]
+        R9["R9: Fix React 19 Ref Access in contribution-skyline.tsx (ISSUE-FE-001)"]
+        R10["R10: Eliminate Synchronous setState in Effects (ISSUE-FE-002)"]
     end
 
-    Phase1 --> Phase2 --> Phase3 --> Phase4
+    Gate1 --> Gate2 --> Gate3 --> Gate4
 ```
 
 ---
 
-## 2. Phase 1: Critical Release Blockers (Immediate Action Required)
+## 2. Gate 1: Immediate Release Blockers (Mandatory Hotfixes)
 
-### Task 1.1: Decompose `AssessmentAttempt` & Prevent Data Loss (ISSUE-CONC-001)
-- **Target:** `backend-nestjs/src/assessments/assessments.service.ts` & database entities.
-- **Complexity:** Medium (3–4 engineering days).
-- **Dependencies:** None.
-- **Steps:**
-  1. Author a database migration creating `assessment_proctor_captures` and `assessment_proctor_violations` tables referencing `attempt_id`.
-  2. Migrate existing JSONB arrays into the new tables.
-  3. Refactor `recordProctorCapture` and `recordViolation` to execute pure `INSERT` queries on child tables.
-  4. For `saveProgress`, update only `responses` using a targeted SQL statement:
-     `UPDATE assessment_attempts SET responses = $1, updated_at = NOW() WHERE id = $2`.
-- **Verification:** Run a concurrent benchmark firing 50 parallel saves and 50 captures; assert 0 lost responses.
-
-### Task 1.2: Atomic Lock on Assessment Submission (ISSUE-CONC-002)
-- **Target:** `backend-nestjs/src/assessments/assessments.service.ts` (L1624–1750).
-- **Complexity:** Low (1 engineering day).
-- **Dependencies:** None.
-- **Steps:**
-  1. Refactor `submitAttempt` to perform an atomic compare-and-swap state transition:
-     `UPDATE assessment_attempts SET status = 'submitting' WHERE id = $1 AND status = 'in_progress' RETURNING id`.
-  2. If 0 rows return, immediately throw `ConflictException('Assessment is already being submitted or completed')`.
-  3. Execute `evaluateAttempt` within a protected background job or isolated transaction.
-- **Verification:** Unit test firing 5 simultaneous POST requests to `/api/assessments/:id/submit`; assert exactly 1 succeeds.
-
-### Task 1.3: Cryptographic Safe Exam Browser Verification (ISSUE-SEC-001)
-- **Target:** `backend-nestjs/src/exam-security/exam-security.service.ts`.
-- **Complexity:** Low-Medium (2 engineering days).
-- **Dependencies:** None.
-- **Steps:**
-  1. Read headers `X-SafeExamBrowser-RequestHash` and `X-SafeExamBrowser-ConfigKeyHash`.
-  2. Compute SHA-256 HMAC of the requested URL + server-stored SEB Config Key.
-  3. Compare hashes using constant-time comparison (`crypto.timingSafeEqual`).
-  4. Remove hardcoded `'simulate-secure-token'` and issue cryptographically signed session tokens.
-- **Verification:** Automated tests asserting requests without genuine headers return HTTP 403.
-
-### Task 1.4: Immutable Server-Side Proctoring Violations (ISSUE-SEC-002)
-- **Target:** `backend-nestjs/src/assessments/assessments.service.ts` (L1917–1926).
+### Task 1.1: Resolve Missing S3 Presigner Dependency (ISSUE-BUILD-001)
+- **Target Files:** `backend-nestjs/src/s3/s3.service.ts` & `node_modules/`
+- **Severity:** CRITICAL
 - **Complexity:** Low (0.5 engineering days).
 - **Dependencies:** None.
-- **Steps:**
-  1. Delete logic comparing client violation array length with server violation array length.
-  2. Treat client violation submissions as unverified claims; never overwrite server violation records.
-- **Verification:** Test submitting a truncated or synthetic violation array; assert server records remain unchanged.
+- **Implementation Steps:**
+  1. Populate `@aws-sdk/s3-request-presigner` and its dependency tree into `node_modules` (or vendor the bundle locally under `src/s3/vendor/`).
+  2. Run `(cd backend-nestjs && npx --no-install tsc -p tsconfig.build.json --noEmit --incremental false)` and verify 0 errors.
+  3. Run `npm test --prefix backend-nestjs -- --runInBand` and assert all 72 test suites pass.
+
+### Task 1.2: Complete Concurrency Isolation for Assessments (ISSUE-CONC-001)
+- **Target Files:** `backend-nestjs/src/assessments/assessments.service.ts` & database entities.
+- **Severity:** CRITICAL
+- **Complexity:** Medium (3 engineering days).
+- **Dependencies:** None.
+- **Implementation Steps:**
+  1. Author a database migration creating `assessment_proctor_captures` (`id`, `attempt_id`, `url`, `type`, `captured_at`).
+  2. Refactor `recordProctorCapture` to perform a pure SQL `INSERT INTO assessment_proctor_captures (...)` without modifying `assessment_attempts`.
+  3. In `saveProgress`, replace `attemptRepo.save(attempt)` with an atomic parameterized query:
+     ```sql
+     UPDATE assessment_attempts
+     SET responses = $1, time_spent_seconds = $2, updated_at = NOW()
+     WHERE id = $3 AND status = 'in_progress';
+     ```
+- **Verification:** Run a Testcontainers-backed concurrency integration test dispatching 30 simultaneous saves and captures; assert 0 responses or captures are dropped.
+
+### Task 1.3: Standardize Safe Exam Browser Cryptographic Verification (ISSUE-SEC-001)
+- **Target Files:** `backend-nestjs/src/exam-security/exam-security.service.ts`
+- **Severity:** HIGH
+- **Complexity:** Low-Medium (1.5 engineering days).
+- **Dependencies:** None.
+- **Implementation Steps:**
+  1. Remove `hasMatchingKey = clientSentKey === expectedConfigKey` from `initSecureSession`.
+  2. Disallow setting `clientType = 'SEB'` based purely on `clientBody.isSEB` or User-Agent.
+  3. Compute the expected RequestHash using the full request URL:
+     ```typescript
+     const fullUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+     const expectedHash = crypto.createHash('sha256').update(fullUrl + expectedConfigKey).digest('hex');
+     ```
+  4. Compare with `headers['x-safeexambrowser-requesthash']` using `crypto.timingSafeEqual`.
+- **Verification:** Automated tests confirming that requests without genuine SEB header hashes are rejected with HTTP 403.
 
 ---
 
-## 3. Phase 2: Infrastructure Stability & Observability
+## 3. Gate 2: Infrastructure Stability & Memory Safety
 
-### Task 2.1: S3 Presigned URLs for Proctoring Media (ISSUE-INFRA-001)
-- **Target:** `backend-nestjs/src/s3/s3.service.ts` (L90–98).
-- **Steps:** Inject `@aws-sdk/s3-request-presigner` and implement `getPresignedUrl(key: string, expiresInSeconds = 3600)` for all non-avatar asset retrieval.
+### Task 2.1: Right-Size RDS Instance & Deploy RDS Proxy (ISSUE-INFRA-002)
+- **Target Files:** `terraform/modules/rds/main.tf` & `terraform/environments/production/main.tf`
+- **Severity:** HIGH
+- **Complexity:** Medium (2 engineering days).
+- **Implementation Steps:**
+  1. Upgrade RDS instance class to `db.t4g.small` (2 GiB RAM) to safely support `max_connections = 200`.
+  2. Provision AWS RDS Proxy between API and PostgreSQL, setting target connection pool max to 30.
+  3. Lower backend `DB_POOL_MAX` to `10` per API instance.
 
-### Task 2.2: Correct Client Telemetry Path (ISSUE-OBS-001)
-- **Target:** `backend-nestjs/src/observability/health/health.controller.ts` (L106).
-- **Steps:** Change `@Post('api/telemetry/client-events')` to `@Post('telemetry/client-events')`.
+### Task 2.2: Decouple BullMQ Redis from Cache / Throttler (ISSUE-INFRA-001)
+- **Target Files:** `terraform/modules/redis/main.tf` & `backend-nestjs/src/app.module.ts`
+- **Severity:** HIGH
+- **Complexity:** Medium (2 engineering days).
+- **Implementation Steps:**
+  1. Deploy a dedicated Redis instance for BullMQ persistent queues (`noeviction`).
+  2. Configure the caching and rate-limiting Redis cluster with `maxmemory-policy: volatile-lru`.
 
-### Task 2.3: Consolidate Conflicting Health Controllers (ISSUE-ROUT-001)
-- **Target:** Delete `src/health/health.controller.ts` and route all health probing to a standardized `@nestjs/terminus` controller.
-
-### Task 2.4: Secure Metrics IP Filter & Enforce Scrape Token (ISSUE-SEC-003)
-- **Target:** `backend-nestjs/src/observability/metrics/metrics.controller.ts` (L20–29).
-- **Steps:** Use `ipaddr.js` for RFC 1918 CIDR matching and require a mandatory `Bearer` token on `/api/metrics`.
-
-### Task 2.5: Remove Plaintext Passwords in `email_jobs` (ISSUE-SEC-004)
-- **Target:** `backend-nestjs/src/students/students.service.ts` (L782).
-- **Steps:** Store a cryptographically random, hashed activation token and send an activation link instead of raw passwords.
-
-### Task 2.6: Right-Size RDS Connections & Deploy PgBouncer (ISSUE-INFRA-002)
-- **Target:** `terraform/modules/rds/main.tf` & `database.module.ts`.
-- **Steps:** Deploy AWS RDS Proxy or increase `max_connections` parameter group ceiling to 200+. Set backend `DB_POOL_MAX = 10`.
+### Task 2.3: Route Contest Finalization through `SubmissionStore` (ISSUE-DATA-001)
+- **Target Files:** `backend-nestjs/src/contests/contests.service.ts`
+- **Severity:** MEDIUM
+- **Complexity:** Low (1 engineering day).
+- **Implementation Steps:** Replace `this.submissionRepo.find({ where: { contestId } })` with a query through `SubmissionStore` that aggregates submissions across all active shard instances.
 
 ---
 
-## 4. Phase 3: Performance, Scalability & Architecture
+## 4. Gate 3: Performance & Scalability
 
 ### Task 3.1: Piston Batch Compilation Pipeline (ISSUE-PERF-001)
-- **Target:** `backend-nestjs/src/execution/execution.service.ts` (L460–482).
-- **Steps:** For compiled languages (C, C++, Java, Rust), invoke Piston to compile source into a binary once. Execute all $T$ test cases against the binary artifact, reducing execution CPU by up to 80%.
+- **Target Files:** `backend-nestjs/src/execution/execution.service.ts`
+- **Severity:** HIGH
+- **Complexity:** High (3–4 engineering days).
+- **Implementation Steps:** For compiled languages (C, C++, Java, Rust), invoke Piston to compile source code into an executable binary once, cache the binary artifact in worker memory or shared volume, and execute test cases sequentially against the binary.
 
-### Task 3.2: Separate Redis Clusters & Eviction Policy (ISSUE-INFRA-003)
-- **Target:** `terraform/modules/redis/main.tf` & `backend-nestjs/src/app.module.ts`.
-- **Steps:** Provision two Redis instances: (1) `bullmq-redis` with `noeviction` for queues, (2) `cache-redis` with `volatile-lru` for rate-limiting, session, and cache.
-
-### Task 3.3: Atomic Discussion Vote Counters (ISSUE-DATA-001)
-- **Target:** `backend-nestjs/src/discussions/discussions.service.ts`.
-- **Steps:** Replace `thread.upvotes = thread.upvotes + 1; save()` with `this.threadRepo.increment({ id }, 'upvotes', 1)`.
-
-### Task 3.4: Dynamic Partition Maintenance (ISSUE-DB-002)
-- **Target:** `backend-nestjs/src/database/declarative-partitioning.ts`.
-- **Steps:** Implement automated partition generation using `pg_partman` or a scheduled monthly cron job.
+### Task 3.2: Distributed Redis Rate Limiter for AI Pet (ISSUE-PERF-002)
+- **Target Files:** `backend-nestjs/src/pet/pet.service.ts`
+- **Severity:** MEDIUM
+- **Complexity:** Low (1 engineering day).
+- **Implementation Steps:** Replace in-process `Map` with Redis sliding window counter (`INCR` with 60s `EXPIRE`).
 
 ---
 
-## 5. Phase 4: Client & Quality Polish
+## 5. Gate 4: Client & Quality Polish
 
-### Task 4.1: Enforce TypeORM Safe Mode (ISSUE-DB-001)
-- **Target:** `backend-nestjs/src/database/database.module.ts`.
-- **Steps:** Change `invalidWhereValuesBehavior: { null: 'throw' }`.
+### Task 4.1: Fix React 19 Ref Access During Render (ISSUE-FE-001)
+- **Target Files:** `frontend-v2/src/components/ui/contribution-skyline.tsx`
+- **Severity:** LOW
+- **Complexity:** Low (0.5 engineering days).
+- **Implementation Steps:** Move `cfg.current = ...` into `React.useEffect` to eliminate React 19 concurrent render compiler warnings.
 
-### Task 4.2: Resolve React 19 Render-Phase Warnings (ISSUE-FE-001)
-- **Target:** `frontend-v2/src/components/auth/otp-input.tsx` & `useFullscreen.ts`.
-- **Steps:** Defer ref interactions and focus mutations into `useEffect` hooks.
-
-### Task 4.3: Refactor Anti-Cheat DevTools Heuristics (ISSUE-SEC-005)
-- **Target:** `frontend-v2/src/hooks/useDevToolsDetect.ts`.
-- **Steps:** Remove console timing benchmarks; rely exclusively on window dimension deltas and official SEB integration.
+### Task 4.2: Eliminate Synchronous `setState` in Effects (ISSUE-FE-002)
+- **Target Files:** `frontend-v2/src/components/ui/otp-input.tsx` & `modern-loader.tsx`
+- **Severity:** LOW
+- **Complexity:** Low (0.5 engineering days).
+- **Implementation Steps:** Derive state values during render instead of scheduling synchronous state updates inside `useEffect`.

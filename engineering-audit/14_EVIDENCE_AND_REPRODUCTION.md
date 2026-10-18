@@ -1,192 +1,168 @@
-# Evidence, Reproduction Proofs & Verification Scripts
+# Evidence, Reproduction Proofs & Verification Logs (Commit `b846d107`)
 
 **Audit Date:** October 18, 2026  
 **Audited Target:** CodeSkill Platform  
-**Commit:** `2d89bd45`  
+**Commit Inspected:** `b846d107`  
 **Auditor:** Quality Assurance & Verification Specialist  
+**Output Location:** `engineering-audit/`  
 
 ---
 
-## 1. Reproduction Proofs & Static Traces
+## 1. Reproduction Proofs & Verification Logs
 
-This document provides concrete code traces, curl requests, and synthetic reproduction scripts for the defects discovered during the pre-production audit.
+This document contains empirical commands, observed outputs, and reproduction traces collected during the independent engineering reassessment of commit `b846d107`.
 
 ---
 
-### Reproduction 1: Safe Exam Browser Bypass (ISSUE-SEC-001)
+### Reproduction 1: Backend TypeScript Compilation & Test Suite Failure (ISSUE-BUILD-001)
 
 #### Verification Command
 ```bash
-curl -X POST http://localhost:5001/api/exam-security/verify \
+(cd backend-nestjs && npx --no-install tsc -p tsconfig.build.json --noEmit --incremental false)
+```
+
+#### Observed Compiler Output (Exit Code: 2)
+```
+src/s3/s3.service.ts:13:30 - error TS2307: Cannot find module '@aws-sdk/s3-request-presigner' or its corresponding type declarations.
+
+13 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Found 1 error in src/s3/s3.service.ts:13
+```
+
+#### Observed Test Suite Failure (Jest Log)
+```bash
+npm test --prefix backend-nestjs -- --runInBand
+```
+Output:
+```
+FAIL src/assessments/assessment-concurrency-integrity.spec.ts
+  ● Test suite failed to run
+
+    Cannot find module '@aws-sdk/s3-request-presigner' from 's3/s3.service.ts'
+
+    Require stack:
+      s3/s3.service.ts
+      assessments/assessments.service.ts
+      assessments/assessment-concurrency-integrity.spec.ts
+
+      11 |   GetObjectCommand,
+      12 | } from '@aws-sdk/client-s3';
+    > 13 | import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+         | ^
+
+Test Suites: 9 failed, 63 passed, 72 total
+Tests:       9 skipped, 535 passed, 544 total
+Snapshots:   0 total
+Time:        15.043 s
+```
+*Proof:* The missing dependency breaks the TypeScript build and immediately fails 9 backend test suites.
+
+---
+
+### Reproduction 2: Safe Exam Browser Bypass via Plaintext ConfigKey (ISSUE-SEC-001)
+
+#### Code Trace in `backend-nestjs/src/exam-security/exam-security.service.ts`
+```typescript
+// Line 50:
+const clientType = (clientBody.isSEB || hasSebHeader || isSebUserAgent) ? 'SEB' : 'BROWSER';
+
+// Lines 64-65:
+const clientSentKey = String(configKey || '').trim();
+const hasMatchingKey = clientSentKey && clientSentKey === expectedConfigKey;
+
+if (!hasMatchingKey && !hasMatchingHash) {
+  throw new ForbiddenException('Safe Exam Browser configuration key mismatch...');
+}
+```
+
+#### Verification Command (Bypassing SEB from Terminal)
+```bash
+# Attacker inspects exam .seb file, extracts configKey, and sends request from curl:
+curl -X POST http://localhost:5001/api/exam-security/init-session \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <STUDENT_JWT>" \
-  -d '{"isSEB": true}'
+  -d '{
+    "assessmentId": "asmt-uuid-1",
+    "isSEB": true,
+    "configKey": "SECRET_EXAM_CONFIG_KEY_123"
+  }'
 ```
 
-#### Observed Server Response
+#### Expected Server Response
 ```json
 {
-  "verified": true,
-  "clientType": "SEB",
-  "token": "simulate-secure-token"
+  "success": true,
+  "sessionId": "session-uuid",
+  "status": "VERIFIED",
+  "token": "4a7c89f..."
 }
 ```
-*Proof:* The server accepts unauthenticated, un-hashed requests and confirms the client as genuine Safe Exam Browser.
+*Proof:* `hasMatchingKey` evaluates to `true`, granting verified SEB access without cryptographic RequestHash validation.
 
 ---
 
-### Reproduction 2: Prometheus Metrics IP Bypass (ISSUE-SEC-003)
+### Reproduction 3: Assessment Save vs Proctor Capture Race Trace (ISSUE-CONC-001)
 
-#### Verification Command
-```bash
-# Spoofed or forwarded IP containing '10.' (e.g. 210.12.34.56):
-curl -X GET http://localhost:5001/api/metrics \
-  -H "X-Forwarded-For: 210.12.34.56"
-```
+#### Code Trace in `backend-nestjs/src/assessments/assessments.service.ts`
 
-#### Code Evidence (`backend-nestjs/src/observability/metrics/metrics.controller.ts`)
+**Thread A: Student Auto-Save (`saveProgress` L1531-1638):**
 ```typescript
-const clientIp = req.ip || req.connection.remoteAddress || '';
-const isPrivate = clientIp.includes('10.') || clientIp.includes('172.') || clientIp.includes('192.168.');
-if (!isPrivate && scrapeToken !== expectedToken) {
-  throw new ForbiddenException('Access denied');
-}
-```
-*Proof:* Because `"210.12.34.56".includes('10.')` evaluates to `true`, the `ForbiddenException` is skipped and full Prometheus metrics are returned without authentication.
-
----
-
-### Reproduction 3: Telemetry Route Prefix 404 (ISSUE-OBS-001)
-
-#### Verification Command
-```bash
-# Request sent by frontend error-boundary.tsx:
-curl -i -X POST http://localhost:5001/api/telemetry/client-events \
-  -H "Content-Type: application/json" \
-  -d '{"error": "TypeError: Cannot read properties of undefined"}'
+const attempt = await this.attemptRepo.findOne({
+  where: { assessmentId: assessment.id, studentId, status: 'in_progress' },
+});
+// attempt.captures holds [frame1...frame20]
+attempt.responses = updatedResponses;
+// Writes back entire attempt row with stale captures array:
+await this.attemptRepo.save(attempt);
 ```
 
-#### Observed HTTP Status
-```http
-HTTP/1.1 404 Not Found
-Content-Type: application/json; charset=utf-8
-
-{
-  "message": "Cannot POST /api/telemetry/client-events",
-  "error": "Not Found",
-  "statusCode": 404
-}
-```
-
-#### Actual Registered Route
-```bash
-curl -i -X POST http://localhost:5001/api/api/telemetry/client-events \
-  -H "Content-Type: application/json" \
-  -d '{"event": "test"}'
-# Returns 201 Created (proving route is mounted at /api/api/...)
-```
-
----
-
-### Reproduction 4: Assessment Attempt Autosave vs Proctor Capture Collision (ISSUE-CONC-001)
-
-#### Synthetic Concurrency Test Script (`concurrency-race-test.ts`)
+**Thread B: Background Proctoring (`recordProctorCapture` L2384-2390):**
 ```typescript
-import axios from 'axios';
-
-async function testAssessmentRaceCondition(attemptId: string, jwt: string) {
-  const client = axios.create({
-    baseURL: 'http://localhost:5001/api',
-    headers: { Authorization: `Bearer ${jwt}` },
-  });
-
-  console.log('Dispatching concurrent saveProgress and recordProctorCapture...');
-
-  // Thread 1: Autosave student code
-  const p1 = client.post(`/assessments/${attemptId}/progress`, {
-    responses: { q1: 'console.log("CRITICAL_STUDENT_CODE");' },
-  });
-
-  // Thread 2: Background webcam proctor capture
-  const p2 = client.post(`/assessments/${attemptId}/proctor-capture`, {
-    frameUrl: 'https://storage/proctoring/frame_999.jpg',
-  });
-
-  await Promise.all([p1, p2]);
-
-  // Inspect database row:
-  const res = await client.get(`/assessments/${attemptId}`);
-  const savedCode = res.data.responses?.q1;
-  const captures = res.data.captures;
-
-  console.log('Saved Code:', savedCode);
-  console.log('Captures Count:', captures?.length);
-
-  if (savedCode !== 'console.log("CRITICAL_STUDENT_CODE");') {
-    console.error('FATAL ERROR: Student code was overwritten and lost!');
-  } else if (!captures?.some((c: any) => c.frameUrl.includes('frame_999'))) {
-    console.error('ERROR: Proctor capture frame was clobbered!');
-  } else {
-    console.log('Both writes survived (rare non-interleaved timing).');
-  }
-}
+const freshAttempt = await this.attemptRepo.findOne({ where: { id: attempt.id } });
+const targetAttempt = freshAttempt || attempt;
+targetAttempt.captures = [...captures, newCapture]; // holds [frame1...frame21]
+await this.attemptRepo.save(targetAttempt);
 ```
+
+**Failure Sequence:**
+1. Thread A loads `attempt` at $T=0$ (captures: 20).
+2. Thread B completes S3 upload, loads `freshAttempt` at $T=50\text{ ms}$ (captures: 20).
+3. Thread B saves `targetAttempt` at $T=60\text{ ms}$ (captures: 21).
+4. Thread A completes response validation and saves `attempt` at $T=70\text{ ms}$ (captures: 20).
+5. **Database Row Overwritten:** `captures` array is reverted from 21 back to 20. Frame 21 is permanently erased.
 
 ---
 
-### Reproduction 5: S3 Proctoring Access 403 Forbidden (ISSUE-INFRA-001)
+### Reproduction 4: React 19 Ref Access During Render (ISSUE-FE-001)
 
-#### Verification Command
+#### ESLint Verification Command
 ```bash
-# Fetching proctoring snapshot returned by backend:
-curl -i https://app-storage-bucket.s3.us-east-1.amazonaws.com/proctoring/attempt-uuid/capture-1.jpg
+npm run lint --prefix frontend-v2
 ```
 
-#### Observed HTTP Status
-```xml
-HTTP/1.1 403 Forbidden
-x-amz-error-code: AccessDenied
-
-<?xml version="1.0" encoding="UTF-8"?>
-<Error>
-  <Code>AccessDenied</Code>
-  <Message>Access Denied</Message>
-</Error>
+#### Observed Linter Warning
 ```
-*Proof:* Terraform policy grants public `GetObject` only to `avatars/*`. Because `S3Service` constructs raw public HTTPS URLs instead of using `getSignedUrl()`, all proctoring images fail to render.
+/Users/venkateshk22/Documents/codeskill/frontend-v2/src/components/ui/contribution-skyline.tsx
+   509:3  warning  Error: Cannot access refs during render
+
+React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).
+
+/Users/venkateshk22/Documents/codeskill/frontend-v2/src/components/ui/contribution-skyline.tsx:509:3
+  507 |   // Everything the render loop reads, refreshed every render so the loop never closes over stale props.
+  508 |   const cfg = React.useRef({ model, duration, heightScale, orbit, palette, legendLevel, ... })
+> 509 |   cfg.current = { model, duration, heightScale, orbit, palette, legendLevel, ... }
+      |   ^^^^^^^^^^^ Cannot update ref during render
+```
+*Proof:* Direct mutation of `ref.current` during render violates React 19 compiler constraints.
 
 ---
 
-### Reproduction 6: Plaintext Passwords in `email_jobs` (ISSUE-SEC-004)
+### Reproduction 5: Verified Fixes from PR #95
 
-#### Database Verification Query
-```sql
-SELECT id, "userId", type, "temporaryPassword", status, "createdAt" 
-FROM email_jobs 
-WHERE type = 'WELCOME_PASSWORD' AND "temporaryPassword" IS NOT NULL 
-LIMIT 5;
-```
-
-#### Observed Database Result
-```
-                  id                  |                userId                |       type       | temporaryPassword | status  |          createdAt          
---------------------------------------+--------------------------------------+------------------+-------------------+---------+-----------------------------
- 4a9f1b2c-3d4e-5f6a-7b8c-9d0e1f2a3b4c | 11111111-2222-3333-4444-555555555555 | WELCOME_PASSWORD | P@ssw0rd2026!     | PENDING | 2026-10-18 10:14:22.123456+00
-```
-*Proof:* Passwords are saved in cleartext directly in PostgreSQL column `temporaryPassword`.
-
----
-
-### Reproduction 7: Dual Health Controller Collision (ISSUE-ROUT-001)
-
-#### Route Registration Inspection
-1. `backend-nestjs/src/health/health.controller.ts`:
-   - `@Controller('health')` -> Registers `GET /api/health/live` and `GET /api/health/ready`.
-2. `backend-nestjs/src/observability/health/health.controller.ts`:
-   - `@Controller('health')` -> Registers `GET /api/health/live` and `GET /api/health/ready`.
-
-#### Failure Mechanism
-When Express compiles the router stack, the first registered handler always claims the route:
-- Controller 1 checks `TypeORM` connection only.
-- Controller 2 checks `TypeORM` AND `Redis` connection.
-If Controller 1 takes precedence, load balancers mark the node healthy even when Redis is down, causing all subsequent user logins and BullMQ jobs to fail.
+#### Verified Remediations on Commit `b846d107`
+1. **Telemetry Route:** Tested route `POST /api/telemetry/client-events` returns HTTP 204 No Content (route collision resolved).
+2. **Prometheus Metrics IP Check:** Tested in `metrics.controller.spec.ts`: RFC 1918 regexes reject unauthorized public IPs containing substring `'10.'` (e.g. `210.45.1.2`).
+3. **Discussion Voting:** Tested in `discussions.service.ts`: `voteThread` runs inside a pessimistic write lock transaction, preventing vote count write skew.
+4. **Temporary Password Encryption:** Tested in `credential-crypto.util.spec.ts`: AES-256-GCM encrypts temporary passwords before database storage.

@@ -1,10 +1,11 @@
-# Pre-Production Engineering Audit: Executive Summary
+# Pre-Production Engineering Audit Re-Assessment: Executive Summary
 
 **Date:** October 18, 2026  
 **Target Repository:** CodeSkill Platform (`backend-nestjs` & `frontend-v2`)  
-**Commit Inspected:** `2d89bd45` (HEAD -> main)  
-**Audit Scope:** Full-Stack Pre-Production Engineering Assessment (17 Engineering Disciplines)  
-**Audit Mode:** Non-Destructive, Read-Only, Independent Static & Empirical Analysis  
+**Commit Inspected:** `b846d107` (Merge PR #95 `fix/audit-003-remediation`)  
+**Audit Scope:** Full-Stack Pre-Production Engineering Re-Assessment (17 Engineering Disciplines)  
+**Audit Mode:** Non-Destructive, Read-Only, Independent Multi-Disciplinary Analysis  
+**Output Location:** `engineering-audit/`  
 
 ---
 
@@ -12,32 +13,48 @@
 
 ### Production Readiness Verdict: **NOT PRODUCTION READY (RELEASE BLOCKED)**
 
-The CodeSkill platform demonstrates sophisticated functional capabilities, including multi-language automated code judging, Safe Exam Browser (SEB) proctoring hooks, rich browser-based IDE integration, real-time WebSockets, dynamic problem management, contest leaderboards, and partitioned submission architectures. The development team has engineered comprehensive unit test suites (68 backend suites with 580 passing tests; 47 frontend suites with 344 passing tests) and clean TypeScript type-checking across both codebases.
+Following the initial audit and the subsequent merge of PR #95 (`b846d107`), the CodeSkill platform made targeted progress in several areas:
+- **Telemetry Routing Fixed:** `HealthAndTelemetryController` correctly routes to `telemetry/client-events`, eliminating the previous 404 route collision.
+- **Health Route Shadowing Resolved:** Competing health check endpoints were deduplicated.
+- **Metrics Scraping Hardened:** Prometheus IP check now uses strict RFC 1918 CIDR regexes instead of substring matching.
+- **Credential Storage Secured:** Temporary student passwords in `email_jobs` are now encrypted via AES-256-GCM.
+- **Partition Horizon Extended:** Declarative partitioning added a catch-all default partition and yearly tables through 2030.
+- **TypeORM Safety Enforced:** `null: 'throw'` was applied to prevent BOLA query stripping.
+- **Discussion Voting Protected:** Discussion upvotes/downvotes now run inside pessimistic write-locked transactions.
 
-However, a rigorous architectural and concurrency audit reveals **critical pre-production failure modes** that pose catastrophic risks to data integrity, system availability, and security in a concurrent production environment:
+However, a rigorous independent reassessment of commit `b846d107` reveals **critical new and unaddressed pre-production release blockers**:
 
-1. **Silent Student Data Loss Under Assessment Concurrency:** High-frequency proctoring background capture beacons race with periodic auto-save and submission requests on the same database entity (`assessment_attempts`). Due to non-atomic in-memory mutations without database row-level locking or isolated sub-entity tables, student code and answers are silently overwritten and destroyed in production.
-2. **Double Evaluation & External Resource Exhaustion:** Assessment submission (`submitAttempt` and `evaluateAttempt`) does not execute under transactional idempotency or row locking. Simultaneous client submits or network retries trigger duplicate parallel test-case executions on the Piston/Docker backend, causing worker thread pool starvation and massive CPU spikes.
-3. **Complete Safe Exam Browser (SEB) Integrity Bypass:** The exam security validation relies exclusively on a client-submitted boolean (`clientBody.isSEB`) rather than cryptographic validation of HTTP headers against SEB Config Key or Browser Exam Key hashes. Furthermore, server token generation contains hardcoded mock secrets (`simulate-secure-token`).
-4. **Administrative Proctoring Evidence 403 Lockout:** Proctoring snapshot images stored in AWS S3 (`proctoring/*`) are generated with raw public URLs against a bucket policy restricting public access to `avatars/*`. The backend lacks S3 presigned URL generation, rendering candidate proctoring snapshots 100% inaccessible to instructors and administrators.
-5. **Autoscaling Connection Starvation & Shared Redis OOM Cascades:** Infrastructure configurations enforce a rigid 50-connection ceiling on PostgreSQL RDS (`db.t4g.micro`) while API instances default to 50 connections each, guaranteeing immediate database failure upon horizontal autoscaling. Concurrently, a shared single Redis cluster with `maxmemory-policy: noeviction` will hard-fail all user logins, job enqueuing, and Socket.IO messages once memory thresholds are crossed.
+1. **Broken Dependency & Immediate TypeScript/Test Failure (NEW CRITICAL DEFECT):**
+   - PR #95 introduced `import { getSignedUrl } from '@aws-sdk/s3-request-presigner';` in `backend-nestjs/src/s3/s3.service.ts` and added it to `package.json`.
+   - However, the package was never installed in `node_modules`. As a result, backend compilation (`tsc -p tsconfig.build.json --noEmit`) hard-fails with TS2307 (`Cannot find module '@aws-sdk/s3-request-presigner'`), 9 backend test suites immediately fail to run, and the production backend crashes on startup.
+2. **Incomplete Concurrency Fix & Persistent Assessment Data Loss Hazard:**
+   - In `backend-nestjs/src/assessments/assessments.service.ts`, PR #95 added a `findOne` reload inside `recordProctorCapture` *after* the S3 upload.
+   - However, `saveProgress` (lines 1531–1638) still reads the full entity, updates `attempt.responses`, and calls `await this.attemptRepo.save(attempt)` without any row locks or version checks.
+   - If `saveProgress` executes `findOne` while `recordProctorCapture` is saving, `saveProgress` writes back its stale snapshot, clobbering the proctoring capture array. Conversely, if `recordProctorCapture` writes after `saveProgress`, student code is erased. The core architectural flaw—storing high-frequency webcam telemetry and student exam code in a single non-locked entity row—remains unaddressed.
+3. **Flawed Safe Exam Browser (SEB) Verification Logic:**
+   - In `backend-nestjs/src/exam-security/exam-security.service.ts`, `clientType` is set to `'SEB'` if `clientBody.isSEB || hasSebHeader || isSebUserAgent`. If `security.configKey` is not configured, any browser sending `{ isSEB: true }` or spoofing the User-Agent still bypasses SEB enforcement.
+   - Even when `security.configKey` is set, the server permits `clientSentKey === expectedConfigKey`, allowing attackers to supply the secret key in plaintext JSON rather than sending cryptographic RequestHash headers.
+   - Furthermore, the server's hash check hashes `assessment.id + expectedConfigKey` rather than the genuine SEB standard of `URL + ConfigKey`, making genuine SEB clients incompatible with the platform.
+4. **O(N) Piston Compilation Multiplier Unchanged:**
+   - Multi-test submissions still compile code $T$ times for $T$ test cases in `execution.service.ts`, maintaining an 8.1× CPU amplification factor on execution hosts.
+5. **Shared Single Redis Instance with `noeviction`:**
+   - BullMQ, rate limiting, and WebSockets share a single Redis instance with `maxmemory-policy: noeviction`. Memory exhaustion halts all job queuing and user logins.
 
 ---
 
 ## 2. Engineering Maturity Assessment
 
-| Discipline | Maturity Level | Rating (1-5) | Primary Concern / Justification |
+| Discipline | Maturity Level | Rating (1-5) | Assessment on Commit `b846d107` |
 | :--- | :--- | :---: | :--- |
-| **System Architecture** | Mature / Transitional | 3.5 / 5 | Well-structured domain boundaries; hybrid monolithic API with external execution workers. Fragile worker gateway integration. |
-| **Frontend Architecture** | Moderate | 3.0 / 5 | Next.js App Router with robust Monaco editor integration; React 19 render-ref warnings, unhandled telemetry 404s, and aggressive anti-cheat heuristics. |
-| **Backend & API Architecture** | Mature | 3.5 / 5 | Clean NestJS modules and DTO validation pipes; conflicting health route declarations and inconsistent telemetry path prefixes. |
-| **Database Architecture** | High Risk | 2.0 / 5 | Overloaded entity columns (`responses` JSONB, `captures` JSONB); declarative partitioning is hardcoded to 2026/2027; dangerous `null: 'ignore'` in TypeORM. |
-| **Concurrency & Integrity** | Critical Risk | 1.5 / 5 | Pervasive read-modify-write anti-patterns without pessimistic locks; write skew in voting; race conditions during assessment saves. |
-| **Application Security** | Moderate Risk | 2.5 / 5 | Strong JWT and Argon2 hashing; SEB authentication bypass, metrics IP filter bypass, and plaintext temporary password storage in DB. |
-| **SRE & Operational Reliability** | High Risk | 2.0 / 5 | Shared Redis `noeviction` policy; dual competing health controllers; worker gateway detached from HTTP server; RDS pool starvation. |
-| **Performance & Scalability** | Moderate Risk | 2.5 / 5 | Piston compiles every test case independently (O(N) compilation cost per submission); in-memory unbounded rate limiting maps. |
-| **Cloud Infrastructure (DevOps)** | Moderate Risk | 2.5 / 5 | Terraform modules exist for dev/prod; missing S3 presigned URL configuration, hardcoded low RDS connection caps, and single-AZ Redis. |
-| **QA & Test Coverage** | Good (Static/Unit) | 3.5 / 5 | Extensive unit test coverage; complete absence of integration/concurrency tests simulating multi-client assessment autosaves. |
+| **System Architecture** | Transitional | 3.0 / 5 | Modular service boundaries, but build is broken by uninstalled presigner dependency. |
+| **Frontend Architecture** | Mature | 3.5 / 5 | Next.js 15 / React 19; all 47 frontend unit suites pass (344 tests); clean typecheck. |
+| **Backend & API Architecture** | Broken Build | 2.0 / 5 | Backend `tsc` fails with code 2; 9 test suites fail due to missing `@aws-sdk/s3-request-presigner`. |
+| **Database Architecture** | Moderate Risk | 3.0 / 5 | Partitioning horizon fixed to 2030; `null: 'throw'` applied; overloaded entity persists. |
+| **Concurrency & Integrity** | High Risk | 2.5 / 5 | Partial reload in `recordProctorCapture` does not prevent race with `saveProgress`. |
+| **Application Security** | Moderate Risk | 2.5 / 5 | Passwords now encrypted in `email_jobs`; SEB verification contains multiple bypass vectors. |
+| **SRE & Reliability** | Moderate Risk | 2.5 / 5 | Telemetry route prefix fixed; RDS max_connections bumped to 200; shared Redis `noeviction` persists. |
+| **Performance & Scalability** | High Risk | 2.0 / 5 | Piston multi-compilation multiplier remains unaddressed; 200 connections on 1GB RAM RDS risks OOM. |
+| **QA & Test Automation** | Degraded | 2.5 / 5 | 9 test suites fail in backend due to module import failure. Frontend suite maintains 100% pass rate. |
 
 ---
 
@@ -45,65 +62,33 @@ However, a rigorous architectural and concurrency audit reveals **critical pre-p
 
 | Severity Level | Count | Definition & Production Impact |
 | :--- | :---: | :--- |
-| **CRITICAL** | **2** | Immediate data loss, severe vulnerability, or total platform failure under routine concurrent load. |
-| **HIGH** | **7** | Major security bypass, administrative outage, infrastructure deadlocks, or silent telemetry failure. |
-| **MEDIUM** | **6** | Write skew, memory leaks, unencrypted credentials in operational tables, or connection starvation risks. |
-| **LOW / HYPOTHESIS** | **3** | Telemetry anomalies, minor UI re-render thrashing, and unindexed auxiliary queries. |
-| **TOTAL ISSUES** | **18** | **Exhaustive audit inventory across 14 specialized reports.** |
+| **CRITICAL** | **2** | Uninstalled module dependency breaks backend build/startup; persistent race condition in assessment saves causes student data loss. |
+| **HIGH** | **4** | Safe Exam Browser logic flaws allow lockdown bypass; Piston multi-compilation CPU multiplier; shared Redis `noeviction` OOM; RDS memory pressure with 200 connections on `db.t4g.micro`. |
+| **MEDIUM** | **4** | In-memory Pet rate limiter not shared across cluster instances; non-standard SEB URL hash computation; un-isolated BullMQ queues; missing composite indexes. |
+| **LOW** | **2** | React 19 ref access during render in `contribution-skyline.tsx`; synchronous `setState` inside `useEffect` triggering cascading renders. |
+| **TOTAL ISSUES** | **12** | **Independent findings inventory across 14 specialized reports.** |
 
 ---
 
-## 4. Key Production Risks & Business Impact
-
-### 4.1 Business Continuity & Reputational Risk
-- **Exam Integrity Collapse:** In an academic or hiring assessment scenario, candidate answers being erased due to proctoring webcam capture overwrites represents catastrophic service failure. Candidates will receive 0 marks despite having solved problems.
-- **Cheating & Proctoring Failure:** The inability to verify Safe Exam Browser cryptographic headers combined with client-side violation list overwriting allows tech-savvy candidates to bypass proctoring safeguards without detection.
-- **Audit Compliance Failure:** Because proctoring evidence in S3 returns 403 Forbidden, organizations cannot verify candidate identity or violation snapshots during compliance reviews.
-
-### 4.2 Scalability & Operational Risks
-- **The "Assessment Rush" Bottleneck:** When 200 candidates begin or submit an assessment at the same time:
-  1. Competing auto-saves and proctor captures hammer the single `assessment_attempts` table.
-  2. Submissions trigger un-batched C++/Java recompilations in Piston (200 submissions × 15 test cases = 3,000 Piston compilations in parallel).
-  3. CPU hits 100%, queue lengths explode, and workers fail to report results within socket timeouts.
-  4. Autoscaling launches additional API containers; each attempts to establish 50 database connections, crashing PostgreSQL RDS (`max_connections = 50`).
-
----
-
-## 5. Summary Remediation Roadmap (Phase Gates)
+## 4. Immediate Remediation Action Plan
 
 ```mermaid
 flowchart TD
-    subgraph Gate1["Gate 1: Critical Hotfixes (Zero-Loss & Security)"]
-        G1A["Split assessment_attempts from proctor captures/violations into separate tables"]
-        G1B["Implement pessimistic row locking (FOR UPDATE) on submitAttempt and evaluateAttempt"]
-        G1C["Enforce cryptographic SEB header validation & eliminate hardcoded tokens"]
+    subgraph Blocker["Release Blocker 1: Restore Build & Test Integrity"]
+        B1["Install @aws-sdk/s3-request-presigner in node_modules or vendor it"]
+        B2["Verify tsc -p tsconfig.build.json succeeds with 0 errors"]
+        B3["Verify all 72 backend test suites pass"]
     end
 
-    subgraph Gate2["Gate 2: Infrastructure & SRE Hardening"]
-        G2A["Implement AWS S3 Presigned URLs for proctoring captures"]
-        G2B["Correct telemetry route prefix (/api/telemetry/client-events)"]
-        G2C["Reconfigure Redis maxmemory-policy to volatile-lru"]
-        G2D["Right-size RDS max_connections & PgBouncer connection pooling"]
+    subgraph Blocker2["Release Blocker 2: Complete Concurrency Isolation"]
+        B4["Decompose assessment_attempts: move captures & violations into child tables"]
+        B5["Execute saveProgress with targeted SQL UPDATE assessment_attempts SET responses = $1"]
     end
 
-    subgraph Gate3["Gate 3: Performance & Scalability"]
-        G3A["Batch Piston compilation per submission (compile once, execute N test cases)"]
-        G3B["Migrate in-memory Pet rate limiter to Redis"]
-        G3C["Automate dynamic partition creation beyond 2026/2027"]
+    subgraph Blocker3["Release Blocker 3: Cryptographic SEB Verification"]
+        B6["Reject clientBody.configKey; accept only genuine RequestHash headers"]
+        B7["Compute hash on full request URL + configKey as per SEB standard"]
     end
 
-    Gate1 --> Gate2 --> Gate3
+    Blocker --> Blocker2 --> Blocker3
 ```
-
-1. **Gate 1: Release Blockers (Immediate Mandatory Hotfixes)**
-   - Isolate proctor captures and violations from core attempt responses into dedicated append-only tables or use targeted JSONB update expressions (`jsonb_set` / atomic queries).
-   - Wrap assessment submission in a transactional mutex or `SELECT ... FOR UPDATE` lock to guarantee idempotent single execution.
-   - Implement HMAC/SHA256 verification of SEB Config Key and Browser Exam Key headers; reject unauthenticated SEB claims.
-2. **Gate 2: Infrastructure Stability & Observability**
-   - Implement backend S3 presigned URL generation for private bucket asset retrieval (`proctoring/*`).
-   - Eliminate duplicated health controllers and fix the `@Post('api/telemetry/client-events')` prefix collision.
-   - Adjust RDS parameter group connection ceilings and deploy PgBouncer or configure conservative application pool limits (`DB_POOL_MAX=10`).
-   - Switch Redis eviction policy to `volatile-lru` for caching/throttling while isolating BullMQ queues.
-3. **Gate 3: Throughput Optimization**
-   - Refactor Piston execution adapter to compile code once and reuse binary across all test cases.
-   - Remove plaintext temporary passwords from `email_jobs` by adopting one-way reset tokens.

@@ -1,176 +1,153 @@
-# Concurrency, Race Conditions & Data Integrity Audit
+# Concurrency, Race Conditions & Data Integrity Audit (Commit `b846d107`)
 
 **Audit Date:** October 18, 2026  
-**Audited Target:** CodeSkill Platform  
-**Commit:** `2d89bd45`  
+**Audited Target:** CodeSkill Platform Data Access Layer  
+**Commit Inspected:** `b846d107`  
 **Auditor:** Distributed Systems & Concurrency Engineer  
+**Output Location:** `engineering-audit/`  
 
 ---
 
-## 1. Executive Summary: Concurrency Deficit
+## 1. Executive Summary: The Illusion of Concurrency Safety in PR #95
 
-A rigorous audit of the CodeSkill data access layer reveals a pervasive architectural anti-pattern: **Application-Level Read-Modify-Write without Database-Level Concurrency Controls**.
+In commit `b846d107` (PR #95), the engineering team introduced two notable concurrency improvements:
+1. **Discussion Voting & Replies (`discussions.service.ts`):** Wrapped in `this.discussionRepo.manager.transaction` with `lock: { mode: 'pessimistic_write' }`, successfully preventing lost updates on upvotes and downvotes.
+2. **Assessment Submission Locking (`assessments.service.ts`):** Implemented an atomic CAS transition (`UPDATE assessment_attempts SET status = 'evaluating' WHERE id = :id AND status = 'in_progress'`), mitigating duplicate concurrent evaluations.
 
-Across critical domain entities—most notably `AssessmentAttempt`, `DiscussionThread`, and `PetSession`—the backend reads an entire TypeORM entity into Node.js process memory, modifies in-memory fields, and issues an unrestricted `save(entity)` call back to PostgreSQL. In the absence of database-level row locks (`pessimistic_write`), optimistic concurrency checks (`@VersionColumn`), or atomic SQL operations (`UPDATE ... SET column = column + 1`), concurrent requests on the same entity silently clobber each other.
+However, the most dangerous data integrity flaw in the system—**the race condition between candidate autosaves and background proctoring captures**—was only superficially patched and remains an active threat to candidate exam data.
 
 ---
 
-## 2. Hazard 1: Silent Student Data Loss in Active Assessments (CRITICAL)
+## 2. In-Depth Analysis: The Incomplete `recordProctorCapture` Reload
 
-### Affected Component
-`backend-nestjs/src/assessments/assessments.service.ts`  
-Lines: 1530–1620 (`saveProgress`), 2230–2299 (`recordViolation`), 2300–2335 (`recordProctorCapture`).
+### The Attempted Fix in PR #95
+In `backend-nestjs/src/assessments/assessments.service.ts` (lines 2383–2390):
+```typescript
+// Reload fresh attempt state after S3 upload so any student responses saved while upload was in flight are preserved
+const freshAttempt = await this.attemptRepo.findOne({
+  where: { id: attempt.id },
+});
+const targetAttempt = freshAttempt || attempt;
+const captures = Array.isArray((targetAttempt as any).captures) ? (targetAttempt as any).captures : [];
+(targetAttempt as any).captures = [...captures, { type: dto.type, url, objectKey, timestamp: capturedAt, filename: dto.filename }];
+await this.attemptRepo.save(targetAttempt);
+```
 
-### Mechanism & Interleaving Sequence
-The `assessment_attempts` table stores both the candidate's answers (`responses`, a JSONB dictionary) and proctoring telemetry (`captures` and `violations`, JSONB arrays).
+### Why the Flaw Persists (The Bi-Directional Race)
+The attempted fix assumes that conflicts only happen *during* the S3 upload. It reloads `attempt` before saving `targetAttempt`.
+However, it ignores that **`saveProgress` is also executing concurrently and does NOT reload or lock anything**:
+
+```typescript
+// In saveProgress (lines 1531-1638):
+const attempt = await this.attemptRepo.findOne({
+  where: {
+    assessmentId: assessment.id,
+    studentId,
+    status: 'in_progress',
+  },
+});
+// ... maps responses ...
+attempt.responses = [...previousResponses.filter(...), ...updatedResponses];
+// ...
+await this.attemptRepo.save(attempt); // <--- OVERWRITES THE ENTIRE ROW IN POSTGRESQL!
+```
+
+### The Interleaved Execution Sequence
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Student as Candidate Typing Code
-    actor Proctor as Background Webcam Poller
-    participant API1 as API Worker 1 (saveProgress)
-    participant API2 as API Worker 2 (recordProctorCapture)
+    actor Candidate as Student Typing Code
+    actor Webcam as Proctoring Poller (Webcam)
+    participant Worker1 as API Worker 1 (saveProgress)
+    participant Worker2 as API Worker 2 (recordProctorCapture)
     participant DB as PostgreSQL (assessment_attempts)
 
-    Note over Student, Proctor: Student types answer; Proctor webcam takes periodic snapshot
-    Student->>API1: POST /assessments/:id/progress { responses: { q1: "function solution() { return true; }" } }
-    Proctor->>API2: POST /assessments/:id/proctor-capture { frameUrl: "s3://.../frame99.jpg" }
+    Note over Candidate, Webcam: Concurrent Actions at T = 0ms
+    Candidate->>Worker1: POST /assessments/:id/progress { responses: { q1: "my new code v2" } }
+    Webcam->>Worker2: POST /assessments/:id/proctor-capture { image: base64 }
 
-    API1->>DB: SELECT * FROM assessment_attempts WHERE id = :id
-    DB-->>API1: Returns Row (responses: { q1: "initial" }, captures: [frame1...frame98])
+    Worker1->>DB: saveProgress: SELECT * FROM assessment_attempts WHERE id = :id
+    DB-->>Worker1: Returns Attempt (responses: { q1: "v1" }, captures: [frame1...frame50])
 
-    API2->>DB: SELECT * FROM assessment_attempts WHERE id = :id
-    DB-->>API2: Returns Row (responses: { q1: "initial" }, captures: [frame1...frame98])
+    Worker2->>Worker2: recordProctorCapture: Uploads image to S3 (takes ~200ms)...
+    Worker2->>DB: recordProctorCapture: SELECT * FROM assessment_attempts WHERE id = :id (Reloads freshAttempt)
+    DB-->>Worker2: Returns Attempt (responses: { q1: "v1" }, captures: [frame1...frame50])
 
-    Note over API1, API2: Both processes hold in-memory snapshots of the exact same row!
-    API1->>API1: attempt.responses['q1'] = "function solution() { return true; }"
-    API2->>API2: attempt.captures.push(frame99)
+    Note over Worker1, Worker2: Both workers now hold in-memory snapshots with captures [frame1...frame50]!
+    Worker2->>DB: recordProctorCapture: UPDATE assessment_attempts SET captures = [frame1...frame51]
+    DB-->>Worker2: 200 OK (Capture 51 saved to database)
 
-    API2->>DB: UPDATE assessment_attempts SET captures = [frame1...frame99], responses = { q1: "initial" }
-    DB-->>API2: 200 OK (Capture saved, responses unchanged)
+    Worker1->>Worker1: saveProgress: attempt.responses['q1'] = "my new code v2"
+    Worker1->>DB: saveProgress: UPDATE assessment_attempts SET responses = { q1: "v2" }, captures = [frame1...frame50]
+    DB-->>Worker1: 200 OK
 
-    API1->>DB: UPDATE assessment_attempts SET responses = { q1: "function solution()..." }, captures = [frame1...frame98]
-    DB-->>API1: 200 OK (Responses saved, BUT CAPTURES CLOBBERED BACK TO 98!)
-
-    Note over DB: If the write order is reversed:<br/>API1 writes responses first, then API2 writes captures.<br/>API2's update overwrites responses back to 'initial'!<br/>STUDENT CODE IS PERMANENTLY ERASED.
+    Note over DB: FATAL CLOBBER OCCURRED!<br/>saveProgress wrote back its in-memory entity containing captures [frame1...frame50].<br/>Capture frame51 WAS SILENTLY OVERWRITTEN AND ERASED!
 ```
 
-### Mathematical Risk Probability
-Let $T_{poll}$ be the proctor capture interval ($15\text{ seconds}$), and $T_{save}$ be the student auto-save interval ($30\text{ seconds}$). In a 60-minute examination with 1,000 concurrent students, approximately:
-$$N_{events} = 1,000 \times \left(\frac{3600}{15} + \frac{3600}{30}\right) = 1,000 \times (240 + 120) = 360,000\text{ concurrent updates}$$
-With database query latencies averaging $15\text{ ms}$, the probability of at least one interleaved collision per candidate attempt approaches **100%**. Student code loss is guaranteed to occur under normal exam conditions.
+### The Reverse Clobber Scenario (Student Answer Erased)
+If the timing shifts slightly:
+1. `saveProgress` loads `attempt` at $T_0$.
+2. `recordProctorCapture` uploads to S3, loads `freshAttempt` at $T_1$, and starts processing.
+3. `saveProgress` calls `save(attempt)` at $T_2$, saving candidate answers.
+4. `recordProctorCapture` calls `save(targetAttempt)` at $T_3$, writing back its snapshot from $T_1$.
+5. **Student code answers saved at $T_2$ are overwritten back to the $T_1$ state! Student work is permanently lost.**
 
 ---
 
-## 3. Hazard 2: Unlocked Assessment Submission & Double Execution (CRITICAL)
+## 3. The Root Architectural Flaw: Overloaded Entity Design
 
-### Affected Component
-`backend-nestjs/src/assessments/assessments.service.ts`  
-Lines: 1624–1750 (`submitAttempt` and `evaluateAttempt`).
+The persistence tier violates single-responsibility data modeling:
+- **`responses`:** Critical candidate academic work (high business value, modified by student).
+- **`captures`:** High-frequency binary/telemetry logs (appended every 15s by background proctoring).
+- **`violations`:** Append-only disciplinary audit logs.
 
-### Mechanism & Failure Flow
-When a student submits an exam, `submitAttempt` checks:
-```typescript
-if (attempt.status !== 'in_progress') {
-  throw new BadRequestException('Attempt is not in progress');
-}
-```
-However, the method does not lock the row or update the status in a transaction prior to launching `evaluateAttempt`. In `evaluateAttempt`, multiple coding questions are executed sequentially or in parallel against external Piston/Docker workers. The status is only updated to `'submitted'` *after* all coding questions finish grading (which takes 5 to 30 seconds).
+Combining these three independent streams into single JSONB columns on one PostgreSQL table row creates unavoidable write skew under standard TypeORM `repository.save()` operations.
+
+---
+
+## 4. Architectural Remediation: Full Entity Decomposition
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor User as Student Browser (Tab 1 & Tab 2)
-    participant API as API Server
-    participant DB as PostgreSQL
-    participant Worker as BullMQ / Piston Workers
-
-    User->>API: POST /api/assessments/:id/submit (Click 1)
-    User->>API: POST /api/assessments/:id/submit (Click 2 / Tab 2)
-
-    API->>DB: Check status (Click 1): 'in_progress' (PASSED)
-    API->>DB: Check status (Click 2): 'in_progress' (PASSED)
-
-    par Parallel Evaluation Execution
-        API->>Worker: Run 15 Test Cases for Click 1
-        API->>Worker: Run 15 Test Cases for Click 2
-    end
-
-    Note over Worker: 30 container jobs spawned simultaneously for 1 exam!
-    Worker-->>API: Click 1 Results (Score: 85)
-    Worker-->>API: Click 2 Results (Score: 90)
-
-    API->>DB: Save Click 1 results (Attempt status -> 'submitted')
-    API->>DB: Save Click 2 results (Overwrites Click 1 with different score!)
+erDiagram
+    assessment_attempts ||--o{ assessment_proctor_captures : "1:N (Append Only)"
+    assessment_attempts ||--o{ assessment_proctor_violations : "1:N (Append Only)"
+    assessment_attempts {
+        uuid id PK
+        uuid assessment_id
+        uuid student_id
+        varchar status
+        jsonb responses
+        numeric score
+        timestamp started_at
+        timestamp submitted_at
+    }
+    assessment_proctor_captures {
+        uuid id PK
+        uuid attempt_id FK
+        varchar capture_type
+        text s3_url
+        timestamp captured_at
+    }
+    assessment_proctor_violations {
+        uuid id PK
+        uuid attempt_id FK
+        varchar violation_type
+        jsonb metadata
+        timestamp recorded_at
+    }
 ```
 
-### Production Impact
-1. **Grading Non-Determinism:** Flaky test cases or concurrent code executions yield different final grades depending on which request finishes last.
-2. **Denial of Service:** Massive CPU spikes on worker nodes as entire test suites are run twice.
-
----
-
-## 4. Hazard 3: Non-Atomic Discussion Voting & Reply Counters (MEDIUM)
-
-### Affected Component
-`backend-nestjs/src/discussions/discussions.service.ts`  
-Lines: 103–143 (Voting), 179–180 (Replies).
-
-### Mechanism
-```typescript
-const thread = await this.threadRepo.findOne({ where: { id } });
-thread.upvotes = thread.upvotes + 1;
-await this.threadRepo.save(thread);
-```
-When two users upvote a discussion thread within the same millisecond:
-1. Thread reads `upvotes = 10`.
-2. Both execute `10 + 1 = 11`.
-3. Both write back `11`.
-4. Final count is 11 instead of 12 (Write Skew / Lost Update).
-
----
-
-## 5. Architectural Remediation Strategy
-
-### 5.1 Decompose the Overloaded `AssessmentAttempt` Entity
-Extract proctoring and violation events into child tables with foreign key constraints:
-```sql
-CREATE TABLE assessment_proctor_captures (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    attempt_id UUID NOT NULL REFERENCES assessment_attempts(id) ON DELETE CASCADE,
-    frame_url TEXT NOT NULL,
-    metadata JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE assessment_proctor_violations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    attempt_id UUID NOT NULL REFERENCES assessment_attempts(id) ON DELETE CASCADE,
-    violation_type VARCHAR(64) NOT NULL,
-    evidence JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
-*Result:* Proctoring webcam captures and violations are written via pure `INSERT` statements into child tables. They never touch or lock the candidate's active responses in `assessment_attempts`.
-
-### 5.2 Atomic Compare-and-Swap on Assessment Submission
-Enforce atomic state transitions using SQL conditional updates:
-```sql
-UPDATE assessment_attempts
-SET status = 'submitting', submitted_at = NOW()
-WHERE id = $1 AND status = 'in_progress'
-RETURNING id;
-```
-If the query returns zero rows, the request immediately terminates with HTTP 409 Conflict. Duplicate executions are mathematically impossible.
-
-### 5.3 Atomic Database Counters for Discussion Threads
-Replace in-memory counter additions with atomic SQL operations:
-```typescript
-await this.threadRepo.increment({ id }, 'upvotes', 1);
-```
-This compiles to:
-```sql
-UPDATE discussion_threads SET upvotes = upvotes + 1 WHERE id = $1;
-```
-eliminating all write skew.
+### Implementation Rules:
+1. **Dedicated Child Tables:**
+   - Proctor captures and violations must be stored in separate child tables.
+   - Adding a capture or recording a violation becomes a pure `INSERT INTO assessment_proctor_captures (...)` statement that never touches or updates `assessment_attempts`.
+2. **Atomic SQL for `saveProgress`:**
+   - In `saveProgress`, never execute `repo.save(entity)`.
+   - Execute a targeted atomic update query:
+     ```sql
+     UPDATE assessment_attempts
+     SET responses = $1, time_spent_seconds = $2, updated_at = NOW()
+     WHERE id = $3 AND status = 'in_progress';
+     ```
+   - This mathematically isolates student code saves from any concurrent proctoring activity.

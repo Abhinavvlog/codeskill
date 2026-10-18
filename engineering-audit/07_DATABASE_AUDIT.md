@@ -1,121 +1,98 @@
-# Database Architecture, Performance & Schema Audit
+# Database Architecture, Performance & Schema Audit (Commit `b846d107`)
 
 **Audit Date:** October 18, 2026  
-**Audited Target:** CodeSkill Platform (PostgreSQL & Sharding Architecture)  
-**Commit:** `2d89bd45`  
+**Audited Target:** CodeSkill Persistence Layer (PostgreSQL & Sharding Topology)  
+**Commit Inspected:** `b846d107`  
 **Auditor:** Database Architect & Performance Engineer  
+**Output Location:** `engineering-audit/`  
 
 ---
 
 ## 1. Database Architecture & Technology Overview
 
-The persistence tier consists of:
-1. **Primary Relational Store:** PostgreSQL 15+ managed via AWS RDS or local Docker containers.
-2. **Object-Relational Mapping:** TypeORM 0.3.x with 35 active entities.
-3. **Submission Sharding Architecture:** An optional multi-shard PostgreSQL topology managed via `SubmissionStore` (`backend-nestjs/src/database/sharding/submission-store.ts`).
-4. **Declarative Partitioning:** Native PostgreSQL range partitioning implemented on large event tables (`declarative-partitioning.ts`).
+The persistence architecture consists of:
+1. **Primary Relational Store:** PostgreSQL 15+ hosted on AWS RDS or local Docker.
+2. **Object-Relational Mapping:** TypeORM 0.3.x managing 35 domain entities.
+3. **Partitioning Framework:** Native PostgreSQL range partitioning implemented via `declarative-partitioning.ts`.
+4. **Sharding Framework:** Multi-shard user-partitioned topology orchestrated via `SubmissionStore`.
 
 ---
 
-## 2. Critical Database Defects & Schema Deficiencies
+## 2. Re-Assessment of Recent Database Changes (PR #95)
 
-### 2.1 Overloaded Entity Anti-Pattern: `AssessmentAttempt`
+### 2.1 Declarative Partitioning Horizon Extended (Remediated)
+- **File:** `backend-nestjs/src/database/migrations/declarative-partitioning.ts` (lines 92–125)
+- **Previous Finding:** Hardcoded partition definitions expired on December 31, 2027.
+- **Current Status: REMEDIATED**
+  - PR #95 implemented `generateDynamicPartitionsSql(tableName, baseYear, futureYearsCount)`, dynamically generating:
+    - 12 monthly partitions for base year 2026 (`${tableName}_y2026m01` ... `m12`).
+    - 4 yearly partitions for future years 2027 through 2030 (`${tableName}_y2027` ... `y2030`).
+    - A resilient default partition (`CREATE TABLE IF NOT EXISTS "${tableName}_default" PARTITION OF "${tableName}" DEFAULT;`).
+  - This guarantees that any insert with unexpected or future timestamps will safely land in the default partition rather than throwing a PostgreSQL partition violation error.
+
+### 2.2 TypeORM Safe Mode Applied (Remediated)
+- **File:** `backend-nestjs/src/database/database.module.ts` (lines 121–123, 139–141)
+- **Previous Finding:** `null: 'ignore'` silently stripped `userId` filters from WHERE clauses when variables were undefined.
+- **Current Status: REMEDIATED**
+  - The configuration was updated to `invalidWhereValuesBehavior: { null: 'throw' }`.
+  - TypeORM will now throw an exception if an undefined or null filter key is passed to repository lookup methods, closing the BOLA vulnerability.
+
+---
+
+## 3. Critical Database Risks Remaining
+
+### 3.1 RDS PostgreSQL Memory Exhaustion under `max_connections = 200` (NEW HIGH RISK)
+- **Configuration:** `terraform/modules/rds/main.tf` (line 58): `max_connections = "200"`.
+- **Instance Sizing:** `instance_class = "db.t4g.micro"` (1 GiB RAM).
+- **Technical Risk:**
+  - In PostgreSQL, each client connection spawns a dedicated backend OS process.
+  - Baseline memory per connection is 5–10 MB, plus `work_mem` (default 4 MB per sort/hash operation).
+  - 200 active connections consume up to $200 \times 9\text{ MB} = 1.8\text{ GB}$ of RAM.
+  - Adding PostgreSQL's `shared_buffers` (256 MB) and OS kernel memory brings total RAM demand to $> 2.1\text{ GB}$, exceeding the physical 1 GiB capacity of `db.t4g.micro` by over 100%.
+  - When connection counts surge during an assessment rush, the host OS kernel will invoke the OOM killer to terminate the PostgreSQL daemon (`postmaster`).
+- **Remediation:** 
+  1. Upgrade the RDS instance class to at least `db.t4g.small` (2 GiB RAM) or `db.t4g.medium` (4 GiB RAM).
+  2. Implement **AWS RDS Proxy** to multiplex application connections so physical database connections remain capped below 30.
+
+---
+
+### 3.2 Overloaded Entity Contention on `AssessmentAttempt`
 - **Entity:** `backend-nestjs/src/database/entities/assessment-attempt.entity.ts`
-- **Schema Columns:**
-  - `responses`: JSONB containing all question answers and draft code.
-  - `captures`: JSONB array of base64/URL proctoring snapshots.
-  - `violations`: JSONB array of security violation logs.
-- **Problem:** Storing high-frequency append-only proctoring logs and student answers in a single row creates massive write contention and TOAST table overhead in PostgreSQL. Every 15-second webcam capture rewrites the entire row and updates the JSONB TOAST pointers, triggering aggressive WAL generation and table bloat.
-
-### 2.2 Hardcoded Partitioning Horizon (ISSUE-DB-002)
-- **File:** `backend-nestjs/src/database/declarative-partitioning.ts` (Lines 58–85)
-- **Code:**
-  ```sql
-  CREATE TABLE IF NOT EXISTS submissions_y2025 PARTITION OF submissions
-  FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
-
-  CREATE TABLE IF NOT EXISTS submissions_y2026 PARTITION OF submissions
-  FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');
-
-  CREATE TABLE IF NOT EXISTS submissions_y2027 PARTITION OF submissions
-  FOR VALUES FROM ('2027-01-01') TO ('2028-01-01');
-  ```
-- **Finding:** The partitioning script defines static yearly tables terminating on December 31, 2027. There is no automated routine (`pg_partman` or scheduled cron) to generate partitions for 2028 onward. On January 1, 2028, all submission writes will fail with:
-  `ERROR: no partition of relation "submissions" found for row`.
-
-### 2.3 Hazardous Query Behavior: TypeORM `null: 'ignore'` (ISSUE-DB-001)
-- **File:** `backend-nestjs/src/database/database.module.ts` (Lines 121–123, 139–141)
-- **Configuration:**
-  ```typescript
-  invalidWhereValuesBehavior: {
-    null: 'ignore',
-  }
-  ```
-- **Finding:** If an application query passes `undefined` or `null` for a filter key (e.g., `userId`), TypeORM removes that clause entirely instead of matching `IS NULL` or throwing an exception. This exposes the database to accidental table scans and Broken Object Level Authorization (BOLA).
+- **Columns:** `responses` (JSONB), `captures` (JSONB array), `violations` (JSONB array).
+- **Issue:** 
+  - Every 15-second webcam capture rewrites the entire attempt row and its associated JSONB TOAST pointers in PostgreSQL.
+  - In a 1,000-candidate exam, this generates 4,000 full-row updates per minute on `assessment_attempts`.
+  - This leads to excessive WAL generation, write amplification, and vacuum contention.
+- **Remediation:** Decompose proctoring telemetry into dedicated child tables (`assessment_proctor_captures`, `assessment_proctor_violations`).
 
 ---
 
-## 3. Connection Pool Sizing & Resource Allocation Mismatch
-
-```mermaid
-flowchart LR
-    subgraph AppServers["Application Tier (Autoscaling ASG)"]
-        API1["API Server 1 (DB_POOL_MAX=50)"]
-        API2["API Server 2 (DB_POOL_MAX=50)"]
-        Worker1["Judge Worker (DB_POOL_MAX=50)"]
-    end
-
-    subgraph DatabaseTier["RDS PostgreSQL (db.t4g.micro)"]
-        PG["PostgreSQL Instance<br/><b>max_connections = 50</b><br/>1 GiB RAM"]
-    end
-
-    API1 -->|Up to 50 connections| PG
-    API2 -.->|Connection Rejected! (Slots Exhausted)| PG
-    Worker1 -.->|Connection Rejected! (Slots Exhausted)| PG
-```
-
-- **Terraform Configuration (`terraform/modules/rds/main.tf` L56-60):**
-  `max_connections = 50`
-- **Backend Configuration (`database.module.ts` L88):**
-  `DB_POOL_MAX = 50`
-- **Analysis:**
-  With 1 API instance and 1 Worker instance running, peak connection demand is 100 connections. When traffic increases and autoscaling launches a second API instance, total potential demand reaches 150. PostgreSQL hard-rejects connections beyond 50, resulting in catastrophic database connection dropouts across the cluster.
+### 3.3 Contest Finalization Sharding Bypass (ISSUE-DATA-001)
+- **File:** `backend-nestjs/src/contests/contests.service.ts` (lines 520–560)
+- **Issue:** 
+  - The contest finalization pipeline executes direct TypeORM queries on the primary `submissions` table:
+    `this.submissionRepo.find({ where: { contestId } })`.
+  - When submission sharding is enabled (`SUBMISSION_SHARDS`), candidate submissions are written to shard instances via `SubmissionStore`.
+  - As a result, contest finalization evaluates only legacy or un-sharded submissions, calculating corrupted leaderboards and inaccurate final ranks.
+- **Remediation:** Direct all submission read and write queries through `SubmissionStore`.
 
 ---
 
-## 4. Query Analysis & N+1 Performance Risks
+## 4. Query Performance & Indexing Opportunities
 
-### 4.1 Reports Aggregation N+1 Querying
-- **Location:** `backend-nestjs/src/reports/reports.controller.ts` & `reports.service.ts`
-- **Pattern:** Fetching batches of students or assessments, followed by looped calls to fetch individual submission counts or performance scores for each student.
-- **Impact:** Generating an institution-level performance report for 500 students executes 501 distinct SQL queries, taking $> 4.5\text{ seconds}$ and locking database worker threads.
-- **Solution:** Rewrite report aggregations using PostgreSQL Common Table Expressions (CTEs) or window functions (`COUNT(*) OVER (PARTITION BY student_id)`).
-
-### 4.2 Missing Composite Indexes
-- Queries on `submissions` frequently filter by:
-  `WHERE user_id = $1 AND problem_id = $2 ORDER BY created_at DESC`
-  Existing indexes cover `user_id` and `problem_id` separately. A composite B-tree index on `(user_id, problem_id, created_at DESC)` is required to prevent costly index bitmap scans and sorting steps.
-
----
-
-## 5. Submission Sharding Architecture Review
-
-### Architecture Mechanics
-The `SubmissionStore` coordinates writes across:
-- **Primary Database:** Holds users, problems, contests, and metadata.
-- **Shard Instances:** Multiple independent PostgreSQL nodes storing partitions of the `submissions` table, keyed by `userId`.
-
-### Shard Consistency Findings
-1. **Contest Bypass:** When completing a contest, certain operations bypass the `SubmissionStore` and query the primary database's legacy `submissions` table directly, resulting in missing submissions if sharding is enabled.
-2. **Distributed Transaction Absence:** Writes to primary metadata and shard databases are not coordinated under a Two-Phase Commit (2PC) or Saga pattern. A network failure during submission creation leaves orphaned submission records in the shard without corresponding events in BullMQ or Redis.
-3. **Cutover Vulnerability:** The shard cutover script (`npm run db:shards:migrate`) requires all writers to be stopped (`--writers-stopped`). If writers remain active during cutover, data divergence is irreversible.
-
----
-
-## 6. Database Remediation Roadmap
-
-1. **Deploy Connection Pooling Layer:** Deploy AWS RDS Proxy or PgBouncer configured with `pool_mode = transaction`. Reduce backend `DB_POOL_MAX` to `10`.
-2. **Decompose `AssessmentAttempt`:** Create `assessment_proctor_captures` and `assessment_proctor_violations` tables to isolate proctoring append operations.
-3. **Automate Partition Management:** Integrate `pg_partman` into PostgreSQL or add automated TypeORM migration tasks to generate partitions 12 months in advance.
-4. **Harden TypeORM Settings:** Replace `null: 'ignore'` with `null: 'throw'` in `database.module.ts`.
-5. **Add Composite Indexes:** Deploy migration adding `(user_id, problem_id, created_at DESC)` and `(attempt_id, status)`.
+### Missing Composite Indexes
+1. **Submissions by Contest & Problem:**
+   - Queries frequently filter by `WHERE "contestId" = $1 AND "problemId" = $2 ORDER BY "createdAt" DESC`.
+   - Existing indexes cover `contestId` and `problemId` separately, forcing PostgreSQL to perform bitmap index scans and in-memory sort operations.
+   - Recommended Index:
+     ```sql
+     CREATE INDEX "IDX_submissions_contest_problem_created" 
+     ON "submissions" ("contestId", "problemId", "createdAt" DESC);
+     ```
+2. **Assessment Attempts by Assessment & Student:**
+   - Lookups filter by `WHERE "assessmentId" = $1 AND "studentId" = $2 AND "status" = $3`.
+   - Recommended Index:
+     ```sql
+     CREATE INDEX "IDX_assessment_attempts_lookup" 
+     ON "assessment_attempts" ("assessmentId", "studentId", "status");
+     ```
