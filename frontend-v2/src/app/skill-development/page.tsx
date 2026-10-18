@@ -1,8 +1,10 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import MentorGratitude from '@/components/skill-development/MentorGratitude';
 import {
   ArrowDownRight,
   ArrowLeft,
+  ArrowRight,
   BookOpenCheck,
   Compass,
   Lightbulb,
@@ -45,6 +47,18 @@ const learningSteps = [
   ['04', 'Grow', 'Carry that learning into a more challenging task or project.'],
 ];
 
+const teamMembers = [
+  { name: 'Venkatesh', role: 'Technical Trainer', image: '/images/skill-development/team/member-01.jpg' },
+  { name: 'Mustakim', role: 'Technical Trainer', image: '/images/skill-development/team/member-02.jpg' },
+  { name: 'Vishal', role: 'Technical Trainer', image: '/images/skill-development/team/member-03.jpg' },
+  { name: 'Neeraj', role: 'Assistant Professor', image: '/images/skill-development/team/member-04.jpg' },
+  { name: 'Shadab', role: 'Technical Trainer', image: '/images/skill-development/team/member-05.jpg' },
+  { name: 'Tushar', role: 'Technical Trainer', image: '/images/skill-development/team/member-06.jpg' },
+  { name: 'Mazz', role: 'Technical Trainer', image: '/images/skill-development/team/member-07.jpg' },
+  { name: 'Anmol', role: 'Technical Trainer', image: '/images/skill-development/team/member-08.jpg' },
+  { name: 'Abhinav', role: 'Technical Trainer', image: '/images/skill-development/team/member-09.jpg' },
+];
+
 export default function SkillDevelopmentPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
@@ -81,23 +95,60 @@ export default function SkillDevelopmentPage() {
 
         <MentorGratitude />
 
-        <figure className="mx-auto mt-12 max-w-5xl overflow-hidden rounded-3xl border border-border/80 bg-card shadow-xl shadow-black/5">
-          <div className="relative flex aspect-[16/8] min-h-56 items-center justify-center overflow-hidden bg-gradient-to-br from-primary/10 via-muted/70 to-emerald-500/10 sm:aspect-[16/6]">
-            <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,hsl(var(--foreground)/0.08)_1px,transparent_0)] [background-size:22px_22px]" />
-            <div className="relative mx-5 flex max-w-lg flex-col items-center rounded-2xl border border-border/70 bg-background/85 px-6 py-7 text-center shadow-sm backdrop-blur-sm sm:px-10">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
-                <UsersRound className="h-7 w-7" aria-hidden="true" />
-              </div>
-              <p className="font-heading text-lg font-bold">Technical Training team</p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Group photograph space · Add the team photo here when it is available.
+        <section
+          className="mx-auto mt-14 max-w-6xl rounded-[2rem] border border-emerald-900/10 bg-emerald-50/70 p-5 shadow-sm dark:border-emerald-100/10 dark:bg-emerald-950/15 sm:mt-16 sm:p-8 lg:p-10"
+          aria-labelledby="team-title"
+        >
+          <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.17em] text-emerald-700 dark:text-emerald-300">
+                <UsersRound className="h-4 w-4" aria-hidden="true" />
+                Our developers &amp; contributors
+              </span>
+              <h2 id="team-title" className="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">
+                Meet the Team Behind CodeSkill
+              </h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
+                The people building practical, hands-on learning experiences for CodeSkill.
               </p>
             </div>
           </div>
-          <figcaption className="border-t border-border/70 px-5 py-3 text-center text-xs text-muted-foreground">
-            A collaborative effort to make skill-building practical, engaging, and continuous.
-          </figcaption>
-        </figure>
+
+          <div
+            className="-mx-1 overflow-x-auto overscroll-x-contain px-1 pb-3 [scrollbar-color:rgba(5,150,105,0.35)_transparent] [scrollbar-width:thin]"
+            aria-label="Team portraits; scroll horizontally to view all nine members"
+            tabIndex={0}
+            style={{ scrollSnapType: 'x mandatory' }}
+          >
+          <div className="grid min-w-[900px] grid-cols-9 gap-2 sm:gap-3 lg:min-w-0 lg:gap-2 xl:gap-3">
+            {teamMembers.map((member) => (
+              <article
+                key={member.image}
+                className="group flex min-w-0 snap-center flex-col items-center px-1.5 py-3 text-center transition duration-300 hover:-translate-y-1"
+              >
+                <div className="relative h-32 w-20 shrink-0 overflow-hidden rounded-2xl bg-muted shadow-md transition duration-300 group-hover:shadow-lg sm:h-36 sm:w-[5.5rem] lg:h-40 lg:w-24 xl:h-44 xl:w-28">
+                  <Image
+                    src={member.image}
+                    alt={`Portrait of ${member.name}`}
+                    fill
+                    sizes="(max-width: 639px) 80px, (max-width: 1023px) 88px, 112px"
+                    quality={82}
+                    className={`object-cover transition duration-500 group-hover:scale-[1.035] ${member.name === 'Shadab' ? 'object-[44%_center]' : 'object-center'}`}
+                  />
+                </div>
+                <div className="mt-4 flex min-h-[3.75rem] flex-col items-center justify-start gap-1">
+                  <h3 className="w-full text-xs font-bold leading-snug tracking-tight text-foreground sm:text-sm lg:text-[15px]">{member.name}</h3>
+                  <p className="w-full text-[11px] font-semibold leading-snug text-primary sm:text-xs lg:text-[13px]">{member.role}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+          </div>
+          <div className="mt-1 flex items-center justify-center gap-2 text-[11px] font-medium text-muted-foreground sm:hidden">
+            <span>Swipe to see all 9 members</span>
+            <ArrowRight className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300" aria-hidden="true" />
+          </div>
+        </section>
 
         <section className="mx-auto mt-16 grid max-w-5xl gap-5 md:grid-cols-2">
           <article className="rounded-3xl border border-border/70 bg-card/75 p-7 shadow-sm sm:p-9">
