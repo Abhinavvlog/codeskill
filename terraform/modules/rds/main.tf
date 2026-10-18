@@ -46,14 +46,14 @@ resource "aws_security_group" "rds" {
   )
 }
 
-# Parameter group configured for 4 GiB instance (db.t4g.medium) with PgBouncer connection pooling
+# Parameter group configured for 4 GiB instance (db.t3.medium) with PgBouncer connection pooling
 resource "aws_db_parameter_group" "postgres" {
   count       = var.create_parameter_group ? 1 : 0
   name        = "${var.name_prefix}-pg${local.major_version}-params"
   family      = "postgres${local.major_version}"
   description = "Tuned PostgreSQL parameters for CodeSkill database"
 
-  # 200 connections safely supported on 4 GiB RAM db.t4g.medium with PgBouncer pooler
+  # 200 connections safely supported on 4 GiB RAM db.t3.medium with PgBouncer pooler
   parameter {
     name         = "max_connections"
     value        = "200"

@@ -283,7 +283,7 @@ module "rds" {
   db_name                 = var.db_name
   db_username             = var.db_username
   db_password             = var.db_password
-  instance_class          = "db.t4g.medium"
+  instance_class          = "db.t3.medium"
   allocated_storage       = 50
   max_allocated_storage   = 500
   multi_az                = true
