@@ -46,17 +46,17 @@ resource "aws_security_group" "rds" {
   )
 }
 
-# Parameter group tuned for low-memory instance (db.t4g.micro with 1 GiB RAM)
+# Parameter group configured for 4 GiB instance (db.t4g.medium) with PgBouncer connection pooling
 resource "aws_db_parameter_group" "postgres" {
   count       = var.create_parameter_group ? 1 : 0
   name        = "${var.name_prefix}-pg${local.major_version}-params"
   family      = "postgres${local.major_version}"
-  description = "Tuned PostgreSQL parameters for CodeSkill micro database"
+  description = "Tuned PostgreSQL parameters for CodeSkill database"
 
-  # Hardened for 1 GiB RAM db.t4g.micro to prevent Linux kernel OOM termination (ISSUE-INFRA-002)
+  # 200 connections safely supported on 4 GiB RAM db.t4g.medium with PgBouncer pooler
   parameter {
     name         = "max_connections"
-    value        = "100"
+    value        = "200"
     apply_method = "pending-reboot"
   }
 
