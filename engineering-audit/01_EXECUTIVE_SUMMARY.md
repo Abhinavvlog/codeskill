@@ -1,94 +1,165 @@
-# Pre-Production Engineering Audit Re-Assessment: Executive Summary
+# Independent Pre-Production Engineering Audit: Executive Summary
 
-**Date:** October 18, 2026  
-**Target Repository:** CodeSkill Platform (`backend-nestjs` & `frontend-v2`)  
-**Commit Inspected:** `b846d107` (Merge PR #95 `fix/audit-003-remediation`)  
-**Audit Scope:** Full-Stack Pre-Production Engineering Re-Assessment (17 Engineering Disciplines)  
-**Audit Mode:** Non-Destructive, Read-Only, Independent Multi-Disciplinary Analysis  
-**Output Location:** `engineering-audit/`  
-
----
-
-## 1. Executive Synthesis & Verdict
-
-### Production Readiness Verdict: **NOT PRODUCTION READY (RELEASE BLOCKED)**
-
-Following the initial audit and the subsequent merge of PR #95 (`b846d107`), the CodeSkill platform made targeted progress in several areas:
-- **Telemetry Routing Fixed:** `HealthAndTelemetryController` correctly routes to `telemetry/client-events`, eliminating the previous 404 route collision.
-- **Health Route Shadowing Resolved:** Competing health check endpoints were deduplicated.
-- **Metrics Scraping Hardened:** Prometheus IP check now uses strict RFC 1918 CIDR regexes instead of substring matching.
-- **Credential Storage Secured:** Temporary student passwords in `email_jobs` are now encrypted via AES-256-GCM.
-- **Partition Horizon Extended:** Declarative partitioning added a catch-all default partition and yearly tables through 2030.
-- **TypeORM Safety Enforced:** `null: 'throw'` was applied to prevent BOLA query stripping.
-- **Discussion Voting Protected:** Discussion upvotes/downvotes now run inside pessimistic write-locked transactions.
-
-However, a rigorous independent reassessment of commit `b846d107` reveals **critical new and unaddressed pre-production release blockers**:
-
-1. **Broken Dependency & Immediate TypeScript/Test Failure (NEW CRITICAL DEFECT):**
-   - PR #95 introduced `import { getSignedUrl } from '@aws-sdk/s3-request-presigner';` in `backend-nestjs/src/s3/s3.service.ts` and added it to `package.json`.
-   - However, the package was never installed in `node_modules`. As a result, backend compilation (`tsc -p tsconfig.build.json --noEmit`) hard-fails with TS2307 (`Cannot find module '@aws-sdk/s3-request-presigner'`), 9 backend test suites immediately fail to run, and the production backend crashes on startup.
-2. **Incomplete Concurrency Fix & Persistent Assessment Data Loss Hazard:**
-   - In `backend-nestjs/src/assessments/assessments.service.ts`, PR #95 added a `findOne` reload inside `recordProctorCapture` *after* the S3 upload.
-   - However, `saveProgress` (lines 1531–1638) still reads the full entity, updates `attempt.responses`, and calls `await this.attemptRepo.save(attempt)` without any row locks or version checks.
-   - If `saveProgress` executes `findOne` while `recordProctorCapture` is saving, `saveProgress` writes back its stale snapshot, clobbering the proctoring capture array. Conversely, if `recordProctorCapture` writes after `saveProgress`, student code is erased. The core architectural flaw—storing high-frequency webcam telemetry and student exam code in a single non-locked entity row—remains unaddressed.
-3. **Flawed Safe Exam Browser (SEB) Verification Logic:**
-   - In `backend-nestjs/src/exam-security/exam-security.service.ts`, `clientType` is set to `'SEB'` if `clientBody.isSEB || hasSebHeader || isSebUserAgent`. If `security.configKey` is not configured, any browser sending `{ isSEB: true }` or spoofing the User-Agent still bypasses SEB enforcement.
-   - Even when `security.configKey` is set, the server permits `clientSentKey === expectedConfigKey`, allowing attackers to supply the secret key in plaintext JSON rather than sending cryptographic RequestHash headers.
-   - Furthermore, the server's hash check hashes `assessment.id + expectedConfigKey` rather than the genuine SEB standard of `URL + ConfigKey`, making genuine SEB clients incompatible with the platform.
-4. **O(N) Piston Compilation Multiplier Unchanged:**
-   - Multi-test submissions still compile code $T$ times for $T$ test cases in `execution.service.ts`, maintaining an 8.1× CPU amplification factor on execution hosts.
-5. **Shared Single Redis Instance with `noeviction`:**
-   - BullMQ, rate limiting, and WebSockets share a single Redis instance with `maxmemory-policy: noeviction`. Memory exhaustion halts all job queuing and user logins.
+**Target Commit:** `3a3e9671d863e8abd95d19cbc7136c4227476ba8`  
+**Assessment Date:** October 18, 2026  
+**Auditing Entity:** Principal Full-Stack Engineering Review Board  
+**Target Environment:** AWS `ap-south-1` (Mumbai) Production Deployment  
+**Overall Readiness Verdict:** **NOT PRODUCTION READY (HIGH SEVERITY BLOCKERS IDENTIFIED)**
 
 ---
 
-## 2. Engineering Maturity Assessment
+## 1. Executive Summary & Verdict
 
-| Discipline | Maturity Level | Rating (1-5) | Assessment on Commit `b846d107` |
-| :--- | :--- | :---: | :--- |
-| **System Architecture** | Transitional | 3.0 / 5 | Modular service boundaries, but build is broken by uninstalled presigner dependency. |
-| **Frontend Architecture** | Mature | 3.5 / 5 | Next.js 15 / React 19; all 47 frontend unit suites pass (344 tests); clean typecheck. |
-| **Backend & API Architecture** | Broken Build | 2.0 / 5 | Backend `tsc` fails with code 2; 9 test suites fail due to missing `@aws-sdk/s3-request-presigner`. |
-| **Database Architecture** | Moderate Risk | 3.0 / 5 | Partitioning horizon fixed to 2030; `null: 'throw'` applied; overloaded entity persists. |
-| **Concurrency & Integrity** | High Risk | 2.5 / 5 | Partial reload in `recordProctorCapture` does not prevent race with `saveProgress`. |
-| **Application Security** | Moderate Risk | 2.5 / 5 | Passwords now encrypted in `email_jobs`; SEB verification contains multiple bypass vectors. |
-| **SRE & Reliability** | Moderate Risk | 2.5 / 5 | Telemetry route prefix fixed; RDS max_connections bumped to 200; shared Redis `noeviction` persists. |
-| **Performance & Scalability** | High Risk | 2.0 / 5 | Piston multi-compilation multiplier remains unaddressed; 200 connections on 1GB RAM RDS risks OOM. |
-| **QA & Test Automation** | Degraded | 2.5 / 5 | 9 test suites fail in backend due to module import failure. Frontend suite maintains 100% pass rate. |
+This report delivers the results of an independent, exhaustive pre-production engineering assessment of the CodeSkill platform at commit `3a3e9671` (following the merge of PR #96). The audit evaluated the platform across 17 engineering disciplines, including software architecture, distributed systems concurrency, application security, cloud infrastructure, performance and capacity, database reliability, and supply chain integrity.
+
+While recent pull requests resolved several critical defects—most notably replacing the missing `@aws-sdk/s3-request-presigner` runtime package with an in-tree AWS SigV4 implementation and fixing React 19 rendering effects—**the system remains NOT READY for production deployment with active users**.
+
+A total of **28 distinct engineering findings** were identified, verified, and classified:
+- **6 Critical Findings**: Immediate risks of total platform downtime, proctoring security bypass, data corruption, or denial-of-service.
+- **11 High Severity Findings**: Flaws causing severe latency, memory exhaustion, race conditions, or complete feature failures in non-localhost environments.
+- **8 Medium Severity Findings**: Architectural anti-patterns, missing database indices, lack of pagination, and unhandled edge cases.
+- **3 Low / Informational Findings**: Minor state synchronization and code hygiene issues.
+
+### Production Readiness Scorecard
+
+| Discipline / Domain | Evaluation | Verdict | Primary Risk Factor |
+| :--- | :---: | :---: | :--- |
+| **Cloud Infrastructure & CI/CD** | 3.5 / 10 | **FAIL** | ASG `MinHealthyPercentage: 0` terminates all active servers during deployments, causing total outage. |
+| **Application Security & Exam Proctoring** | 4.0 / 10 | **FAIL** | SEB requirement can be completely bypassed via User-Agent spoofing when configKey is omitted. |
+| **Concurrency & Data Integrity** | 4.5 / 10 | **FAIL** | Lack of row locks or optimistic versioning leads to lost updates between answer autosaves and proctor captures. |
+| **Execution Engine & Capacity** | 5.0 / 10 | **FAIL** | Piston re-compiles identical source code on every test case; 20 test cases = 20 compilation passes. |
+| **Database Architecture & Query Efficiency**| 5.5 / 10 | **WARN** | Full table scans in Node.js memory on student dashboard; missing GIN indices on PostgreSQL array columns. |
+| **Caching & Queue Architecture** | 6.0 / 10 | **WARN** | Shared Redis cluster with `noeviction` allows volatile caches to starve and crash BullMQ submission queues. |
+| **Frontend Architecture & UX** | 7.0 / 10 | **PASS (CONDITIONAL)** | Hardcoded `http://localhost:5000` breaks AI generation; 47 unit test suites pass (344 tests). |
+| **Supply Chain & Dependencies** | 8.0 / 10 | **PASS** | Critical presigner dependency resolved; package lockfiles consistent. |
 
 ---
 
-## 3. Discovered Vulnerability & Defect Register Summary
+## 2. Issue Summary Matrix
 
-| Severity Level | Count | Definition & Production Impact |
-| :--- | :---: | :--- |
-| **CRITICAL** | **2** | Uninstalled module dependency breaks backend build/startup; persistent race condition in assessment saves causes student data loss. |
-| **HIGH** | **4** | Safe Exam Browser logic flaws allow lockdown bypass; Piston multi-compilation CPU multiplier; shared Redis `noeviction` OOM; RDS memory pressure with 200 connections on `db.t4g.micro`. |
-| **MEDIUM** | **4** | In-memory Pet rate limiter not shared across cluster instances; non-standard SEB URL hash computation; un-isolated BullMQ queues; missing composite indexes. |
-| **LOW** | **2** | React 19 ref access during render in `contribution-skyline.tsx`; synchronous `setState` inside `useEffect` triggering cascading renders. |
-| **TOTAL ISSUES** | **12** | **Independent findings inventory across 14 specialized reports.** |
+```mermaid
+pie title Discovered Issues by Severity
+    "Critical (6)" : 6
+    "High (11)" : 11
+    "Medium (8)" : 8
+    "Low / Info (3)" : 3
+```
+
+### Breakdown by Discipline
+
+| Discipline | Critical | High | Medium | Low | Total |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Cloud Infrastructure & DevOps** | 1 | 2 | 1 | 0 | **4** |
+| **Application Security & Threat Modeling** | 1 | 2 | 0 | 0 | **3** |
+| **Distributed Systems & Concurrency** | 1 | 2 | 1 | 0 | **4** |
+| **Execution Engine & Capacity** | 1 | 2 | 1 | 0 | **4** |
+| **Database Architecture & Reliability** | 1 | 1 | 2 | 0 | **4** |
+| **Frontend Architecture & Client Standards**| 1 | 1 | 2 | 2 | **6** |
+| **API & Integration Architecture** | 0 | 1 | 1 | 1 | **3** |
+| **Total** | **6** | **11** | **8** | **3** | **28** |
 
 ---
 
-## 4. Immediate Remediation Action Plan
+## 3. Top 8 Critical & High-Priority Findings
+
+### 1. [ISSUE-INFRA-001] Auto Scaling Instance Refresh `MinHealthyPercentage: 0` Guarantees Production Downtime on Deployments
+- **File:** `.github/workflows/deploy.yml` (Lines 32, 356–358)
+- **Severity:** **CRITICAL** | **Confidence:** **CONFIRMED**
+- **Impact:** Every automated deployment terminates all healthy running frontend and backend instances before newly provisioned EC2 instances become healthy. The Application Load Balancer returns HTTP 502 Bad Gateway to 100% of end users for 2 to 4 minutes per deployment.
+
+### 2. [ISSUE-SEC-001] Safe Exam Browser (SEB) Security Bypass via User-Agent Header Spoofing
+- **File:** `backend-nestjs/src/exam-security/exam-security.service.ts` (Lines 42–63)
+- **Severity:** **CRITICAL** | **Confidence:** **CONFIRMED**
+- **Impact:** When an assessment has `requireSEB: true` but lacks an explicitly defined `configKey`, the server validates client authenticity strictly using the regex `/SEB|SafeExamBrowser/i.test(userAgent)`. Any candidate can bypass proctoring restrictions in standard Google Chrome by setting their User-Agent string.
+
+### 3. [ISSUE-CONCUR-001] Lost Update Race Hazard Between `saveProgress` and `recordProctorCapture`
+- **File:** `backend-nestjs/src/assessments/assessments.service.ts` (Lines 1638–1652, 2396–2406)
+- **Severity:** **CRITICAL** | **Confidence:** **CONFIRMED**
+- **Impact:** Neither endpoint utilizes pessimistic row locking (`SELECT ... FOR UPDATE`), optimistic concurrency (`@VersionColumn`), or atomic JSONB updates. An autosave occurring while a base64 proctoring image is uploading to S3 overwrites and permanently deletes the newly captured proctoring snapshot or overwrites recent candidate answers.
+
+### 4. [ISSUE-EXEC-001] Piston Compilation Explosion Under Concurrent Exam Submissions
+- **File:** `backend-nestjs/src/execution/execution.service.ts` (Lines 460–482, 601–635)
+- **Severity:** **CRITICAL** | **Confidence:** **CONFIRMED**
+- **Impact:** Piston treats every test case as an independent HTTP request and recompiles identical C, C++, Java, and Rust source code for every test case. A submission with 20 test cases triggers 20 full compilation passes. Under an exam of 100 concurrent students, 2,000 compilations saturate the Piston host CPU, triggering cascading 504 Gateway Timeouts.
+
+### 5. [ISSUE-INFRA-002] Shared Redis Cluster with `noeviction` Allows Cache Bloat to Crash BullMQ Submissions
+- **File:** `terraform/modules/redis/main.tf` (Lines 54–57) & `backend-nestjs/src/redis/redis.service.ts`
+- **Severity:** **CRITICAL** | **Confidence:** **CONFIRMED**
+- **Impact:** BullMQ job queues and volatile application caches (problem details, leaderboards, rate limit keys) share a single ElastiCache Redis instance configured with `maxmemory-policy = noeviction`. If cache keys saturate memory, Redis rejects all write operations (`OOM command not allowed`), completely stopping code submission processing.
+
+### 6. [ISSUE-PERF-001] Full Assessment Table In-Memory Deserialization on Student Dashboard
+- **File:** `backend-nestjs/src/assessments/assessments.service.ts` (Lines 1056–1065)
+- **Severity:** **CRITICAL** | **Confidence:** **CONFIRMED**
+- **Impact:** `getStudentAssessments` queries all published and ongoing assessments across the entire institution without pagination or database-level targeting filters. Large JSONB assessment payloads are parsed into V8 heap and filtered via JavaScript. During exam morning peak logins, simultaneous requests cause CPU starvation and V8 heap OOM crashes.
+
+### 7. [ISSUE-FE-001] Hardcoded `http://localhost:5000` Breaks Question AI Generation in Production
+- **File:** `frontend-v2/src/app/admin/questions/create/_components/AIAssistance.tsx` (Lines 35, 50)
+- **Severity:** **HIGH** | **Confidence:** **CONFIRMED**
+- **Impact:** Both `fetch` and Socket.IO client connections target `http://localhost:5000`. In staging and production, client browsers reject requests due to Mixed Content security rules (HTTPS loading HTTP) and wrong port resolution, completely breaking admin AI question assistance.
+
+### 8. [ISSUE-SEC-002] S3 Presigner SigV4 Fallback Generates Inaccessible Unsigned URLs in IAM Environments
+- **File:** `backend-nestjs/src/s3/s3-presigner.util.ts` (Lines 48–54)
+- **Severity:** **HIGH** | **Confidence:** **CONFIRMED**
+- **Impact:** If `@aws-sdk/s3-request-presigner` is missing at runtime and static AWS credentials are not in environment variables (the standard AWS security pattern using EC2 IAM Instance Profiles), `generateS3PresignedUrl` falls back to returning a plain unsigned public URL. In private S3 buckets, all proctoring image views fail with HTTP 403 Forbidden.
+
+---
+
+## 4. Key Verified Successes in Commit `3a3e9671`
+
+1. **Frontend Test Suite Integrity:** All 47 Jest test suites containing 344 individual component, hook, and utility tests pass with 100% success (`Ran all test suites in 11.66s`).
+2. **Frontend Linter Cleanliness:** ESLint across `frontend-v2` executes with **0 errors** (403 warnings strictly categorized as non-blocking React hooks advice and unused variables).
+3. **TypeScript Type Safety:** `frontend-v2` compiles cleanly with zero type errors (`tsc --noEmit --incremental false`).
+4. **JWT Rotation & Refresh Architecture:** Refresh token rotation incorporates single-use database consumption (`UPDATE refresh_tokens SET revokedAt = now() WHERE id = :id AND revokedAt IS NULL`), automatic family invalidation upon replay detection, and a 10-second concurrency grace period.
+5. **Database Sharding Architecture:** Clean architectural separation between PostgreSQL primary relational storage and submission shards, guarded by advisory locks during schema upgrades.
+
+---
+
+## 5. Strategic Remediation Roadmap
 
 ```mermaid
 flowchart TD
-    subgraph Blocker["Release Blocker 1: Restore Build & Test Integrity"]
-        B1["Install @aws-sdk/s3-request-presigner in node_modules or vendor it"]
-        B2["Verify tsc -p tsconfig.build.json succeeds with 0 errors"]
-        B3["Verify all 72 backend test suites pass"]
+    A[Current Commit: 3a3e9671] --> B[Phase 1: Zero-Downtime Deployment & Critical Fixes]
+    B --> C[Phase 2: Data Integrity & Execution Scale]
+    C --> D[Phase 3: Query Optimization & Caching Isolation]
+    D --> E[Production Launch Gate Verified]
+
+    subgraph "Phase 1 (Immediate - 24-48h)"
+        B1["Fix deploy.yml: MinHealthyPercentage = 50%, MaxHealthyPercentage = 150%"]
+        B2["Fix SEB: Enforce mandatory configKey or reject non-genuine headers"]
+        B3["Fix AIAssistance.tsx: Use dynamic getDynamicBaseURL() & WebSocket path"]
     end
 
-    subgraph Blocker2["Release Blocker 2: Complete Concurrency Isolation"]
-        B4["Decompose assessment_attempts: move captures & violations into child tables"]
-        B5["Execute saveProgress with targeted SQL UPDATE assessment_attempts SET responses = $1"]
+    subgraph "Phase 2 (Target: 3-5 Days)"
+        C1["Fix Concurrency: Atomic JSONB PostgreSQL updates for captures & responses"]
+        C2["Fix Piston: Pre-compile binary once; run binary against test cases"]
+        C3["Fix S3 Presigner: Integrate AWS SDK v3 @aws-sdk/s3-request-presigner"]
     end
 
-    subgraph Blocker3["Release Blocker 3: Cryptographic SEB Verification"]
-        B6["Reject clientBody.configKey; accept only genuine RequestHash headers"]
-        B7["Compute hash on full request URL + configKey as per SEB standard"]
+    subgraph "Phase 3 (Target: 1 Week)"
+        D1["Database: Add GIN indices and SQL WHERE filtering to getStudentAssessments"]
+        D2["Redis: Separate BullMQ cluster from volatile application cache cluster"]
     end
-
-    Blocker --> Blocker2 --> Blocker3
 ```
+
+---
+
+## 6. Report Navigation Guide
+
+The complete engineering assessment is documented across the following dedicated reports located in the `engineering-audit/` directory:
+
+| Report File | Title & Core Subject Matter |
+| :--- | :--- |
+| **`01_EXECUTIVE_SUMMARY.md`** | High-level findings, system scorecard, and remediation roadmap |
+| **`02_ARCHITECTURE_ANALYSIS.md`** | Comprehensive end-to-end component topology, data flows, and boundaries |
+| **`03_COMPLETE_ISSUE_REGISTER.md`** | Exhaustive issue register of all 28 findings with formal metadata |
+| **`04_SECURITY_ASSESSMENT.md`** | Threat modeling, proctoring security, authentication, and authorization |
+| **`05_PERFORMANCE_AND_CAPACITY.md`** | Mathematical capacity models, bottleneck analysis, and load limits |
+| **`06_CONCURRENCY_AND_DATA_INTEGRITY.md`**| Race condition hazard analysis, transaction safety, and lost update audits |
+| **`07_DATABASE_AUDIT.md`** | Schema analysis, indexing efficiency, partitioning, and sharding review |
+| **`08_FRONTEND_AUDIT.md`** | Next.js architecture, bundle performance, SSR safety, and accessibility |
+| **`09_INFRASTRUCTURE_AND_RELIABILITY.md`** | Terraform modules, ASG instance refresh, Redis reliability, and failover |
+| **`10_TEST_COVERAGE_AND_GAPS.md`** | Test execution results, unit/e2e test analysis, and untested blindspots |
+| **`11_DEPENDENCY_AND_SUPPLY_CHAIN.md`** | Dependency audits, CVE analysis, lockfile integrity, and build safety |
+| **`12_REMEDIATION_PRIORITY.md`** | Prioritized action items, remediation steps, and verification protocols |
+| **`13_AUDIT_COVERAGE_MATRIX.md`** | Mapping of all 17 disciplines against audited modules and verified risks |
+| **`14_EVIDENCE_AND_REPRODUCTION.md`** | Code evidence, reproduction scripts, and verification artifacts |

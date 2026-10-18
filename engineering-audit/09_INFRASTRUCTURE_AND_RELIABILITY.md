@@ -1,90 +1,137 @@
-# Infrastructure, Cloud Architecture & Site Reliability Engineering (SRE) Audit (Commit `b846d107`)
+# Independent Pre-Production Engineering Audit: Infrastructure & Reliability
 
-**Audit Date:** October 18, 2026  
-**Audited Target:** CodeSkill Infrastructure (Terraform, AWS, PM2, Docker)  
-**Commit Inspected:** `b846d107`  
-**Auditor:** Site Reliability Engineer (SRE) & Cloud DevOps Principal  
-**Output Location:** `engineering-audit/`  
-
----
-
-## 1. Cloud Topology & Infrastructure Definition
-
-The production infrastructure is defined in Terraform (`terraform/environments/production/` and reusable modules in `terraform/modules/`):
-- **Networking:** Multi-AZ AWS VPC with public and private subnets, NAT Gateways, and security groups.
-- **Compute:** Auto Scaling Groups (ASG) running EC2 instances or ECS tasks for API and Frontend services.
-- **Load Balancing:** AWS Application Load Balancer (ALB) routing `/api/*` to NestJS and `/*` to Next.js.
-- **Relational Storage:** AWS RDS PostgreSQL (`db.t4g.micro` with 1 GiB RAM).
-- **In-Memory Broker:** AWS ElastiCache Redis 7.x (`cache.t4g.micro`).
-- **Object Storage:** AWS S3 (`app_storage` bucket) for avatars, submissions, and proctoring snapshots.
+**Target Commit:** `3a3e9671d863e8abd95d19cbc7136c4227476ba8`  
+**Discipline:** Cloud Infrastructure, DevOps & Site Reliability Engineer (SRE)  
+**Cloud Provider:** Amazon Web Services (AWS `ap-south-1` Mumbai)  
+**IaC Tool:** Terraform 1.5+  
 
 ---
 
-## 2. Re-Assessment of Recent Infrastructure Changes (PR #95)
+## 1. AWS Infrastructure Topology & VPC Architecture
 
-### 2.1 Deduplicated Health Routing (Remediated)
-- **Previous Finding:** Competing health controllers in `src/health/health.controller.ts` and `src/observability/health/health.controller.ts` shadowed each other on `/api/health/live` and `/api/health/ready`.
-- **Status: REMEDIATED**
-  - In `HealthAndTelemetryController`, duplicate `@Get('health/live')` and `@Get('health/ready')` annotations were removed, leaving only `@Get('health/deep')`.
-  - ALB probes now route deterministically to the primary health module without router conflicts.
+The production environment is orchestrated via modular Terraform manifests located in `terraform/modules/` and instantiated in `terraform/environments/production/main.tf`.
 
-### 2.2 Client Telemetry Route Corrected (Remediated)
-- **Previous Finding:** In `HealthAndTelemetryController`, `@Post('api/telemetry/client-events')` mounted at `/api/api/telemetry/client-events`, causing client beacons to 404.
-- **Status: REMEDIATED**
-  - Route annotation was changed to `@Post('telemetry/client-events')`.
-  - With NestJS global prefix `'api'`, client beacons to `/api/telemetry/client-events` return HTTP 204 No Content as expected.
+```mermaid
+graph TD
+    subgraph "VPC: 10.0.0.0/16"
+        subgraph "Public Subnets (AZ1 & AZ2)"
+            ALB[Application Load Balancer]
+            NAT1[NAT Gateway AZ1]
+            NAT2[NAT Gateway AZ2]
+        end
+
+        subgraph "Private App Subnets"
+            ASG_FE[Frontend ASG: Min 2, Desired 2, Max 6]
+            ASG_BE[Backend ASG: Min 2, Desired 2, Max 6]
+            ASG_JUDGE[Judge0 / Piston ASG: Min 1, Max 4]
+        end
+
+        subgraph "Private DB Subnets"
+            RDS_PG[(RDS PostgreSQL Multi-AZ)]
+            REDIS[(ElastiCache Redis OSS Cluster)]
+        end
+    end
+
+    Internet([Internet Traffic]) -->|Port 443| ALB
+    ALB -->|Port 3000| ASG_FE
+    ALB -->|Port 5001| ASG_BE
+    ASG_FE --> NAT1
+    ASG_BE --> NAT2
+    ASG_BE -->|Port 5432| RDS_PG
+    ASG_BE -->|Port 6379| REDIS
+    ASG_BE -->|Port 2358/2000| ASG_JUDGE
+```
 
 ---
 
-## 3. Critical Infrastructure & Reliability Risks Remaining
+## 2. Auto Scaling Instance Refresh & Zero-Downtime Analysis
 
-### 3.1 RDS PostgreSQL Memory Saturation under `max_connections = 200` (NEW HIGH RISK)
-- **Module:** `terraform/modules/rds/main.tf` (Line 58)
-- **Configuration:** `max_connections = "200"` on `instance_class = "db.t4g.micro"` (1 GiB RAM).
-- **SRE Risk:**
-  - Raising the connection limit without increasing RAM introduces severe stability risks.
-  - When connection demand spikes, PostgreSQL backend worker processes will allocate up to 1.8 GiB of RAM.
-  - The Linux kernel Out-Of-Memory (OOM) killer will terminate `postmaster`, crashing the database and causing immediate 500 errors across all active candidate sessions.
-- **Remediation:** 
-  - Upgrade the RDS instance class to `db.t4g.small` (2 GiB RAM) or `db.t4g.medium` (4 GiB RAM).
-  - Deploy **AWS RDS Proxy** to decouple application connection pools from physical database connections.
+### 2.1 The `MinHealthyPercentage: 0` Outage (`ISSUE-INFRA-001`)
+In `.github/workflows/deploy.yml` (lines 31–34, 356–358):
+```yaml
+env:
+  ASG_INSTANCE_WARMUP: 120
+  ASG_MIN_HEALTHY_PERCENTAGE: 0
+  ASG_MAX_HEALTHY_PERCENTAGE: 100
+```
+During automated deployment rollouts, GitHub Actions executes:
+```bash
+aws autoscaling start-instance-refresh \
+  --auto-scaling-group-name "$asg" \
+  --preferences '{"MinHealthyPercentage": 0, "MaxHealthyPercentage": 100, "InstanceWarmup": 120, "AutoRollback": true}'
+```
+
+#### Step-by-Step Failure Execution Flow
+1. **Capacity Evaluation:** The Auto Scaling Group currently runs 2 desired instances (100% capacity).
+2. **Constraint Enforcement:** `MaxHealthyPercentage: 100` mandates that total instances in the group can **never exceed 2** during the refresh.
+3. **Termination Phase:** To launch a new instance with the updated Launch Template, Auto Scaling must first terminate an existing instance. Because `MinHealthyPercentage` is set to `0`, Auto Scaling evaluates that 0 running instances is permissible.
+4. **Complete Termination:** Auto Scaling terminates **both active instances simultaneously**.
+5. **Downtime Window:** While new EC2 instances boot, run cloud-init user data scripts, authenticate with ECR, pull container images, and undergo the 120-second health check grace period, the ALB target group has **0 healthy targets**.
+6. **User Impact:** All web browsers and API clients experience `HTTP 502 Bad Gateway` for 2 to 4 minutes during every deployment.
+
+### 2.2 Why This Configuration Was Introduced: AWS vCPU Service Quotas
+In AWS accounts with standard default service quotas:
+- Standard (`A`, `C`, `D`, `M`, `R`, `T`) On-Demand vCPU limit is typically 32 vCPUs.
+- Across 4 Auto Scaling Groups (Frontend, Backend, Worker, Judge), a rollout with `MaxHealthyPercentage: 200` attempts to double instance count simultaneously.
+- When previous deployments attempted to launch instances before terminating old ones, AWS EC2 rejected the `RunInstances` API call with:
+  `VcpuLimitExceeded: You have requested more vCPU capacity than your current vCPU limit of 32 allows.`
+- The previous engineering team resolved the quota deadlock by setting `MinHealthyPercentage: 0` to terminate old instances first, unknowingly introducing complete service downtime on every deployment.
 
 ---
 
-### 3.2 Shared Redis Memory Exhaustion & Cascade Lockup (ISSUE-INFRA-001)
-- **Module:** `terraform/modules/redis/main.tf` (Lines 44–60)
-- **Configuration:**
-  ```hcl
+## 3. Caching & Messaging Reliability (Redis Parameter Group)
+
+### 3.1 Unbounded Growth Under `noeviction` (`ISSUE-INFRA-002`)
+In `terraform/modules/redis/main.tf` (lines 44–58):
+```hcl
+resource "aws_elasticache_parameter_group" "noeviction" {
+  name        = "${var.name_prefix}-redis7-noeviction"
+  family      = "redis7"
   parameter {
     name  = "maxmemory-policy"
     value = "noeviction"
   }
-  ```
-- **SRE Risk:**
-  - Single shared Redis instance handles BullMQ queues, login rate limiters, session caches, and Socket.IO adapters.
-  - When memory reaches capacity, `noeviction` rejects all write commands with `OOM command not allowed`.
-  - This halts user logins, OTP verifications, job enqueuing, and live updates simultaneously.
-- **Remediation:** Separate BullMQ into a persistent Redis cluster, and use a separate Redis instance with `volatile-lru` for caching and rate limiting.
+}
+```
+- **The Dilemma:** BullMQ requires `noeviction` so that waiting and active job keys are not prematurely evicted by Redis under memory pressure.
+- **The Architecture Flaw:** CodeSkill routes general application caching (e.g. problem descriptions, user profile caches, OTP entries, rate limit counters) to this same Redis instance.
+- **The Failure Mode:** When memory on the `cache.t4g.small` node hits capacity, Redis refuses all writes. BullMQ crashes, submissions fail, and user logins fail.
 
 ---
 
-### 3.3 Broken S3 Presigner Deployment (ISSUE-BUILD-001)
-- **Module:** `backend-nestjs/src/s3/s3.service.ts`
-- **Issue:** The code now invokes `getSignedUrl` from `@aws-sdk/s3-request-presigner`, but the dependency was not installed in `node_modules`.
-- **SRE Impact:** Automated CI/CD deployments and Docker container launches fail during build/startup, preventing deployments to production.
+## 4. Database Infrastructure & Configuration Sizing
+
+### 4.1 Production Instance Sizing
+- **Current Live AWS Configuration:** `db.t3.medium` (2 vCPU, 4 GiB RAM, Multi-AZ).
+- **Terraform Configuration Flaw (`ISSUE-INFRA-003`):** In `terraform/environments/production/main.tf`, `create_parameter_group` is omitted. The RDS instance runs on default parameter group `default.postgres14`, meaning `rds.force_ssl = 1` and slow query logging are inactive.
 
 ---
 
-### 3.4 Decoupled Worker Socket.IO Emission (ISSUE-OBS-001)
-- **Module:** `backend-nestjs/src/worker.ts` & `src/gateway/events.gateway.ts`
-- **Issue:** When running `PROCESS_ROLE=judge` as a standalone daemon, the worker lacks an attached HTTP server listener. Real-time verdict emissions depend entirely on the Redis adapter. If the adapter encounters network blips, push events are lost silently.
-- **Remediation:** Implement explicit fallback polling on the client and ensure workers publish verdicts to dedicated Redis pub/sub topics consumed by the API server.
+## 5. Reliability & Disaster Recovery Assessment
+
+| Component | Backup Frequency | RPO (Recovery Point) | RTO (Recovery Time) | Reliability Rating |
+| :--- | :---: | :---: | :---: | :---: |
+| **RDS PostgreSQL Primary** | Automated daily + 30-day WAL | $< 5$ minutes | $< 20$ minutes (Multi-AZ failover) | **HIGH** |
+| **Submission Shards** | Manual SQL dump script | $> 24$ hours (No WAL streaming) | $> 2$ hours | **POOR** |
+| **AWS S3 Media Bucket** | Versioning Enabled | Instantaneous | Instantaneous | **EXCELLENT** |
+| **ElastiCache Redis** | Automated snapshots disabled | N/A (Volatile) | $< 15$ minutes (Recreation) | **MODERATE** |
 
 ---
 
-## 4. SRE Recommendations
+## 6. Infrastructure Remediation Action Items
 
-1. **Deploy AWS RDS Proxy:** Interpose a managed connection pooler between the API and RDS PostgreSQL.
-2. **Upgrade Database Instance Class:** Upgrade `db.t4g.micro` to `db.t4g.small` or higher.
-3. **Partition Redis Instances:** Decouple BullMQ persistent queues from rate-limiting/cache instances.
-4. **Automate Dependency Installation in CI:** Enforce `npm ci --legacy-peer-deps` in build containers to catch missing dependency imports before deployment.
+1. **Immediate CI/CD Fix:**
+   - Update `.github/workflows/deploy.yml`:
+     ```yaml
+     ASG_MIN_HEALTHY_PERCENTAGE: 50
+     ASG_MAX_HEALTHY_PERCENTAGE: 150
+     ASG_INSTANCE_WARMUP: 90
+     ```
+   - This ensures that during a 2-instance rollout, 1 instance remains active and healthy at all times while the second instance refreshes, eliminating downtime.
+2. **Request vCPU Limit Increase:**
+   - Submit an AWS Service Quotas increase request for "Running On-Demand All Standard instances" in `ap-south-1` from 32 to 64 vCPUs.
+3. **Split Redis Clusters:**
+   - Provision a dedicated `codeskill-redis-queue` instance for BullMQ (`noeviction`).
+   - Provision a separate `codeskill-redis-cache` instance for application caching (`allkeys-lru`).
+4. **Attach Custom Parameter Group in Production:**
+   - Set `create_parameter_group = true` in `terraform/environments/production/main.tf`.

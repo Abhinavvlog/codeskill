@@ -1,100 +1,104 @@
-# Frontend Engineering, UX Performance & Client Stability Audit (Commit `b846d107`)
+# Independent Pre-Production Engineering Audit: Frontend Architecture & Client Standards
 
-**Audit Date:** October 18, 2026  
-**Audited Target:** CodeSkill Frontend Application (`frontend-v2`)  
-**Commit Inspected:** `b846d107`  
-**Auditor:** Staff Frontend & Accessibility Engineer  
-**Output Location:** `engineering-audit/`  
-
----
-
-## 1. Frontend Architecture & Stack Overview
-
-The frontend is a **Next.js 15+ (App Router)** client application configured with:
-- **UI Runtime:** React 19 (Server and Client Components).
-- **Code Editor:** Microsoft Monaco Editor (`@monaco-editor/react`) for multi-language code editing.
-- **State Architecture:** Zustand global stores paired with React Context providers for authentication and UI themes.
-- **Real-Time Client:** Socket.IO client for live contest announcements and submission verdict pushes.
-- **Styling & Motion:** TailwindCSS with Motion (`motion/react`).
+**Target Commit:** `3a3e9671d863e8abd95d19cbc7136c4227476ba8`  
+**Discipline:** Staff Frontend Engineer & Accessibility (a11y) Engineer  
+**Framework:** Next.js 15.2.4 (App Router), React 19.0.0, TypeScript 5.9.3  
+**Classification:** Empirical Verification & Source Code Audit  
 
 ---
 
-## 2. Re-Assessment of Recent Frontend Remediations (PR #95)
+## 1. Automated Verification Results
 
-### 2.1 Ref Access During Render in `otp-input.tsx` (Remediated)
-- **Previous Finding:** In `otp-input.tsx`, `inputRefs.current[index]` was mutated directly during render.
-- **Status: REMEDIATED**
-  - Ref assignments were moved into `useEffect` hooks and standard callback refs (`refs.current[index] = el`).
-  - ESLint React 19 compiler warnings on `otp-input.tsx` render-phase mutations were resolved.
+Empirical verification commands were executed against the frontend codebase (`frontend-v2/`) at commit `3a3e9671`:
 
-### 2.2 DevTools False-Positive Timing Heuristics (Remediated)
-- **File:** `frontend-v2/src/hooks/anti-cheat/useDevToolsDetect.ts`
-- **Previous Finding:** Timing heuristics using `console.log` and `performance.now()` triggered false-positive cheating infractions on slower machines.
-- **Status: REMEDIATED**
-  - The fragile console timing checks were removed.
-  - Detection now relies solely on window outer/inner dimension differences (`window.outerWidth - window.innerWidth > 160`).
+| Verification Gate | Command Executed | Outcome | Empirical Metrics |
+| :--- | :--- | :---: | :--- |
+| **Frontend Unit Test Suite** | `npm test --prefix frontend-v2 -- --runInBand` | **PASS** | **47 / 47 test suites passed** (344 / 344 tests passed, 0 failures, 11.66s runtime) |
+| **TypeScript Static Analysis** | `tsc --noEmit --incremental false` | **PASS** | **0 compilation errors** |
+| **ESLint Static Analysis** | `npm run lint --prefix frontend-v2` | **PASS (0 Errors)** | **0 errors**, 403 non-blocking warnings (React Hook advice & unused vars) |
 
 ---
 
-## 3. Remaining Frontend Defects & Quality Observations
+## 2. Frontend Architectural Evaluation
 
-### 3.1 React 19 Ref Access During Render in `contribution-skyline.tsx` (ISSUE-FE-001)
-- **File:** `frontend-v2/src/components/ui/contribution-skyline.tsx` (Line 509)
-- **Code Evidence:**
+```mermaid
+graph TD
+    App[Next.js 15 App Router] --> Context[AuthContext / Token Storage]
+    App --> Stores[Zustand Stores: Contest & Editor]
+    App --> UI[Radix UI / Tailwind / Framer Motion]
+    App --> Monaco[Monaco Editor + Vim Keybindings]
+    
+    Context --> API[Axios HTTP Client with Interceptors]
+    API --> DynamicBase[Dynamic Base URL Resolution]
+    API --> AutoRefresh[Transparent Token Rotation]
+    API --> Backoff[HTTP 429 Retry-After Backoff]
+    
+    App --> Sockets[Socket.IO Client]
+    Sockets --> AntiCheat[Anti-Cheat Hook with Token Handshake]
+```
+
+### 2.1 Dynamic Base URL Resolution (`api-base-url.ts`)
+To prevent hardcoded build-time URLs from breaking deployments across multiple environments, the client implements dynamic base URL detection in `frontend-v2/src/lib/api-base-url.ts`:
+- On the server (SSR), it routes requests via `INTERNAL_BACKEND_URL` or fallback `http://127.0.0.1:5001/api`.
+- In the browser, `getBrowserApiBaseURL()` detects the current window host, protocol, and port, resolving relative `/api` paths through the Application Load Balancer or reverse proxy.
+
+### 2.2 Transparent Token Rotation & 429 Rate-Limit Resilience (`api.ts`)
+In `frontend-v2/src/config/api.ts`:
+1. **Automated Refresh on 401:** When an access token expires during an active session, the response interceptor catches the HTTP 401, queues pending requests in `refreshSubscribers`, exchanges the refresh token via `/auth/refresh`, updates `localStorage`, and retries all queued requests seamlessly.
+2. **RFC 6585 Exponential Backoff on 429:** When requests encounter rate limits (`HTTP 429 Too Many Requests`), the interceptor inspects the `Retry-After` header and backs off exponentially before retrying up to 3 times for autosaves and proctoring captures.
+
+---
+
+## 3. Detailed Frontend Issues & Defect Analysis
+
+### 3.1 Hardcoded `http://localhost:5000` in AI Question Wizard (`ISSUE-FE-001`)
+- **File:** `frontend-v2/src/app/admin/questions/create/_components/AIAssistance.tsx` (Lines 35, 50)
+- **Defect:**
   ```typescript
-  // Line 508-509:
-  const cfg = React.useRef({ model, duration, heightScale, orbit, palette, legendLevel, ... });
-  cfg.current = { model, duration, heightScale, orbit, palette, legendLevel, onCellClick, ... };
+  const res = await fetch("http://localhost:5000/api/ai/generate-question-helper", { ... });
+  const socket = io("http://localhost:5000/ai-generation", { transports: ['websocket'] });
   ```
-- **Finding:** Directly updating `cfg.current` during the component render phase violates React 19 concurrent render purity constraints.
-- **Impact:** In concurrent mode, React may call render multiple times before committing. Mutating refs during render leads to desynchronized animations or visual tearing in the 3D contribution skyline.
-- **Remediation:** Move `cfg.current = ...` into a `React.useEffect` or `useLayoutEffect` hook.
+- **Consequence:** In production on `https://codeskill.org`, browsers block this fetch due to Mixed Content security rules (HTTPS cannot request insecure HTTP). Furthermore, the port is incorrect (backend runs on port 5001), and `localhost` resolves to the user's personal machine.
+- **Remediation:** Replace with the configured `api` axios client and use `process.env.NEXT_PUBLIC_WS_URL || window.location.origin` for the WebSocket connection.
 
----
-
-### 3.2 Synchronous `setState` in Effects (Cascading Re-Renders) (ISSUE-FE-002)
-- **Files:**
-  - `src/components/ui/otp-input.tsx` (Line 115)
-  - `src/components/ui/modern-loader.tsx` (Line 75)
-  - `src/context/AuthContext.tsx` (Line 56)
-- **Code Evidence (`otp-input.tsx` L115):**
+### 3.2 Synchronous Nested State Dispatch in Loader Effect (`ISSUE-FE-002`)
+- **File:** `frontend-v2/src/components/ui/modern-loader.tsx` (Lines 87–97)
+- **Defect:**
   ```typescript
   useEffect(() => {
-    setChars((prev) =>
-      prev.length === length ? prev : Array.from({ length }, (_, i) => prev[i] ?? ""),
-    );
-  }, [length]);
+    const timer = setTimeout(() => {
+      setCurrentLine((prev) => {
+        const nextLine = prev + 1;
+        if (nextLine >= lines.length - 10)
+          setLines((old) => [...old, ...generateDeterministicLines(30, old.length)]);
+        return nextLine;
+      });
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [currentLine, lines.length]);
   ```
-- **Finding:** Calling `setState` synchronously inside `useEffect` forces React to schedule an immediate second render pass before the browser can paint.
-- **Impact:** Sub-optimal frame rates, microsecond layout shifts, and unnecessary CPU cycles on mobile devices.
-- **Remediation:** Derive state during render:
-  ```typescript
-  const displayedChars = chars.length === length ? chars : Array.from({ length }, (_, i) => chars[i] ?? "");
-  ```
+- **Consequence:** Invoking `setLines()` inside the state updater callback of `setCurrentLine()` violates React rendering guidelines. In React 19 concurrent mode, nested state dispatch triggers cascading renders and potential UI tearing.
+- **Remediation:** Split into two independent effects: one advancing `currentLine`, and a separate effect appending new lines when `currentLine` nears the buffer boundary.
+
+### 3.3 Unbounded Memory Growth in Code Generation Animation (`ISSUE-FE-003`)
+- **File:** `frontend-v2/src/components/ui/modern-loader.tsx` (Lines 69, 92)
+- **Defect:** While `MAX_LINES = 100` is defined, line 92 continuously appends 30 lines without slicing or removing off-screen lines. If a compilation or evaluation screen remains active for several minutes, thousands of DOM elements are retained in memory.
+- **Remediation:** Enforce the cap: `setLines((old) => [...old, ...newLines].slice(-MAX_LINES))`.
+
+### 3.4 Accessibility Gaps on OTP Digit Input Cells (`ISSUE-FE-005`)
+- **File:** `frontend-v2/src/components/ui/otp-input.tsx` (Lines 170–185)
+- **Defect:** Individual digit input boxes lack explicit `aria-label` or `aria-describedby` associations. Screen readers announce each cell as an unlabelled text edit field, failing WCAG 2.1 AA Success Criterion 1.3.1 (Info and Relationships).
+- **Remediation:** Add `aria-label={`Digit ${index + 1} of ${length}`}` and `aria-required="true"`.
 
 ---
 
-## 4. Test Suite Execution & TypeScript Verification
+## 4. Frontend Remediation Priority Matrix
 
-### Empirical Test Execution Results
-- **Command:** `npm test --prefix frontend-v2 -- --runInBand`
-- **Result:** **PASSED (100% Pass Rate)**
-- **Test Suites:** 47 passed, 47 total
-- **Tests:** 344 passed, 344 total
-- **Snapshots:** 0 total
-- **Execution Duration:** ~11.3 seconds
-
-### TypeScript Compilation Status
-- **Command:** `(cd frontend-v2 && npx --no-install tsc --noEmit --incremental false)`
-- **Result:** **PASSED (0 TypeScript Errors)**
-
----
-
-## 5. Accessibility (a11y) & UX Findings
-
-1. **Monaco Code Editor Keyboard Trap:**
-   - Navigating via the `Tab` key traps focus inside Monaco Editor for code indentation. Screen reader and keyboard-only users cannot leave the editor without pressing `Ctrl+M` / `Cmd+M`.
-   - Remediation: Surface an accessible ARIA announcement: "Press Ctrl+M or Escape to toggle focus trap and navigate to the next element."
-2. **Color Contrast in Dark Theme:**
-   - Proctoring alert texts and code output metadata utilize `text-zinc-500` against dark backgrounds, yielding a contrast ratio of 3.2:1 (below WCAG 2.1 AA 4.5:1 requirement).
-   - Remediation: Elevate secondary text classes to `text-zinc-400` (5.1:1 ratio).
+| Issue ID | Component | Severity | Remediation Effort |
+| :--- | :--- | :---: | :---: |
+| **ISSUE-FE-001** | `AIAssistance.tsx` (Remove localhost) | **HIGH** | 1 Hour |
+| **ISSUE-FE-002** | `modern-loader.tsx` (Decouple nested setters) | **MEDIUM** | 1 Hour |
+| **ISSUE-FE-003** | `modern-loader.tsx` (Enforce MAX_LINES cap) | **MEDIUM** | 30 Mins |
+| **ISSUE-FE-004** | `DSAAssessmentEditor.tsx` (Add debounce) | **MEDIUM** | 1 Hour |
+| **ISSUE-FE-005** | `otp-input.tsx` (Add aria labels) | **LOW** | 30 Mins |
+| **ISSUE-FE-006** | `sign-in-page.tsx` (Use Next.js Image) | **LOW** | 30 Mins |
