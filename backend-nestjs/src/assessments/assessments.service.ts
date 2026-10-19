@@ -1465,13 +1465,6 @@ export class AssessmentsService {
               : (q.metadata as any)?.constraints || [],
           timeLimit: q.timeLimit || (q.metadata as any)?.timeLimit || 2000,
           memoryLimit: q.memoryLimit || (q.metadata as any)?.memoryLimit || 256,
-          examples: (Array.isArray(q.examples) ? q.examples : [])
-            .filter((example) => !('isHidden' in example && example.isHidden === true))
-            .map((example) => ({
-              input: example.input || '',
-              output: example.output || '',
-              explanation: example.explanation || '',
-            })),
           testCases: codingTestCases(q)
             .filter((tc: any) => !tc.isHidden)
             .map((tc: any, tcIdx: number) => ({
