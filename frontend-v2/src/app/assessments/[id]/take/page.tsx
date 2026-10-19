@@ -42,6 +42,7 @@ import { CodeSnippet } from "@/components/assessment/CodeSnippet";
 import {
   checkAssessmentFace,
   getAssessmentFaceReference,
+  clearAssessmentFaceReference,
   type AssessmentFaceCheck,
 } from "@/lib/assessment-face-verification";
 
@@ -408,9 +409,11 @@ export default function TakeAssessmentPage({
           } catch (error: any) {
             lastError = error;
             const status = error?.response?.status;
-            const transient = !status || status === 429 || status >= 500;
+            // 409 Conflict indicates the submission is actively evaluating. Treat as transient with backoff retry!
+            const transient = !status || status === 409 || status === 429 || status >= 500;
             if (!transient || retry === 2) break;
-            await new Promise((resolve) => window.setTimeout(resolve, 750 * (retry + 1)));
+            const delay = status === 409 ? 1500 * (retry + 1) : 750 * (retry + 1);
+            await new Promise((resolve) => window.setTimeout(resolve, delay));
           }
         }
         if (lastError) throw lastError;
@@ -425,6 +428,7 @@ export default function TakeAssessmentPage({
       // Release a preflight stream that was handed off but not adopted by the
       // exam media hook (for example, after a quick route transition).
       releaseAssessmentStream(id);
+      clearAssessmentFaceReference(id);
       if (isAuto) {
         await new Promise((resolve) => window.setTimeout(resolve, 2500));
       }
