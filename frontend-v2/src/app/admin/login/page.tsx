@@ -141,10 +141,6 @@ export default function AdminLoginPage() {
             </div>
 
             <div className="space-y-1.5 text-center flex flex-col items-center">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20 text-[11px] sm:text-xs font-semibold tracking-wide">
-                <ShieldCheck className="w-3.5 h-3.5 text-rose-500" />
-                {showOTP ? "Two-Factor Verification" : "Secure Examination Console"}
-              </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground text-center">
                 {showOTP ? "Verify Your Identity" : "Administrator Sign In"}
               </h1>
