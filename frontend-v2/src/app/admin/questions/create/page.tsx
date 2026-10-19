@@ -40,6 +40,7 @@ import InputOutputFormat from "./_components/InputOutputFormat";
 import StarterCode from "./_components/StarterCode";
 import ReferenceSolution from "./_components/ReferenceSolution";
 import TestCases from "./_components/TestCases";
+import SampleExamples from "./_components/SampleExamples";
 import CustomChecker from "./_components/CustomChecker";
 import SolutionExplanation from "./_components/SolutionExplanation";
 import AIAssistance from "./_components/AIAssistance";
@@ -113,6 +114,7 @@ function UnifiedQuestionForm() {
         { id: "statement", label: "Statement", icon: FileText },
         { id: "constraints", label: "Constraints", icon: AlertTriangle },
         { id: "io-format", label: "I/O Format", icon: ArrowRightLeft },
+        { id: "sample-examples", label: "Examples", icon: BookOpen },
         { id: "starter-code", label: "Starter Code", icon: LayoutTemplate },
         { id: "reference-solution", label: "Reference", icon: Shield },
         { id: "test-cases", label: "Test Cases", icon: Database },
@@ -256,9 +258,7 @@ function UnifiedQuestionForm() {
         payload.constraints = formatConstraints(store.statement.constraints);
         payload.inputFormat = store.statement.inputFormat;
         payload.outputFormat = store.statement.outputFormat;
-        // Public test cases double as the sample examples shown to candidates.
-        payload.examples = store.testCases
-          .filter((tc) => !tc.isHidden)
+        payload.examples = store.sampleExamples
           .map((tc) => ({
             input: tc.input,
             output: tc.output,
@@ -466,6 +466,7 @@ function UnifiedQuestionForm() {
                   <ProblemStatement />
                   <Constraints />
                   <InputOutputFormat />
+                  <SampleExamples />
                   <StarterCode />
                   <ReferenceSolution />
                   <TestCases />

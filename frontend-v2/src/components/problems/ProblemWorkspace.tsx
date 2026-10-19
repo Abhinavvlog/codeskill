@@ -575,12 +575,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
 
   const editorTheme = theme === "dark" ? "vs-dark" : "light";
   const testCases = getTestCases();
-  // Left-panel examples fall back to the public (non-hidden) test cases.
-  const displaySamples = problem.statement?.samples?.length
-    ? problem.statement.samples.filter(hasSampleContent)
-    : (problem.testCases?.cases || [])
-        .filter((tc: any) => tc.isHidden !== true && hasSampleContent(tc))
-        .map((tc: any) => ({ input: tc.input, output: tc.output, explanation: tc.explanation }));
+  const displaySamples = (problem.statement?.samples ?? []).filter(hasSampleContent);
   const difficultyClass = DIFFICULTY_COLORS[problem.difficulty] || DIFFICULTY_COLORS.Easy;
   const acceptanceRate = problem.stats?.totalSubmissions > 0
     ? ((problem.stats.acceptedSubmissions / problem.stats.totalSubmissions) * 100).toFixed(1)
@@ -854,17 +849,10 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
                     {activeSidebarTab === "samples" && (
                       <div className="p-5">
                         <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-3">
-                          Sample Test Cases
+                          Examples
                         </h3>
                         <SampleTestCasesPanel
                           samples={displaySamples}
-                          onLoad={(sample) => {
-                            const match = testCases.findIndex(
-                              (tc: any) => (tc.input || "") === (sample.input || ""),
-                            );
-                            setActiveTestCase(match >= 0 ? match : 0);
-                            setActiveBottomTab("testcases");
-                          }}
                         />
                       </div>
                     )}
