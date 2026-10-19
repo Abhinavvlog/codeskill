@@ -5,8 +5,8 @@ import AdminProblemsPage from "@/app/admin/problems/page";
 import { adminProblemsAPI, adminQuestionsAPI } from "@/config/api";
 
 jest.mock("@/config/api", () => ({
-  adminProblemsAPI: { getAll: jest.fn() },
-  adminQuestionsAPI: { getAll: jest.fn() },
+  adminProblemsAPI: { getAll: jest.fn(), delete: jest.fn() },
+  adminQuestionsAPI: { getAll: jest.fn(), delete: jest.fn() },
 }));
 
 const getProblems = jest.mocked(adminProblemsAPI.getAll);
@@ -28,7 +28,12 @@ beforeEach(() => {
   jest.clearAllMocks();
   getProblems.mockResolvedValue(legacyResponse as Awaited<ReturnType<typeof adminProblemsAPI.getAll>>);
   getQuestions.mockResolvedValue(bankResponse as Awaited<ReturnType<typeof adminQuestionsAPI.getAll>>);
+  jest.spyOn(window, "confirm").mockReturnValue(true);
+  jest.mocked(adminProblemsAPI.delete).mockResolvedValue({ data: { success: true } } as never);
+  jest.mocked(adminQuestionsAPI.delete).mockResolvedValue({ data: { success: true } } as never);
 });
+
+afterEach(() => jest.restoreAllMocks());
 
 it("renders both existing records and eligible bank questions with their own editor links", async () => {
   render(<AdminProblemsPage />);
@@ -120,4 +125,81 @@ it("keeps results correct after React Strict Mode effect replay", async () => {
   expect(getQuestions.mock.calls[0][1]?.aborted).toBe(true);
   expect(getQuestions.mock.calls[1][1]?.aborted).toBe(false);
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it.each(["practice", "question-bank"] as const)("deletes a %s row through its own API and reloads the catalog", async source => {
+  render(<AdminProblemsPage />);
+  await screen.findByText("Graph Paths");
+  const practice = source === "practice";
+  const title = practice ? "Legacy Two Sum" : "Graph Paths";
+  if (practice) {
+    getProblems.mockResolvedValue({ data: { problems: [], pages: 1 } } as never);
+  } else {
+    getQuestions.mockResolvedValue({ data: { questions: bankResponse.data.questions.filter(question => question.id !== "bank-1"), pagination: { totalPages: 1 } } } as never);
+  }
+  fireEvent.click(screen.getByRole("button", { name: `Delete ${title}` }));
+  const dialog = screen.getByRole("alertdialog");
+  expect(dialog).toHaveTextContent(practice ? "Permanently delete" : "archives the original question");
+  expect(adminProblemsAPI.delete).not.toHaveBeenCalled();
+  expect(adminQuestionsAPI.delete).not.toHaveBeenCalled();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Delete", exact: true }));
+  const api = practice ? adminProblemsAPI : adminQuestionsAPI;
+  const otherApi = practice ? adminQuestionsAPI : adminProblemsAPI;
+  await waitFor(() => expect(api.delete).toHaveBeenCalledWith(practice ? "practice-1" : "bank-1"));
+  await waitFor(() => expect(getQuestions).toHaveBeenCalledTimes(2));
+  expect(screen.queryByText(title)).not.toBeInTheDocument();
+  expect(otherApi.delete).not.toHaveBeenCalled();
+  expect(window.confirm).not.toHaveBeenCalled();
+  expect(screen.getByRole("status")).toHaveTextContent(practice ? "Practice problem deleted." : "Question archived");
+});
+
+it.each(["Legacy Two Sum", "Graph Paths"])("keeps %s when deletion is cancelled", async title => {
+  render(<AdminProblemsPage />);
+  await screen.findByText("Graph Paths");
+  fireEvent.click(screen.getByRole("button", { name: `Delete ${title}` }));
+  fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Cancel" }));
+  expect(adminProblemsAPI.delete).not.toHaveBeenCalled();
+  expect(adminQuestionsAPI.delete).not.toHaveBeenCalled();
+  expect(screen.getByText(title)).toBeVisible();
+});
+
+it("keeps a failed deletion visible and lets the administrator retry", async () => {
+  jest.mocked(adminProblemsAPI.delete).mockRejectedValueOnce(new Error("Unavailable"));
+  render(<AdminProblemsPage />);
+  await screen.findByText("Graph Paths");
+  fireEvent.click(screen.getByRole("button", { name: "Delete Legacy Two Sum" }));
+  fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete", exact: true }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Could not delete this problem.");
+  expect(screen.getByText("Legacy Two Sum")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Delete Legacy Two Sum" })).toBeEnabled();
+  expect(getProblems).toHaveBeenCalledTimes(1);
+});
+
+it("focuses Cancel and dismisses the custom dialog with Escape without deleting", async () => {
+  render(<AdminProblemsPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Delete Legacy Two Sum" }));
+  const dialog = screen.getByRole("alertdialog");
+  await waitFor(() => expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus());
+  fireEvent.keyDown(dialog, { key: "Escape", code: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+  expect(adminProblemsAPI.delete).not.toHaveBeenCalled();
+  expect(window.confirm).not.toHaveBeenCalled();
+  expect(screen.getByText("Legacy Two Sum")).toBeVisible();
+});
+
+it("prevents repeated delete requests while a deletion is pending", async () => {
+  let finish!: (value: never) => void;
+  jest.mocked(adminProblemsAPI.delete).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  render(<AdminProblemsPage />);
+  await screen.findByText("Graph Paths");
+  getProblems.mockResolvedValue({ data: { problems: [], pages: 1 } } as never);
+  const button = screen.getByRole("button", { name: "Delete Legacy Two Sum" });
+  fireEvent.click(button);
+  fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete", exact: true }));
+  await waitFor(() => expect(button).toBeDisabled());
+  fireEvent.click(button);
+  expect(screen.getByRole("button", { name: "Delete Graph Paths" })).toBeDisabled();
+  expect(adminProblemsAPI.delete).toHaveBeenCalledTimes(1);
+  await act(async () => finish({ data: { success: true } } as never));
+  await waitFor(() => expect(screen.queryByText("Legacy Two Sum")).not.toBeInTheDocument());
 });
