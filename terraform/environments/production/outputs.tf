@@ -45,24 +45,3 @@ output "redis_endpoint" {
   description = "Configuration endpoint of the ElastiCache Redis cluster"
   value       = module.redis.endpoint
 }
-
-output "cloudfront_acm_validation_records" {
-  description = "DNS CNAME records to add to Hostinger to validate the CloudFront certificate in us-east-1"
-  value = [
-    for dvo in aws_acm_certificate.cloudfront.domain_validation_options : {
-      name   = dvo.resource_record_name
-      type   = dvo.resource_record_type
-      record = dvo.resource_record_value
-    }
-  ]
-}
-
-output "cloudfront_distribution_id" {
-  description = "Identifier of the CloudFront distribution (available when enable_cloudfront is true)"
-  value       = length(module.cloudfront) > 0 ? module.cloudfront[0].distribution_id : null
-}
-
-output "cloudfront_domain_name" {
-  description = "Domain name corresponding to the CloudFront distribution (point your Hostinger CNAME here)"
-  value       = length(module.cloudfront) > 0 ? module.cloudfront[0].distribution_domain_name : null
-}

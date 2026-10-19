@@ -23,18 +23,6 @@ provider "aws" {
   }
 }
 
-provider "aws" {
-  alias  = "us_east_1"
-  region = "us-east-1"
-  default_tags {
-    tags = {
-      Project     = "CodeSkill"
-      Environment = "production"
-      ManagedBy   = "Terraform"
-    }
-  }
-}
-
 locals {
   name_prefix  = "codeskill-prod"
   domain_name  = var.domain_name
@@ -480,55 +468,4 @@ module "judge0_asg" {
 
   scheduled_exam_scale_up_cron   = var.exam_scale_up_cron
   scheduled_exam_scale_down_cron = var.exam_scale_down_cron
-}
-
-# -----------------------------------------------------------------------------
-# 9. Edge Delivery & Protection (Amazon CloudFront & AWS WAF)
-# Note: Domain DNS is managed externally at Hostinger (not Route 53).
-# Add the CNAME output from `cloudfront_acm_validation_records` to Hostinger
-# to validate the certificate, then set enable_cloudfront = true.
-# -----------------------------------------------------------------------------
-
-# Random secret token injected by CloudFront to prevent direct ALB bypass
-resource "random_password" "origin_verify_secret" {
-  length  = 32
-  special = false
-}
-
-# ACM Certificate for CloudFront (Must be provisioned in us-east-1)
-resource "aws_acm_certificate" "cloudfront" {
-  provider          = aws.us_east_1
-  domain_name       = local.domain_name
-  validation_method = "DNS"
-
-  tags = {
-    Name = "${local.name_prefix}-cloudfront-cert"
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Edge WAF for CloudFront (scope = CLOUDFRONT in us-east-1)
-module "edge_waf" {
-  count       = var.enable_cloudfront ? 1 : 0
-  source      = "../../modules/waf"
-  providers   = { aws = aws.us_east_1 }
-  name_prefix = "${local.name_prefix}-edge"
-  scope       = "CLOUDFRONT"
-}
-
-# Amazon CloudFront Edge Distribution (Active once enable_cloudfront = true)
-module "cloudfront" {
-  count                          = var.enable_cloudfront ? 1 : 0
-  source                         = "../../modules/cloudfront"
-  name_prefix                    = local.name_prefix
-  domain_name                    = local.domain_name
-  alb_dns_name                   = module.alb.alb_dns_name
-  s3_bucket_regional_domain_name = module.s3.bucket_regional_domain_name
-  cloudfront_certificate_arn     = var.cloudfront_certificate_arn != "" ? var.cloudfront_certificate_arn : aws_acm_certificate.cloudfront.arn
-  origin_verify_secret           = random_password.origin_verify_secret.result
-  web_acl_arn                    = length(module.edge_waf) > 0 ? module.edge_waf[0].web_acl_arn : ""
-  price_class                    = var.cloudfront_price_class
 }

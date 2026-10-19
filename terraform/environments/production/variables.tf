@@ -149,21 +149,3 @@ variable "asg_instance_warmup" {
   type        = number
   default     = 120
 }
-
-variable "cloudfront_price_class" {
-  description = "CloudFront price class (PriceClass_200 covers India, US, Europe, Asia, Middle East)"
-  type        = string
-  default     = "PriceClass_200"
-}
-
-variable "enable_cloudfront" {
-  description = "Enable CloudFront distribution once the us-east-1 ACM certificate has been validated in Hostinger"
-  type        = bool
-  default     = false
-}
-
-variable "cloudfront_certificate_arn" {
-  description = "Optional explicit ACM Certificate ARN in us-east-1"
-  type        = string
-  default     = ""
-}
