@@ -142,7 +142,7 @@ export default function AdminLoginPage() {
 
             <div className="space-y-1.5 text-center flex flex-col items-center">
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground text-center">
-                {showOTP ? "Verify Your Identity" : "Administrator Sign In"}
+                {showOTP ? "Verify Your Identity" : "Admin Sign In"}
               </h1>
               <p className="text-sm text-muted-foreground leading-relaxed text-center max-w-xs sm:max-w-sm">
                 {showOTP
