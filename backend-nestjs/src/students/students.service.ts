@@ -536,8 +536,10 @@ export class StudentsService {
         '';
 
       const rawSem = findField(row, ['semester', 'sem']);
+      // University sheets commonly write ordinal semesters such as "5th".
+      // Keep invalid values as NaN so the existing row validation reports them.
       const semester = rawSem
-        ? Number(rawSem)
+        ? Number(rawSem.replace(/(?:st|nd|rd|th)$/i, '').trim())
         : defaultOptions?.defaultSemester || 1;
 
       const rawYear = findField(row, ['year', 'grad_year', 'graduation_year']);

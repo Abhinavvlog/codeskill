@@ -159,6 +159,25 @@ describe('Students Bulk Import & Validation', () => {
     expect(result.validRows[0].semester).toBe(6);
   });
 
+  it('accepts ordinal semester values from university spreadsheets', async () => {
+    const buffer = createWorkbookBuffer([{
+      'Roll No': 2416438,
+      Name: 'Aadarshdeep Singh',
+      'Email Id': '2416438.cse.coe@cgc.edu.in',
+      Branch: 'CSE',
+      Sem: '5th',
+    }]);
+
+    const result = await service.parseAndValidateImport(buffer, {
+      defaultBatch: 'AY 2026-2027 ODD',
+      defaultYear: 2027,
+    });
+
+    expect(result.valid).toBe(1);
+    expect(result.validRows[0].semester).toBe(5);
+    expect(result.validRows[0].uid).toBe('2416438');
+  });
+
   it('re-uploading the same file performs idempotent processing and does not fail', async () => {
     // Simulate database returning existing records for confirm check
     userRepo.find.mockResolvedValue([
