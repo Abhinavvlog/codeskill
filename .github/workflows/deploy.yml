@@ -48,6 +48,29 @@ jobs:
     name: Validate Backend (Lint, Build, Test)
     if: github.event.inputs.service == 'all' || github.event.inputs.service == 'backend' || github.event_name == 'push'
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_DB: codeskill_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
@@ -75,9 +98,24 @@ jobs:
         working-directory: ./backend-nestjs
         run: npm run test:startup
 
-      - name: Backend Unit Tests
+      - name: Backend Unit & Concurrency Tests
         working-directory: ./backend-nestjs
         run: npm test -- --maxWorkers=2
+
+      - name: Backend E2E Tests
+        working-directory: ./backend-nestjs
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgres://postgres:postgrespassword@localhost:5432/codeskill_test
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: postgrespassword
+          DATABASE_NAME: codeskill_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          JWT_SECRET: test-super-secret-key-32-chars-minimum-length
+        run: npm run test:e2e -- --runInBand
 
   validate-frontend:
     name: Validate Frontend (Lint, Type Check & Tests)
