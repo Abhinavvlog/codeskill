@@ -29,12 +29,68 @@ resource "aws_wafv2_web_acl" "main" {
       managed_rule_group_statement {
         name        = "AWSManagedRulesCommonRuleSet"
         vendor_name = "AWS"
+
+        # The ALB WAF inspects only 8 KiB of a body. Spreadsheet uploads and
+        # validated import batches legitimately exceed that size; retain every
+        # other managed rule and handle this size label below by request path.
+        rule_action_override {
+          name = "SizeRestrictions_BODY"
+          action_to_use {
+            count {}
+          }
+        }
       }
     }
 
     visibility_config {
       cloudwatch_metrics_enabled = false
       metric_name                = "AWSManagedRulesCommonRuleSetMetric"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  # Keep the managed body-size restriction for all routes except the bounded,
+  # authenticated bulk-import endpoints. Their file/JSON limits are enforced
+  # by the application after the ALB forwards the request.
+  rule {
+    name     = "BlockOversizeBodyOutsideBulkImport"
+    priority = 2
+
+    action {
+      block {}
+    }
+
+    statement {
+      and_statement {
+        statement {
+          label_match_statement {
+            scope = "LABEL"
+            key   = "awswaf:managed:aws:core-rule-set:SizeRestrictions_Body"
+          }
+        }
+
+        statement {
+          not_statement {
+            statement {
+              regex_match_statement {
+                regex_string = "^/api/admin/(students|questions)/import/(preview|confirm|auto)$"
+                field_to_match {
+                  uri_path {}
+                }
+                text_transformation {
+                  priority = 0
+                  type     = "NONE"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = false
+      metric_name                = "BlockOversizeBodyOutsideBulkImportMetric"
       sampled_requests_enabled   = true
     }
   }

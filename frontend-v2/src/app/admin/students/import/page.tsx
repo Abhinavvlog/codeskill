@@ -155,8 +155,12 @@ export default function ImportStudentsPage() {
       }
       setImportResult(result);
     } catch (err: any) {
+      const blockedByFirewall = err.response?.status === 403 &&
+        typeof err.response?.data !== "object";
       setErrorMessage(
-        `${err.response?.data?.message || "Failed to commit student import into database."} Some batches may have succeeded. Retry safely; existing students will be skipped.`,
+        `${blockedByFirewall
+          ? "Import request was blocked (HTTP 403). Ask the site administrator to check the firewall body-size rule."
+          : err.response?.data?.message || "Failed to commit student import into database."} Some batches may have succeeded. Retry safely; existing students will be skipped.`,
       );
     } finally {
       setIsCommitting(false);
