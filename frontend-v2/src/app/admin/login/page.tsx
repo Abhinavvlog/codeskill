@@ -107,7 +107,7 @@ export default function AdminLoginPage() {
           <div className="rounded-3xl border border-border/70 bg-card/60 backdrop-blur-sm p-6 sm:p-8 shadow-sm transition-all space-y-6">
             {/* Dual Co-Branding Header: CodeSkill Admin Logo | CU Logo */}
             <div className="flex items-center justify-center gap-3 sm:gap-4 select-none pt-1">
-              {/* CodeSkill Logo + Wordmark + Admin Tag */}
+              {/* CodeSkill Logo + Wordmark */}
               <Link
                 href="/"
                 className="inline-flex items-center gap-2.5 group transition-transform hover:scale-[1.02]"
@@ -119,14 +119,9 @@ export default function AdminLoginPage() {
                     className="w-full h-full object-contain"
                   />
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-2xl sm:text-[26px] tracking-tight leading-none text-foreground font-sans">
-                    CodeSkill
-                  </span>
-                  <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/25 rounded-md leading-none shadow-xs">
-                    Admin
-                  </span>
-                </div>
+                <span className="font-bold text-2xl sm:text-[26px] tracking-tight leading-none text-foreground font-sans">
+                  CodeSkill
+                </span>
               </Link>
 
               {/* Divider */}
