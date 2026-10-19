@@ -127,7 +127,7 @@ export async function applyDeclarativePartitioningMigration(
       "createdAt" timestamp NOT NULL DEFAULT now(),
       "updatedAt" timestamp NOT NULL DEFAULT now(),
       CONSTRAINT "PK_submissions" PRIMARY KEY ("id", "createdAt"),
-      CONSTRAINT "CHK_submissions_problem_source" CHECK ("problemSource" IN ('problem', 'metadata', 'question'))
+      CONSTRAINT "CHK_submissions_problem_source" CHECK ("problemSource" IN ('problem', 'metadata', 'question', 'contest-question'))
     ) PARTITION BY RANGE ("createdAt")`,
       `CREATE TABLE IF NOT EXISTS "submissions_y2026m10" PARTITION OF "submissions"
       FOR VALUES FROM ('2026-10-01 00:00:00') TO ('2026-11-01 00:00:00');

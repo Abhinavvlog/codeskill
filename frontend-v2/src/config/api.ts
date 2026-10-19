@@ -295,6 +295,8 @@ export const problemsAPI = {
     return api.get("/problems", { params, signal });
   },
   getBySlug: (slug: string) => api.get(`/problems/${slug}`),
+  getContestProblem: (contestId: string, slug: string) =>
+    api.get(`/contests/${encodeURIComponent(contestId)}/problems/${encodeURIComponent(slug)}`),
 };
 
 export const petAPI = {
@@ -411,6 +413,7 @@ function notifyContestChange<T>(response: T): T {
 export const adminContestsAPI = {
   getAll: (page = 1, limit = 50, search = "") =>
     api.get(`/admin/contests?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`),
+  getEligibleQuestions: () => api.get("/admin/contests/eligible-questions"),
   getById: (id: string) => api.get(`/admin/contests/${id}`),
   create: (data: any) => api.post("/admin/contests", data).then(notifyContestChange),
   update: (id: string, data: any) => api.put(`/admin/contests/${id}`, data).then(notifyContestChange),

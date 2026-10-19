@@ -7,7 +7,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThanOrEqual } from 'typeorm';
+import { Repository, MoreThanOrEqual, In } from 'typeorm';
 
 import { User } from '../database/entities/user.entity';
 import { ProblemMetadata } from '../database/entities/problem-metadata.entity';
@@ -25,6 +25,28 @@ import { Question } from '../database/entities/question.entity';
 import { CacheService } from '../redis/cache.service';
 import { TokenService } from '../auth/token.service';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
+
+const CONTEST_FORMATS = ['mcq', 'coding', 'mixed'] as const;
+type ContestFormat = (typeof CONTEST_FORMATS)[number];
+const MCQ_TYPES = ['mcq', 'single_choice', 'multiple_choice', 'true_false'];
+const CODING_TYPES = ['dsa', 'coding', 'algorithmic'];
+
+function questionContestType(questionType: unknown): 'mcq' | 'coding' | null {
+  const type = String(questionType || '').trim().toLowerCase();
+  if (MCQ_TYPES.includes(type)) return 'mcq';
+  if (CODING_TYPES.includes(type)) return 'coding';
+  return null;
+}
+
+function contestQuestionIsEligible(question: Question) {
+  const metadata = question.metadata || {};
+  return (
+    ['approved', 'active', 'published'].includes(String(question.status || '').toLowerCase()) &&
+    ['published', 'public'].includes(String(metadata.visibility || '').trim().toLowerCase()) &&
+    metadata.contestOnly === true &&
+    questionContestType(question.questionType) !== null
+  );
+}
 
 @Injectable()
 export class AdminService {
@@ -372,6 +394,32 @@ export class AdminService {
     return { ...contest, _id: contest.id };
   }
 
+  async getContestEligibleQuestions(format?: string) {
+    const selectedFormat = format?.toLowerCase();
+    if (selectedFormat && !CONTEST_FORMATS.includes(selectedFormat as ContestFormat)) {
+      throw new BadRequestException('Invalid contest format');
+    }
+
+    const questions = await this.questionModel.find({
+      order: { createdAt: 'DESC' },
+    });
+    return {
+      questions: questions
+        .filter((question) => {
+          if (!contestQuestionIsEligible(question)) return false;
+          const type = questionContestType(question.questionType);
+          return !selectedFormat || selectedFormat === 'mixed' || type === selectedFormat;
+        })
+        .map((question) => ({
+          _id: question.id,
+          title: question.title || question.question,
+          slug: question.slug || `question-${question.id}`,
+          difficulty: question.difficulty,
+          type: questionContestType(question.questionType),
+        })),
+    };
+  }
+
   async deleteContest(id: string) {
     const contest = await this.contestModel.findOne({
       where: this.contestLookup(id),
@@ -382,6 +430,10 @@ export class AdminService {
   }
 
   private validateContestPayload(body: any) {
+    const format = String(body?.format || 'coding').toLowerCase();
+    if (!CONTEST_FORMATS.includes(format as ContestFormat)) {
+      throw new BadRequestException('Invalid contest format');
+    }
     const title = String(body?.title || '').trim();
     const slug = String(body?.slug || '')
       .trim()
@@ -427,6 +479,7 @@ export class AdminService {
       startTime,
       endTime,
       problems,
+      format,
       isPrivate: !!body?.isPrivate,
       password: body?.isPrivate ? String(body.password).trim() : undefined,
       isPublished: !!body?.isPublished,
@@ -460,6 +513,7 @@ export class AdminService {
 
   async createContest(body: any) {
     const data = this.validateContestPayload(body);
+    await this.validateContestQuestionSelection(data.problems, data.format);
     if (!data.antiCheatConfig) {
       data.antiCheatConfig = {
         enableTabSwitchDetection: true,
@@ -491,7 +545,7 @@ export class AdminService {
       where: this.contestLookup(id),
     });
     if (!contest) throw new NotFoundException('Contest not found');
-
+    await this.validateContestQuestionSelection(data.problems, data.format, contest.problems || []);
     const clash = await this.contestModel.findOne({
       where: { slug: data.slug },
     });
@@ -506,6 +560,37 @@ export class AdminService {
       message: 'Contest updated',
       contest: { ...contest, _id: contest.id },
     };
+  }
+
+  private async validateContestQuestionSelection(
+    problemIds: string[],
+    format: ContestFormat,
+    existingProblemIds: string[] = [],
+  ) {
+    const questions = await this.questionModel.find({
+      where: { id: In(problemIds) },
+    });
+    const questionById = new Map(questions.map((question) => [question.id, question]));
+    for (const id of problemIds) {
+      const question = questionById.get(id);
+      const type = question && questionContestType(question.questionType);
+      if (!question && existingProblemIds.includes(id) && format !== 'mcq') {
+        const legacyProblem = await this.problemModel.findOne({ where: { id } });
+        if (
+          legacyProblem &&
+          ['published', 'public'].includes(String(legacyProblem.visibility || '').trim().toLowerCase())
+        ) continue;
+      }
+      if (
+        !question ||
+        !contestQuestionIsEligible(question) ||
+        (format !== 'mixed' && type !== format)
+      ) {
+        throw new BadRequestException(
+          'Contest problems must be published Contest Only questions matching the selected format',
+        );
+      }
+    }
   }
 
   async getContestResults(

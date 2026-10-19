@@ -437,6 +437,20 @@ it.each([
     service.getExecutionProblem(id, 'question'),
   ).rejects.toBeInstanceOf(NotFoundException);
 });
+it('allows published Contest Only coding details through the contest-scoped service path', async () => {
+  const { service, bankQuery } = setup();
+  bankQuery.getOne.mockResolvedValueOnce(codingQuestion({ visibility: 'Published', contestOnly: true }));
+  await expect(service.getProblemBySlug('bank-title')).rejects.toBeInstanceOf(NotFoundException);
+  bankQuery.getOne.mockResolvedValueOnce(codingQuestion({ visibility: 'Published', contestOnly: true }));
+  expect((await service.getContestProblemBySlug('bank-title')).data).toMatchObject({ id, title: 'Bank Title' });
+});
+it('resolves contest submission sources only for still-eligible Contest Only coding questions', async () => {
+  const { service, bank } = setup();
+  bank.findOne.mockResolvedValueOnce(codingQuestion({ visibility: 'Published', contestOnly: true }));
+  expect(await service.getExecutionProblem(id, 'contest-question')).toMatchObject({ id, source: 'question' });
+  bank.findOne.mockResolvedValueOnce(codingQuestion({ visibility: 'Published', contestOnly: false }));
+  await expect(service.getExecutionProblem(id, 'contest-question')).rejects.toBeInstanceOf(NotFoundException);
+});
 it.each(['MCQ', 'TRUE_FALSE', 'CODE_OUTPUT', 'MULTIPLE_CHOICE'])(
   'excludes noncoding %s despite public visibility',
   async (questionType) => {

@@ -71,7 +71,7 @@ const SIDEBAR_TABS = [
   { id: "ai_tutor", icon: Brain, label: "AI Tutor", shortcut: "⌘I" },
 ];
 
-export default function ProblemWorkspace({ params, embedded = false }: { params: Promise<{ id: string }>; embedded?: boolean }) {
+export default function ProblemWorkspace({ params, embedded = false, contestId }: { params: Promise<{ id: string }>; embedded?: boolean; contestId?: string }) {
   const unwrappedParams = use(params);
   const problemId = unwrappedParams.id;
   const { theme } = useTheme();
@@ -147,11 +147,11 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
 
   useEffect(() => {
     setLoading(true);
-    problemsAPI.getBySlug(problemId)
+    (contestId ? problemsAPI.getContestProblem(contestId, problemId) : problemsAPI.getBySlug(problemId))
       .then(res => setProblem(res.data.data))
       .catch(() => setProblem(null))
       .finally(() => setLoading(false));
-  }, [problemId]);
+  }, [problemId, contestId]);
 
   // Draft Restoration
   useEffect(() => {
@@ -439,6 +439,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
     try {
       const submitRes = await submissionAPI.submit({
         problemId: problem._id || problem.id,
+        contestId,
         language,
         code,
         category: problem.categories?.[0] || "General",

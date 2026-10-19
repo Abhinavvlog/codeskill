@@ -16,6 +16,18 @@ export async function applyContestSecurityReattemptMigration(
     END $$;
   `);
 
+  await queryRunner.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'contests' AND column_name = 'format'
+      ) THEN
+        ALTER TABLE "contests" ADD COLUMN "format" varchar(20) NOT NULL DEFAULT 'coding';
+      END IF;
+    END $$;
+  `);
+
   // 2. Add attemptNumber, score, and problemsSolved to contest_attempts if missing
   await queryRunner.query(`
     DO $$
