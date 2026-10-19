@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import Image from 'next/image';
 import MentorGratitude from '@/components/skill-development/MentorGratitude';
+import DominoGallery from '@/components/ui/domino-gallery';
 import {
   ArrowDownRight,
   ArrowLeft,
@@ -60,7 +60,7 @@ const teamMembers = [
 
 export default function SkillDevelopmentPage() {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
+    <main className="relative min-h-screen overflow-x-clip bg-background text-foreground">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 h-[34rem] bg-gradient-to-b from-primary/10 via-primary/5 to-transparent"
@@ -113,30 +113,18 @@ export default function SkillDevelopmentPage() {
             <span className="mx-auto mt-5 block h-1 w-12 rounded-full bg-primary" aria-hidden="true" />
           </div>
 
-          <div className="grid grid-cols-3 gap-x-2 gap-y-6 sm:grid-cols-3 sm:gap-x-4 md:grid-cols-5 xl:grid-cols-9 xl:gap-x-2 2xl:gap-x-4" aria-label="CodeSkill team members">
-            {teamMembers.map((member) => (
-              <article
-                key={member.image}
-                className="group flex min-w-0 flex-col items-center px-0.5 py-3 text-center transition duration-300 hover:-translate-y-1 sm:px-1"
-              >
-                <div className="relative aspect-[4/5] w-full max-w-[11rem] shrink-0 overflow-hidden rounded-2xl bg-muted shadow-md transition duration-300 group-hover:shadow-lg">
-                  <Image
-                    src={member.image}
-                    alt={`Portrait of ${member.name}`}
-                    fill
-                    sizes="(max-width: 639px) 28vw, (max-width: 767px) 20vw, (max-width: 1279px) 18vw, 11rem"
-                    quality={82}
-                    className={`object-cover transition duration-500 group-hover:scale-[1.035] ${member.name === 'Shadab' ? 'object-[44%_center]' : 'object-center'}`}
-                  />
-                </div>
-                <div className="mt-4 flex min-h-[4.5rem] w-full flex-col items-center gap-2">
-                  <h3 className="w-full text-sm font-extrabold leading-snug tracking-tight text-foreground sm:text-base lg:text-lg">{member.name}</h3>
-                  <span className="h-0.5 w-7 rounded-full bg-primary" aria-hidden="true" />
-                  <p className="text-xs font-semibold leading-snug text-primary sm:text-sm">{member.role}</p>
-                </div>
-              </article>
-            ))}
-          </div>
+          <DominoGallery
+            items={teamMembers.map((member) => ({
+              src: member.image,
+              alt: `Portrait of ${member.name}, ${member.role}`,
+              title: `${member.name} · ${member.role}`,
+            }))}
+            cardWidth={210}
+            cardHeight={315}
+            gap={16}
+            scrollLength={1400}
+            standAngle={94}
+          />
         </section>
 
         <section className="mx-auto mt-16 grid max-w-5xl gap-5 md:grid-cols-2">
