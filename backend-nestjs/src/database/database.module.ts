@@ -36,6 +36,7 @@ import { BugReport } from './entities/bug-report.entity';
 import { BugImage } from './entities/bug-image.entity';
 import { BugComment } from './entities/bug-comment.entity';
 import { BugActivity } from './entities/bug-activity.entity';
+import { QuestionBulkUploadBatch } from './entities/question-bulk-upload-batch.entity';
 
 const entities = [
   User,
@@ -50,6 +51,7 @@ const entities = [
   ProblemConfig,
   ProblemTestCase,
   Question,
+  QuestionBulkUploadBatch,
   QuestionBank,
   Assessment,
   AssessmentAttempt,
@@ -146,4 +148,4 @@ const entities = [
   ],
   exports: [TypeOrmModule],
 })
-export class DatabaseModule {}
+export class DatabaseModule { }

@@ -562,10 +562,14 @@ export const adminQuestionsAPI = {
     status?: string;
     language?: string;
     aiGenerated?: boolean;
+    batchId?: string;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
   }, signal?: AbortSignal) => api.get("/admin/questions", { params, signal }),
   getById: (id: string) => api.get(`/admin/questions/${id}`),
+  getBulkUploadBatches: (params?: { page?: number; limit?: number }) => api.get('/admin/questions/bulk-upload-batches', { params }),
+  deleteBulkUploadBatch: (id: string, mode: 'history' | 'with-questions') =>
+    api.delete(`/admin/questions/bulk-upload-batches/${id}`, { params: { mode } }),
   create: (data: any) => api.post("/admin/questions", data),
   update: (id: string, data: any) => api.put(`/admin/questions/${id}`, data),
   bulkUpdate: (ids: string[], updates: any) => api.put("/admin/questions/bulk", { ids, updates }),
@@ -580,8 +584,8 @@ export const adminQuestionsAPI = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
-  confirmImport: (validRows: any[], mergeStrategy?: 'skip' | 'update' | 'merge') =>
-    api.post("/admin/questions/import/confirm", { validRows, mergeStrategy }),
+  confirmImport: (validRows: any[], mergeStrategy?: 'skip' | 'update' | 'merge', totalRows?: number, originalFilename?: string) =>
+    api.post("/admin/questions/import/confirm", { validRows, mergeStrategy, totalRows, originalFilename }),
   autoImport: (file: File, mergeStrategy?: 'skip' | 'update' | 'merge') => {
     const formData = new FormData();
     formData.append("file", file);
