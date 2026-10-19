@@ -987,7 +987,11 @@ export class QuestionsService {
       .filter(Boolean);
   }
 
-  async parseAndValidateQuestionsImport(fileBuffer: Buffer, sheetName?: string) {
+  async parseAndValidateQuestionsImport(
+    fileBuffer: Buffer,
+    sheetName?: string,
+    requireSheetSelection = false,
+  ) {
     const workbook = XLSX.read(fileBuffer, {
       type: 'buffer',
       cellFormula: false,
@@ -1005,7 +1009,7 @@ export class QuestionsService {
       );
     }
 
-    const selectedSheet = sheetName || (sheetNames.length === 1 ? sheetNames[0] : null);
+    const selectedSheet = sheetName || (!requireSheetSelection || sheetNames.length === 1 ? sheetNames[0] : null);
     if (selectedSheet && !sheetNames.includes(selectedSheet)) {
       throw new BadRequestException('Selected worksheet does not exist in the uploaded file.');
     }
@@ -1973,7 +1977,7 @@ export class QuestionsService {
     mergeStrategy: 'skip' | 'update' | 'merge' = 'skip',
     sheetName?: string,
   ) {
-    const preview = await this.parseAndValidateQuestionsImport(fileBuffer, sheetName);
+    const preview = await this.parseAndValidateQuestionsImport(fileBuffer, sheetName, true);
     if (!preview.selectedSheet) {
       throw new BadRequestException('Select a worksheet before importing questions.');
     }

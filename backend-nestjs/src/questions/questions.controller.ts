@@ -70,7 +70,7 @@ export class QuestionsController {
     if (!file) {
       throw new BadRequestException('Spreadsheet file is required');
     }
-    return this.questionsService.parseAndValidateQuestionsImport(file.buffer, sheetName?.trim());
+    return this.questionsService.parseAndValidateQuestionsImport(file.buffer, sheetName?.trim(), true);
   }
 
   @Post('import/auto')

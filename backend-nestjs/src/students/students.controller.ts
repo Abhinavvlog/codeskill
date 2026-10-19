@@ -184,7 +184,7 @@ export class StudentsController {
       defaultUniversity: defaultUniversity?.trim(),
       sheetName: sheetName?.trim(),
     };
-    return this.studentsService.parseAndValidateImport(file.buffer, defaultOptions);
+    return this.studentsService.parseAndValidateImport(file.buffer, defaultOptions, true);
   }
 
   @Post('import/confirm')

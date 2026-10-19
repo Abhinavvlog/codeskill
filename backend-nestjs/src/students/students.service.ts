@@ -367,6 +367,7 @@ export class StudentsService {
       defaultUniversity?: string;
       sheetName?: string;
     },
+    requireSheetSelection = false,
   ) {
     let workbook: xlsx.WorkBook;
     try {
@@ -393,7 +394,7 @@ export class StudentsService {
       );
     }
 
-    const selectedSheet = defaultOptions?.sheetName || (sheetNames.length === 1 ? sheetNames[0] : null);
+    const selectedSheet = defaultOptions?.sheetName || (!requireSheetSelection || sheetNames.length === 1 ? sheetNames[0] : null);
     if (selectedSheet && !sheetNames.includes(selectedSheet)) {
       throw new BadRequestException('Selected worksheet does not exist in the uploaded file');
     }
