@@ -39,7 +39,7 @@ interface PreviewData {
     toUpdateCount?: number;
   };
   validRows: any[];
-  errors: { row: number; question?: string; error: string; isDuplicate?: boolean }[];
+  errors: { row: number; question?: string; questionType?: string; error: string; isDuplicate?: boolean }[];
 }
 
 export default function ImportQuestionsPage() {
@@ -141,12 +141,12 @@ export default function ImportQuestionsPage() {
   };
 
   const handleConfirmImport = async () => {
-    if (!previewData || previewData.validRows.length === 0) return;
+    if (!previewData || previewData.summary.totalRows === 0) return;
 
     setIsCommitting(true);
     setErrorMessage(null);
     try {
-      const res = await adminQuestionsAPI.confirmImport(previewData.validRows, mergeStrategy);
+      const res = await adminQuestionsAPI.confirmImport(previewData.validRows, mergeStrategy, previewData.summary.totalRows, file?.name);
       const data = res.data;
       setImportResult({
         totalProcessed: data.totalProcessed || data.count || previewData.validRows.length,
@@ -564,7 +564,7 @@ export default function ImportQuestionsPage() {
                   )}
                   <button
                     type="button"
-                    disabled={isCommitting || previewData.validRows.length === 0}
+                    disabled={isCommitting || previewData.summary.totalRows === 0}
                     onClick={handleConfirmImport}
                     className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:bg-primary/90 transition-all disabled:opacity-50"
                   >
@@ -576,7 +576,7 @@ export default function ImportQuestionsPage() {
                     ) : (
                       <>
                         <Check className="w-4 h-4" />
-                        Confirm & Process ({previewData.validRows.length})
+                        Confirm & Process ({previewData.validRows.length} valid, {previewData.summary.invalidCount} failed)
                       </>
                     )}
                   </button>

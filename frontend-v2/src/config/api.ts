@@ -562,10 +562,14 @@ export const adminQuestionsAPI = {
     status?: string;
     language?: string;
     aiGenerated?: boolean;
+    batchId?: string;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
   }, signal?: AbortSignal) => api.get("/admin/questions", { params, signal }),
   getById: (id: string) => api.get(`/admin/questions/${id}`),
+  getBulkUploadBatches: (params?: { page?: number; limit?: number }) => api.get('/admin/questions/bulk-upload-batches', { params }),
+  deleteBulkUploadBatch: (id: string, mode: 'history' | 'with-questions') =>
+    api.delete(`/admin/questions/bulk-upload-batches/${id}`, { params: { mode } }),
   create: (data: any) => api.post("/admin/questions", data),
   update: (id: string, data: any) => api.put(`/admin/questions/${id}`, data),
   bulkUpdate: (ids: string[], updates: any) => api.put("/admin/questions/bulk", { ids, updates }),
@@ -580,8 +584,8 @@ export const adminQuestionsAPI = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
-  confirmImport: (validRows: any[], mergeStrategy?: 'skip' | 'update' | 'merge') =>
-    api.post("/admin/questions/import/confirm", { validRows, mergeStrategy }),
+  confirmImport: (validRows: any[], mergeStrategy?: 'skip' | 'update' | 'merge', totalRows?: number, originalFilename?: string) =>
+    api.post("/admin/questions/import/confirm", { validRows, mergeStrategy, totalRows, originalFilename }),
   autoImport: (file: File, mergeStrategy?: 'skip' | 'update' | 'merge') => {
     const formData = new FormData();
     formData.append("file", file);
@@ -608,6 +612,26 @@ export const adminAssessmentsAPI = {
   updateStatus: (id: string, status: string) => api.put(`/admin/assessments/${id}/status`, { status }),
   delete: (id: string) => api.delete(`/admin/assessments/${id}`),
   getResults: (id: string) => api.get(`/admin/assessments/${id}/results`),
+};
+
+export const adminBugsAPI = {
+  getAll: (params?: { search?: string; sort?: "newest" | "oldest" | "priority" }) =>
+    api.get("/admin/bugs", { params }),
+  getById: (id: string) => api.get(`/admin/bugs/${id}`),
+  create: (data: FormData) =>
+    api.post("/admin/bugs", data, { headers: { "Content-Type": "multipart/form-data" } }),
+  assign: (id: string, assigneeName: string) =>
+    api.put(`/admin/bugs/${id}/assign`, { assigneeName }),
+  updateStatus: (id: string, status: "fixed" | "new") =>
+    api.put(`/admin/bugs/${id}/status`, { status }),
+  updateBug: (id: string, data: { title: string; description: string }) =>
+    api.put(`/admin/bugs/${id}`, data),
+  addImages: (id: string, data: FormData) =>
+    api.post(`/admin/bugs/${id}/images`, data, { headers: { "Content-Type": "multipart/form-data" } }),
+  addComment: (id: string, data: { commenterName: string; text: string }) =>
+    api.post(`/admin/bugs/${id}/comments`, data),
+  updateComment: (id: string, commentId: string, text: string) =>
+    api.put(`/admin/bugs/${id}/comments/${commentId}`, { text }),
 };
 
 export const studentAssessmentsAPI = {

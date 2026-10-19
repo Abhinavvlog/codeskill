@@ -32,16 +32,26 @@ import { EmailJob } from './entities/email-job.entity';
 import { ExamSession } from './entities/exam-session.entity';
 import { ExamSecurityEvent } from './entities/exam-security-event.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
+import { BugReport } from './entities/bug-report.entity';
+import { BugImage } from './entities/bug-image.entity';
+import { BugComment } from './entities/bug-comment.entity';
+import { BugActivity } from './entities/bug-activity.entity';
+import { QuestionBulkUploadBatch } from './entities/question-bulk-upload-batch.entity';
 
 const entities = [
   User,
   RefreshToken,
+  BugReport,
+  BugImage,
+  BugComment,
+  BugActivity,
   Problem,
   ProblemMetadata,
   ProblemStatement,
   ProblemConfig,
   ProblemTestCase,
   Question,
+  QuestionBulkUploadBatch,
   QuestionBank,
   Assessment,
   AssessmentAttempt,
@@ -111,7 +121,7 @@ const entities = [
             synchronize: isSyncAllowed,
             extra: poolConfig,
             invalidWhereValuesBehavior: {
-              null: 'ignore',
+              null: 'throw',
             },
           } as any;
         }
@@ -129,7 +139,7 @@ const entities = [
           synchronize: isSyncAllowed,
           extra: poolConfig,
           invalidWhereValuesBehavior: {
-            null: 'ignore',
+            null: 'throw',
           },
         } as any;
       },
@@ -138,4 +148,4 @@ const entities = [
   ],
   exports: [TypeOrmModule],
 })
-export class DatabaseModule {}
+export class DatabaseModule { }

@@ -2,7 +2,7 @@
 
 import { getQuestionTypeLabel, getTopicCategories, QUESTION_TYPES } from "@/lib/question-types";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   Table,
   TableBody,
@@ -22,10 +22,10 @@ import {
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  MoreVertical, 
-  Eye, 
-  CheckCircle2, 
+import {
+  MoreVertical,
+  Eye,
+  CheckCircle2,
   XCircle,
   Search,
   FilterX,
@@ -35,13 +35,41 @@ import {
   BookOpen,
   Plus,
   SlidersHorizontal,
-  Clock
 } from "lucide-react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
-import { useRef } from "react";
 import Link from "next/link";
 
+
+const questionFallbackKeyMap = new WeakMap<object, string>();
+let fallbackKeySequence = 0;
+
+/**
+ * Resolves a stable, deterministic React key for a question row.
+ * Priority:
+ * 1. Persistent primary key (`q._id`, `q.id`, or `q.mongoId`)
+ * 2. Stable human/URL slug (`slug-${q.slug}`)
+ * 3. WeakMap-cached fallback string assigned once per object reference (`question-fallback-${n}`)
+ */
+export function getQuestionRowKey(q: any): string {
+  if (!q || typeof q !== "object") {
+    return "";
+  }
+  const primaryId = q._id || q.id || q.mongoId;
+  if (primaryId) {
+    return String(primaryId);
+  }
+  if (q.slug) {
+    return `slug-${q.slug}`;
+  }
+  let fallback = questionFallbackKeyMap.get(q);
+  if (!fallback) {
+    fallbackKeySequence += 1;
+    fallback = `question-fallback-${fallbackKeySequence}`;
+    questionFallbackKeyMap.set(q, fallback);
+  }
+  return fallback;
+}
 
 interface VTable3Props {
   questions: any[];
@@ -70,9 +98,13 @@ interface VTable3Props {
   selectedQuestionIds: string[];
   onToggleQuestion: (id: string) => void;
   onTogglePage: () => void;
+  onClearSelection: () => void;
   onBulkDelete: () => void;
   deletingQuestions: boolean;
   onBulkEdit?: () => void;
+  batches?: any[];
+  selectedBatchId?: string;
+  onBatchChange?: (id: string) => void;
 }
 
 export function VTable3({
@@ -102,11 +134,16 @@ export function VTable3({
   selectedQuestionIds,
   onToggleQuestion,
   onTogglePage,
+  onClearSelection,
   onBulkDelete,
   deletingQuestions,
   onBulkEdit,
+  batches = [],
+  selectedBatchId = '',
+  onBatchChange,
 }: VTable3Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
 
   useGSAP(() => {
     try {
@@ -124,12 +161,25 @@ export function VTable3({
           });
         }
       }
-    } catch (_) {}
+    } catch {
+      // Ignored for GSAP in test/unsupported environments
+    }
   }, { scope: containerRef, dependencies: [questions, loading] });
 
-  const hasFilters = Boolean(search || selectedTopic || selectedDifficulty || selectedType || selectedStatus);
-  const visibleIds = questions.map((q) => String(q._id || q.id || "")).filter(Boolean);
+  const visibleIds = (questions || []).map((q) => String(q?._id || q?.id || q?.mongoId || getQuestionRowKey(q) || "")).filter(Boolean);
+  const hasFilters = Boolean(search || selectedTopic || selectedDifficulty || selectedType || selectedStatus || selectedBatchId);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedQuestionIds.includes(id));
+
+  // Deduplicate and resolve deterministic row keys
+  const seenKeys = new Set<string>();
+  const renderedQuestions = (questions || []).map((q, index) => {
+    let rowKey = getQuestionRowKey(q);
+    if (!rowKey || seenKeys.has(rowKey)) {
+      rowKey = `${rowKey || "row"}-dup-${index}`;
+    }
+    seenKeys.add(rowKey);
+    return { q, rowKey };
+  });
 
   const getDifficultyColor = (diff: string) => {
     switch (diff?.toLowerCase()) {
@@ -163,8 +213,20 @@ export function VTable3({
             <p className="text-sm text-muted-foreground">Manage and organize your coding assessment questions.</p>
           </div>
           <div className="flex items-center gap-2">
-            {selectedQuestionIds.length > 0 && (
-              <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-pressed={selectionMode}
+              disabled={deletingQuestions}
+              onClick={() => {
+                onClearSelection();
+                setSelectionMode((active) => !active);
+              }}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+            >
+              {selectionMode ? "Cancel selection" : "Select"}
+            </button>
+            {selectionMode && selectedQuestionIds.length > 0 && (
+              <>
                 {onBulkEdit && (
                   <button
                     type="button"
@@ -182,9 +244,9 @@ export function VTable3({
                   className="inline-flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3.5 py-2 text-sm font-semibold text-rose-600 transition-colors hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Trash2 className="h-4 w-4" />
-                  {deletingQuestions ? "Deleting…" : `Delete (${selectedQuestionIds.length})`}
+                  {deletingQuestions ? "Deleting…" : `Delete selected (${selectedQuestionIds.length})`}
                 </button>
-              </div>
+              </>
             )}
             <Link
               href="/admin/questions/create"
@@ -258,13 +320,27 @@ export function VTable3({
             <option value="rejected">Rejected</option>
           </select>
 
+          <select
+            aria-label="Filter by upload batch"
+            value={selectedBatchId}
+            onChange={(e) => onBatchChange?.(e.target.value)}
+            className="px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-amber-500"
+          >
+            <option value="">All Upload Batches</option>
+            {batches.map((batch) => (
+              <option key={batch.id} value={batch.id}>
+                {batch.questionType} | {new Date(batch.createdAt).toLocaleString()} | {batch.successCount} Questions | {batch.batchCode}
+              </option>
+            ))}
+          </select>
+
           <button
             type="submit"
             className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors"
           >
             Filter
           </button>
-          
+
           {hasFilters && (
             <button
               type="button"
@@ -283,7 +359,7 @@ export function VTable3({
         <Table className="min-w-[800px]">
           <TableHeader className="bg-muted/30">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-12">
+              {selectionMode && <TableHead className="w-12">
                 <input
                   type="checkbox"
                   aria-label="Select all questions on this page"
@@ -292,7 +368,7 @@ export function VTable3({
                   disabled={loading || visibleIds.length === 0}
                   className="h-4 w-4 cursor-pointer rounded border-border accent-rose-500 disabled:cursor-not-allowed"
                 />
-              </TableHead>
+              </TableHead>}
               <TableHead className="w-[30%]">Question</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Topic</TableHead>
@@ -307,7 +383,7 @@ export function VTable3({
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell><Skeleton className="h-4 w-4" /></TableCell>
+                  {selectionMode && <TableCell><Skeleton className="h-4 w-4" /></TableCell>}
                   <TableCell><Skeleton className="h-10 w-full max-w-[300px]" /></TableCell>
                   <TableCell><Skeleton className="h-6 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-6 w-20" /></TableCell>
@@ -320,7 +396,7 @@ export function VTable3({
               ))
             ) : questions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="h-[300px] text-center">
+                <TableCell colSpan={selectionMode ? 9 : 8} className="h-[300px] text-center">
                   <div className="flex flex-col items-center justify-center">
                     <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mb-4">
                       <BookOpen className="w-6 h-6 text-muted-foreground" />
@@ -329,7 +405,7 @@ export function VTable3({
                       {hasFilters ? "No matching questions" : "No questions found"}
                     </h3>
                     <p className="text-sm text-muted-foreground mb-4 max-w-sm">
-                      {hasFilters 
+                      {hasFilters
                         ? "Try adjusting your filters or clearing them to see more results."
                         : "Get started by creating your first assessment question."}
                     </p>
@@ -353,16 +429,16 @@ export function VTable3({
                 </TableCell>
               </TableRow>
             ) : (
-              (questions || []).map((q) => {
-                const qId = q._id || q.id || "";
-                const shortId = qId ? qId.slice(-6).toUpperCase() : "QST";
+              renderedQuestions.map(({ q, rowKey }) => {
+                const qId = q._id || q.id || q.mongoId || rowKey;
+                const shortId = (q._id || q.id || q.mongoId) ? String(q._id || q.id || q.mongoId).slice(-6).toUpperCase() : "QST";
                 const statusStr = (q.status || "active").replace("_", " ");
                 const isMcq = ["MCQ", "single_choice", "MULTIPLE_CHOICE", "multiple_choice", "TRUE_FALSE", "true_false"].includes(q.questionType);
                 const listTitle = isMcq ? (q.title || q.question || "Untitled MCQ") : (q.question || q.title || "Untitled question");
 
                 return (
-                  <TableRow key={qId || Math.random()} className="question-row group hover:bg-muted/30 transition-colors opacity-100">
-                    <TableCell>
+                  <TableRow key={rowKey} className="question-row group hover:bg-muted/30 transition-colors opacity-100">
+                    {selectionMode && <TableCell>
                       <input
                         type="checkbox"
                         aria-label={`Select ${q.question || q.title || "question"}`}
@@ -370,7 +446,7 @@ export function VTable3({
                         onChange={() => onToggleQuestion(qId)}
                         className="h-4 w-4 cursor-pointer rounded border-border accent-rose-500"
                       />
-                    </TableCell>
+                    </TableCell>}
                     <TableCell className="max-w-[300px]">
                       <div className="flex flex-col gap-1">
                         <div className="font-semibold text-foreground text-sm truncate" title={listTitle}>
@@ -394,39 +470,39 @@ export function VTable3({
                         </div>
                       </div>
                     </TableCell>
-                    
+
                     <TableCell>
                       <Badge variant="outline" className="text-[11px] font-medium bg-background text-muted-foreground border-border rounded-md">
                         {getQuestionTypeLabel(q.questionType)}
                       </Badge>
                     </TableCell>
-                    
+
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="text-xs font-medium text-foreground">{getTopicCategories(q).join(", ") || "General"}</span>
                         {q.subtopic && <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{q.subtopic}</span>}
                       </div>
                     </TableCell>
-                    
+
                     <TableCell>
                       <Badge variant="outline" className={`text-[11px] font-medium capitalize rounded-md ${getDifficultyColor(q.difficulty)}`}>
                         {q.difficulty || "medium"}
                       </Badge>
                     </TableCell>
-                    
+
                     <TableCell>
                       <div className="flex items-center gap-1 text-xs font-mono">
                         <span className="text-emerald-500 font-semibold">+{q.marks || 1}</span>
                         {q.negativeMarks > 0 && <span className="text-rose-500">-{q.negativeMarks}</span>}
                       </div>
                     </TableCell>
-                    
+
                     <TableCell>
                       <Badge variant="outline" className={`text-[11px] font-medium capitalize rounded-md ${getStatusColor(q.status)}`}>
                         {statusStr}
                       </Badge>
                     </TableCell>
-                    
+
                     <TableCell>
                       <div className="flex flex-col text-xs font-mono" title={`Created: ${q.createdAt ? new Date(q.createdAt).toLocaleString() : "-"}\nUpdated: ${q.updatedAt ? new Date(q.updatedAt).toLocaleString() : "-"}`}>
                         <span className="text-foreground font-medium whitespace-nowrap">
@@ -437,7 +513,7 @@ export function VTable3({
                         </span>
                       </div>
                     </TableCell>
-                    
+
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger className="p-2 hover:bg-muted rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/20">
