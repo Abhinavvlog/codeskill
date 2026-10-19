@@ -608,6 +608,8 @@ export const adminAssessmentsAPI = {
   updateStatus: (id: string, status: string) => api.put(`/admin/assessments/${id}/status`, { status }),
   delete: (id: string) => api.delete(`/admin/assessments/${id}`),
   getResults: (id: string) => api.get(`/admin/assessments/${id}/results`),
+  getAttemptReport: (attemptId: string) =>
+    api.get(`/reports/assessment-attempt/${encodeURIComponent(attemptId)}`, { responseType: "blob" }),
 };
 
 export const adminBugsAPI = {

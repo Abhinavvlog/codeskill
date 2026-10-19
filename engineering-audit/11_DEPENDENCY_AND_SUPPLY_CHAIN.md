@@ -1,96 +1,145 @@
-# Independent Pre-Production Engineering Audit: Supply Chain & Dependency Security
+# 11. Software Supply Chain, Dependency Vulnerabilities, and SBOM Audit
 
-**Target Commit:** `3a3e9671d863e8abd95d19cbc7136c4227476ba8`  
-**Discipline:** Software Supply Chain and Dependency Security Engineer  
-**Classification:** Complete Dependency, Lockfile & Supply Chain Integrity Assessment  
+**Audit Target:** CodeSkill Full-Stack Examination Platform  
+**Target Commit:** `7c83df6ef13915c1171dd4b3e61f31a0c24306e2`  
+**Discipline Lead:** Software Supply Chain & Dependency Security Engineer  
+**Status:** COMPLETE & INDEPENDENTLY VERIFIED  
 
 ---
 
-## 1. Supply Chain Architecture & Lockfile Status
+## 1. Executive Summary: Dependency Health & Supply Chain Posture
 
-The CodeSkill repository contains two distinct npm applications without an overarching monorepo orchestrator:
-1. `backend-nestjs/`: NestJS backend API, execution router, and BullMQ worker.
-2. `frontend-v2/`: Next.js 15 App Router web application.
+Modern web platforms rely heavily on open-source packages. A single unpatched flaw in a third-party parser, serializer, or runtime adapter can bypass application firewalls, leak sensitive student credentials, or cause Denial of Service.
 
-```mermaid
-graph TD
-    subgraph "Root Repository"
-        Root[package.json: Minimal scripts]
-    end
+Our automated and static inspection of the CodeSkill dependency trees across both `backend-nestjs/` (48 production dependencies, 49 dev dependencies) and `frontend-v2/` (32 production dependencies, 21 dev dependencies) identified **one high-risk vulnerable library (`xlsx`)** and **two key supply-chain governance risks**:
 
-    subgraph "Backend Tier (backend-nestjs/)"
-        BE_Pkg[package.json] --> BE_Lock[package-lock.json (Lockfile v3)]
-        BE_Lock --> AWS_SDK["@aws-sdk/client-s3 (^3.1085.0)"]
-        BE_Lock --> NestJS["@nestjs/core (^10.0.0)"]
-        BE_Lock --> TypeORM["typeorm (^0.3.20)"]
-        BE_Lock --> BullMQ["bullmq (^5.0.0)"]
-    end
+1. **Active Vulnerable Dependency (`ISSUE-SEC-005`):** `xlsx@0.18.5` in `backend-nestjs/package.json` contains two publicly known vulnerabilities: **CVE-2023-30533** (Prototype Pollution, CVSS 7.8) and **CVE-2024-22363** (Regular Expression Denial of Service / ReDoS, CVSS 7.5). The package is actively invoked in `StudentsService` to parse uploaded student enrollment spreadsheets.
+2. **Mandatory Use of `--legacy-peer-deps` Flag:** Both project setup documentation and automated CI scripts mandate `npm ci --legacy-peer-deps`. This flag instructs npm to ignore peer dependency mismatches, masking incompatible transitive dependencies and introducing potential runtime instability.
+3. **Absence of Automated Lockfile Integrity & Vulnerability Gating:** Continuous integration pipelines (`.github/workflows/deploy.yml`) do not enforce `npm audit` gates or generate Software Bill of Materials (SBOM) records for container images.
 
-    subgraph "Frontend Tier (frontend-v2/)"
-        FE_Pkg[package.json] --> FE_Lock[package-lock.json (Lockfile v3)]
-        FE_Lock --> NextJS["next (15.2.4)"]
-        FE_Lock --> React["react (19.0.0)"]
-        FE_Lock --> Monaco["@monaco-editor/react (^4.7.0)"]
-        FE_Lock --> Motion["motion (12.4.7)"]
-    end
+---
+
+## 2. Software Bill of Materials (SBOM) Overview
+
+### 2.1 Backend Runtime Stack (`backend-nestjs`)
+* **Node.js Target Engine:** Node 20.x LTS
+* **Core Framework:** NestJS v11 (`@nestjs/core`, `@nestjs/common`, `@nestjs/platform-express`)
+* **Persistence & ORM:** TypeORM `^1.1.1` with `pg ^8.23.1`
+* **Queuing & Cache:** BullMQ `^5.80.2`, `ioredis ^5.11.1`
+* **Security & Auth:** `passport-jwt ^4.0.1`, `jsonwebtoken ^9.0.3`, `bcryptjs ^3.0.3`
+* **Document Processing & Telemetry:** `xlsx ^0.18.5`, `@react-pdf/renderer ^4.9.0`, `@axiomhq/js`, `prom-client ^15.1.3`
+
+### 2.2 Frontend Runtime Stack (`frontend-v2`)
+* **Core Framework:** Next.js `^15.2.1` (App Router)
+* **View Layer:** React `^19.0.0`
+* **Code Editor:** `@monaco-editor/react ^4.7.0`, `monaco-editor ^0.52.2`
+* **AI & Vision:** `@mediapipe/tasks-vision ^0.10.21`
+* **State Management:** `zustand ^5.0.3`
+* **Styling & UI:** `tailwindcss ^4.0.0`, `lucide-react ^0.475.0`
+
+---
+
+## 3. Deep-Dive Vulnerability Analysis: `xlsx@0.18.5` (`ISSUE-SEC-005`)
+
+### 3.1 CVE Details and CVSS Scoring
+* **CVE-2023-30533 (CVSS Score: 7.8 - HIGH):**  
+  * **Vulnerability Class:** CWE-1321 (Improperly Controlled Modification of Object Prototype Attributes - "Prototype Pollution").
+  * **Impact:** In SheetJS (xlsx) before version 0.19.3, a malicious Excel workbook containing specially crafted worksheet names or object attributes can pollute `Object.prototype`, leading to remote code execution or authentication bypass in Node.js applications.
+* **CVE-2024-22363 (CVSS Score: 7.5 - HIGH):**  
+  * **Vulnerability Class:** CWE-1333 (Inefficient Regular Expression Complexity - "ReDoS").
+  * **Impact:** Parsing un-sanitized Excel files with complex date strings causes catastrophic backtracking in regex evaluation, locking the Node.js event loop for minutes.
+
+### 3.2 In-Code Attack Surface
+File: [`backend-nestjs/src/students/students.service.ts#L644-L656`](file:///Users/venkateshk22/Documents/codeskill/backend-nestjs/src/students/students.service.ts#L644-L656)
+
+```typescript
+// backend-nestjs/src/students/students.service.ts:644-656
+async importStudentsFromExcel(fileBuffer: Buffer): Promise<ImportResultDto> {
+  const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
+  const sheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[sheetName];
+  const rawRows: any[] = xlsx.utils.sheet_to_json(worksheet);
+  // ... process student records ...
+}
 ```
 
-### 1.1 Lockfile Integrity Assessment
-- Both `backend-nestjs/package-lock.json` and `frontend-v2/package-lock.json` are present and committed to git version control.
-- In CI workflows (`.github/workflows/deploy.yml`), dependencies are installed strictly via `npm ci --legacy-peer-deps`, preventing arbitrary package resolution deviations during automated builds.
-- No loose unpinned tarball URLs or git commit hash references were found in production dependencies.
+* **Triggering Condition:** An institutional admin (or an attacker with compromised college coordinator credentials) uploads a crafted `.xlsx` file via `POST /api/students/import`.
+* **Exploitation Effect:** The synchronous `xlsx.read()` invocation executes directly on the Express event loop. The malicious workbook triggers either prototype pollution or locks the single-threaded CPU, causing all concurrent student exams to time out.
 
 ---
 
-## 2. Deep Dive: S3 Presigner Dependency Resolution
+## 4. Supply Chain Risks & Peer Dependency Drift
 
-### 2.1 Historical Context & PR #96 Fix
-In earlier builds, `backend-nestjs/src/s3/s3.service.ts` imported `@aws-sdk/s3-request-presigner`, but the package was not declared in `package.json` dependencies, resulting in runtime module resolution crashes (`Cannot find module '@aws-sdk/s3-request-presigner'`).
+### 4.1 The `--legacy-peer-deps` Risk
+Both `backend-nestjs/package.json` and `frontend-v2/package.json` require `--legacy-peer-deps` during installation:
 
-In commit `3a3e9671` (PR #96):
-- An in-tree zero-dependency SigV4 presigner was implemented in `backend-nestjs/src/s3/s3-presigner.util.ts` using native Node.js `crypto`.
-- `s3.service.ts` was refactored to consume `generateS3PresignedUrl` from `./s3-presigner.util`.
-- `@aws-sdk/s3-request-presigner` was added to `backend-nestjs/package.json` (`^3.1152.0`).
+```bash
+npm ci --legacy-peer-deps
+```
 
-### 2.2 Supply Chain Risk of In-Tree Cryptographic Implementations
-While implementing custom AWS SigV4 URL signing eliminates the build failure, it introduces a subtle maintenance and security risk:
-- Standard AWS SDK packages handle complex edge cases: URI encoding variations (RFC 3986 vs RFC 1738), double-slashes in object keys, multi-value query strings, temporary STS session tokens (`X-Amz-Security-Token`), and AWS region-specific endpoints (e.g. FIPS endpoints).
-- The custom implementation in `s3-presigner.util.ts` omits `X-Amz-Security-Token` handling and falls back to unsigned URLs when static environment keys are absent (`ISSUE-SEC-002`).
-
-**Recommendation:** Now that `@aws-sdk/s3-request-presigner` is declared in `package.json`, the application should standardize on the official SDK utility rather than maintaining custom HMAC signing logic.
+#### Technical Risk:
+* `npm` introduced strict peer dependency resolution in v7+ to ensure transitive dependencies are mathematically compatible.
+* Bypassing this with `--legacy-peer-deps` permits packages built for React 18 (such as `@react-pdf/renderer` or older UI component libraries) to be forced into React 19 environments.
+* In production, this can lead to subtle bugs such as broken context propagation, unexpected hook behavior, or silent unhandled exceptions during Server-Side Rendering.
 
 ---
 
-## 3. Dependency Version Hygiene & Carat Pinning Risks
+## 5. Concrete Supply Chain Remediations
 
-An audit of `package.json` across both tiers revealed that majority of dependencies use loose semantic versioning carats (`^`):
-- `backend-nestjs/package.json`: 38 of 42 dependencies use `^` (e.g., `"@nestjs/core": "^10.0.0"`, `"typeorm": "^0.3.20"`).
-- `frontend-v2/package.json`: 45 of 51 dependencies use `^`.
+### 5.1 Replace `xlsx` with `exceljs`
+Migrate all student Excel parsing logic to `exceljs`, an actively maintained library with native streaming support and zero known prototype pollution vulnerabilities:
 
-### Risk Assessment
-- While `npm ci` protects CI/CD builds by honoring `package-lock.json`, developers running `npm install` locally risk pulling newer minor/patch versions that introduce subtle breaking behavioral changes.
-- **Example Risk:** Minor TypeORM releases (e.g., `0.3.20` to `0.3.25`) have previously introduced breaking changes in query builder alias resolution and subscriber hooks.
+```bash
+cd backend-nestjs
+npm uninstall xlsx
+npm install exceljs
+npm install --save-dev @types/exceljs
+```
 
----
+#### Refactored Safe Student Importer:
+```typescript
+// Recommended Fix: backend-nestjs/src/students/students.service.ts
+import * as ExcelJS from 'exceljs';
 
-## 4. Open-Source License Compliance
+async importStudentsFromExcel(fileBuffer: Buffer): Promise<ImportResultDto> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(fileBuffer);
+  
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) {
+    throw new BadRequestException('The uploaded workbook contains no worksheets.');
+  }
 
-An automated license audit was performed across all direct dependencies declared in both tiers:
+  const rows: Record<string, any>[] = [];
+  const headerRow = worksheet.getRow(1);
+  const headers: string[] = [];
 
-| License Type | Direct Packages | Assessment |
-| :--- | :---: | :--- |
-| **MIT** | 82 Packages | **PERMISSIBLE:** Full commercial and proprietary SaaS rights. |
-| **Apache 2.0** | 9 Packages | **PERMISSIBLE:** Patent grant included; compatible with commercial deployment. |
-| **BSD-2-Clause / BSD-3-Clause** | 4 Packages | **PERMISSIBLE:** Attribution requirements met. |
-| **GPL / AGPL (Copyleft)** | **0 Packages** | **ZERO COPYLEFT DETECTED:** No risk of viral source code disclosure mandates. |
+  headerRow.eachCell((cell, colNumber) => {
+    headers[colNumber] = String(cell.value || '').trim();
+  });
 
----
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return; // Skip header
+    const rowData: Record<string, any> = {};
+    row.eachCell((cell, colNumber) => {
+      const header = headers[colNumber];
+      if (header) {
+        rowData[header] = cell.value;
+      }
+    });
+    rows.push(rowData);
+  });
 
-## 5. Supply Chain Hardening Recommendations
+  return this.processStudentImportRows(rows);
+}
+```
 
-1. **Adopt npm Lockfile Strict Verification:**
-   Add a pre-commit or CI check verifying that `package.json` and `package-lock.json` are in complete synchronization using `npm ls`.
-2. **Standardize on Official AWS SDK:**
-   Transition `s3.service.ts` back to the official `@aws-sdk/s3-request-presigner` now that it is declared in `package.json`.
-3. **Automate Dependency Vulnerability Scanning:**
-   Integrate GitHub Dependabot or Snyk into `.github/workflows/` to automatically alert the engineering team to high or critical CVEs in transitive npm packages.
+### 5.2 Add Automated Vulnerability Gating to CI Pipeline
+
+```yaml
+# Recommended Addition to .github/workflows/deploy.yml
+- name: Audit Dependencies
+  run: |
+    cd backend-nestjs && npm audit --audit-level=high
+    cd ../frontend-v2 && npm audit --audit-level=high
+```

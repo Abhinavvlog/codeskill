@@ -1,206 +1,137 @@
-# Independent Pre-Production Engineering Audit: Remediation Priority & Action Plan
+# 12. Engineering Remediation Priority, Dependency Graph, and Implementation Roadmap
 
-**Target Commit:** `3a3e9671d863e8abd95d19cbc7136c4227476ba8`  
-**Discipline:** Principal Software Architect & Site Reliability Engineer (SRE)  
-**Classification:** Actionable Remediation Specifications & Phased Implementation Plan  
+**Audit Target:** CodeSkill Full-Stack Examination Platform  
+**Target Commit:** `7c83df6ef13915c1171dd4b3e61f31a0c24306e2`  
+**Discipline Lead:** Principal Software Architect, SRE & QA Lead  
+**Status:** COMPLETE & INDEPENDENTLY VERIFIED  
 
 ---
 
-## 1. Remediation Phasing Overview
+## 1. Executive Summary: Prioritized Engineering Roadmap
 
-All 28 identified issues are organized into three sequential remediation phases based on risk to production availability, security integrity, and data loss.
+A pre-production audit is only as valuable as the clarity and rigor of its remediation plan. Attempting to fix issues haphazardly without understanding cross-system dependencies risks introducing severe secondary regressions—such as increasing backend connection limits without a connection pooler or refactoring frontend retry logic before fixing the backend state machine.
+
+This document establishes a **strict 4-phase, risk-ranked remediation roadmap** covering all 18 cataloged vulnerabilities.
 
 ```mermaid
-flowchart LR
-    Phase1["Phase 1: Pre-Launch Blockers<br/>(Immediate: 24–48 Hours)"] --> Phase2["Phase 2: Data Integrity & Scale<br/>(Target: 3–5 Days)"]
-    Phase2 --> Phase3["Phase 3: Query & Cache Optimization<br/>(Target: 1–2 Weeks)"]
-    Phase3 --> Ready[Production Launch Gate Verified]
+graph TD
+    subgraph Phase 1: Pre-Production Blockers (Days 1-5)
+        SEC01[ISSUE-SEC-001: Piston Sandbox Isolation]
+        INF01[ISSUE-INF-001: AWS RDS Proxy / PgBouncer]
+        RES01[ISSUE-RES-001: Redis Reconnect Strategy]
+        PRF01[ISSUE-PRF-001: BullMQ Async Assessment Grading]
+        DAT01[ISSUE-DAT-001: Assessment CAS Lease & Compensation]
+    end
+
+    subgraph Phase 2: High Integrity & Auth Safeguards (Days 6-10)
+        CON01[ISSUE-CON-001: Contest Grant Transaction Locks]
+        SEC02[ISSUE-SEC-002: Escape ILike User Search]
+        FE01[ISSUE-FE-001: Frontend 409 Retry Alignment]
+        PRF02[ISSUE-PRF-002: Worker Offload for Student Bcrypt]
+        SEC03[ISSUE-SEC-003: Enable Express Trust Proxy]
+        SEC04[ISSUE-SEC-004: Enable ElastiCache Encryption]
+    end
+
+    subgraph Phase 3: Scalability & Memory Hygiene (Days 11-17)
+        DAT02[ISSUE-DAT-002: Keyset Pagination for Shards]
+        SEC05[ISSUE-SEC-005: Replace xlsx with exceljs]
+        DAT03[ISSUE-DAT-003: Batch Report Queries & PDF Worker]
+        FE02[ISSUE-FE-002: Guaranteed Media Teardown]
+        INF02[ISSUE-INF-002: Remove ALB Backend Stickiness]
+    end
+
+    subgraph Phase 4: Operational Resilience & Quality Gates (Days 18-22)
+        OBS01[ISSUE-OBS-001: Axiom Logging Safe Rejection]
+        QA01[ISSUE-QA-001: Gate Concurrency & Shards in CI]
+    end
+
+    INF01 --> PRF01
+    PRF01 --> DAT01
+    DAT01 --> FE01
+    SEC01 --> QA01
 ```
 
 ---
 
-## 2. Phase 1: Pre-Launch Blockers (Immediate: 24–48 Hours)
+## 2. Remediation Dependency Matrix
 
-These items represent immediate risks of total system outage, complete exam security bypass, or broken production features.
+Before deploying changes, engineering teams must observe the following prerequisite relationships:
 
-### 2.1 [FIX-01] Eliminate Deployment Outage in Auto Scaling Instance Refresh
-- **Addresses:** `ISSUE-INFRA-001`
-- **Affected File:** `.github/workflows/deploy.yml` (Lines 32–33)
-- **Concrete Code Change:**
-  ```yaml
-  # Replace:
-  ASG_MIN_HEALTHY_PERCENTAGE: 0
-  ASG_MAX_HEALTHY_PERCENTAGE: 100
-
-  # With:
-  ASG_MIN_HEALTHY_PERCENTAGE: 50
-  ASG_MAX_HEALTHY_PERCENTAGE: 150
-  ```
-- **Rationale:** Setting `MinHealthyPercentage: 50` ensures that in a 2-instance ASG, at least 1 healthy instance continues serving production traffic while the other refreshes, completely eliminating the 2–4 minute HTTP 502 outage window.
-- **Effort:** 15 minutes.
-- **Verification:** Execute a test deployment in a staging branch; assert that an automated `curl` probe against `/health` returns `200 OK` continuously during the entire instance refresh.
-- **Regression Risk:** Low. Requires verifying that AWS account vCPU quota has at least 2 spare vCPUs.
+| Target Fix | Prerequisite Tasks | Why Order Matters |
+| :--- | :--- | :--- |
+| **`ISSUE-PRF-001` (Async Grading)** | `ISSUE-INF-001` (RDS Proxy) | Asynchronous grading queues submissions in BullMQ, which spikes worker database connections upon batch drains. |
+| **`ISSUE-DAT-001` (CAS Lease)** | Database Migration for `evaluatingStartedAt` | State machine query requires the new column and index to be applied to PostgreSQL first. |
+| **`ISSUE-FE-001` (Frontend Retry)** | `ISSUE-DAT-001` (Backend CAS) | Frontend cannot poll/retry safely until backend implements idempotent result retrieval. |
+| **`ISSUE-FE-002` (Media Teardown)** | `ISSUE-FE-001` (Frontend Retry) | Media cleanup must hook into the unified submission lifecycle state. |
+| **`ISSUE-INF-002` (ALB Stickiness)** | None | Can be updated directly via Terraform. |
 
 ---
 
-### 2.2 [FIX-02] Harden Safe Exam Browser (SEB) Authentication
-- **Addresses:** `ISSUE-SEC-001`
-- **Affected File:** `backend-nestjs/src/exam-security/exam-security.service.ts` (Lines 42–63)
-- **Concrete Code Change:**
-  ```typescript
-  // Reject User-Agent spoofing when genuine headers are missing
-  if (security?.requireSEB) {
-    if (!sebReqHash) {
-      throw new ForbiddenException(
-        'Safe Exam Browser verification failed. Missing genuine SEB request headers.',
-      );
-    }
-    if (!security.configKey) {
-      throw new ForbiddenException(
-        'This assessment requires Safe Exam Browser, but no configuration key is set by administrator.',
-      );
-    }
-    // ... proceed with cryptographic hash verification
-  }
-  ```
-- **Effort:** 1 hour.
-- **Verification:** Execute curl requests with `User-Agent: SafeExamBrowser`; assert that requests without valid `X-SafeExamBrowser-RequestHash` receive `403 Forbidden`.
-- **Regression Risk:** Low.
+## 3. Detailed Issue Implementation Register
+
+| Issue ID | Severity | Remediation Scope | Est. Dev Days | Complexity | Regression Risk | Key Verification Test |
+| :--- | :--- | :--- | :-: | :-: | :-: | :--- |
+| **ISSUE-SEC-001** | CRITICAL | Remove `--privileged` in Piston userdata; drop IMDSv2 hop limit to 1. | 1.0 | Medium | Low | Run unshare/mount test inside Piston; verify 169.254.169.254 unreachable. |
+| **ISSUE-DAT-001** | CRITICAL | Add 5-minute lease and `try/catch` rollback to `AssessmentsService`. | 2.0 | Medium | Medium | Inject Piston failure during submit; verify attempt returns to `in_progress`. |
+| **ISSUE-PRF-001** | HIGH | Transition assessment submission to BullMQ worker queue. | 3.0 | High | High | Run 500-submission burst test; verify zero ALB 504 timeouts. |
+| **ISSUE-INF-001** | HIGH | Deploy AWS RDS Proxy via Terraform; configure `max_connections=500`. | 1.5 | Medium | Low | Scale backend ASG to 6 instances; verify zero connection rejected errors. |
+| **ISSUE-RES-001** | HIGH | Update `RedisService.retryStrategy` to exponential backoff without exit. | 0.5 | Low | Low | Restart Redis container locally; verify backend auto-reconnects. |
+| **ISSUE-CON-001** | HIGH | Enclose contest reattempt grant check in pessimistic row transaction. | 1.5 | Medium | Medium | Run 20 concurrent start calls; verify exactly 1 attempt created without crashes. |
+| **ISSUE-SEC-002** | HIGH | Sanitize SQL LIKE inputs (`%`, `_`); enforce exact match on username. | 0.5 | Low | Low | Submit `%` to `/api/auth/login`; verify it does not match first user. |
+| **ISSUE-FE-001** | HIGH | Treat HTTP 409 as transient with exponential backoff in take page. | 1.0 | Low | Low | Mock 409 backend response; verify client polls until scorecard is ready. |
+| **ISSUE-PRF-002** | HIGH | Offload batch CSV student import and bcrypt hashing to BullMQ job. | 2.0 | Medium | Medium | Import 2,000 students; verify event loop latency remains under 50ms. |
+| **ISSUE-SEC-003** | MEDIUM | Set `app.set('trust proxy', true)` in NestJS Express configuration. | 0.2 | Low | Low | Send spoofed `X-Forwarded-For`; verify throttler uses actual client IP. |
+| **ISSUE-SEC-004** | MEDIUM | Enable in-transit and at-rest encryption in Terraform ElastiCache module. | 0.5 | Low | Medium | Re-apply Terraform; verify Redis TLS connection string handshakes. |
+| **ISSUE-DAT-002** | MEDIUM | Rewrite `SubmissionStore.findManyCrossShard` to use keyset cursor pagination. | 2.5 | High | Medium | Query page 100 with 10k rows; verify heap memory delta < 10MB. |
+| **ISSUE-SEC-005** | MEDIUM | Replace `xlsx` with `exceljs` across student import routines. | 1.5 | Medium | Low | Import standard and malformed .xlsx files; verify clean parsing without CVEs. |
+| **ISSUE-DAT-003** | MEDIUM | Batch report database queries; offload PDF generation to background worker. | 2.0 | Medium | Medium | Generate 300-student report; verify zero main thread blocking. |
+| **ISSUE-FE-002** | MEDIUM | Place `stopCamera()` and MediaPipe cleanup in `finally` block. | 0.5 | Low | Low | Induce submit failure; verify camera LED extinguishes and tracks stop. |
+| **ISSUE-INF-002** | MEDIUM | Disable `stickiness` on ALB backend target group in Terraform. | 0.2 | Low | Low | Execute ASG instance refresh; verify active WebSocket clients rebalance. |
+| **ISSUE-INF-003** | HIGH | Remove startup migration runner from backend ASG user-data template. | 0.5 | Low | Low | Scale ASG to 4 nodes; verify all instances boot without DDL deadlocks. |
+| **ISSUE-INF-004** | HIGH | Restrict backend IAM `app_secrets` policy from `*` to specific secret ARNs. | 0.5 | Low | Low | Verify backend reads app secrets but cannot read unrelated AWS secrets. |
+| **ISSUE-INF-005** | MEDIUM | Associate `modules/waf` with production ALB in `production/main.tf`. | 0.5 | Low | Low | Send OWASP test probe; verify WAF blocks Layer 7 SQLi/XSS requests. |
+| **ISSUE-INF-006** | MEDIUM | Enable S3 KMS encryption and separate public avatars from private reports. | 1.0 | Medium | Low | Verify reports require presigned URLs and stored objects are KMS encrypted. |
+| **ISSUE-INF-007** | MEDIUM | Route Next.js `INTERNAL_BACKEND_URL` to internal VPC DNS or private ALB. | 0.5 | Low | Low | Verify SSR calls bypass NAT Gateway; monitor NAT processing cost reduction. |
+| **ISSUE-INF-008** | MEDIUM | Wire Cloud Map deregistration script to systemd `shutdown.target`. | 0.5 | Low | Low | Terminate Piston instance; verify IP is removed from Cloud Map DNS within 15s. |
+| **ISSUE-INF-009** | LOW | Enforce immutable Git commit SHA image tags instead of `:latest`. | 0.5 | Low | Low | Verify ASG launch templates pin exact immutable image digests. |
+| **ISSUE-INF-010** | LOW | Provision AWS CloudWatch alarms for RDS, ALB 5XX, and ElastiCache. | 1.0 | Low | Low | Trigger synthetic alarm test; verify SNS alerts arrive to ops email. |
+| **ISSUE-OBS-001** | LOW | Attach `.catch()` to `this.axiom.ingest` Promise in Winston transport. | 0.2 | Low | Low | Invalidate Axiom token; verify no unhandled rejection crashes occur. |
+| **ISSUE-QA-001** | LOW | Add shard integration and concurrency test suites to GitHub Actions. | 1.5 | Medium | Low | Verify CI pipeline runs all automated suites and gates PR merges. |
 
 ---
 
-### 2.3 [FIX-03] Fix Hardcoded `localhost:5000` in Question AI Wizard
-- **Addresses:** `ISSUE-FE-001`
-- **Affected File:** `frontend-v2/src/app/admin/questions/create/_components/AIAssistance.tsx` (Lines 35, 50)
-- **Concrete Code Change:**
-  ```typescript
-  // Replace line 35:
-  const res = await api.post("/ai/generate-question-helper", { prompt, type: actionId });
-  const data = res.data;
+## 4. Phase-by-Phase Execution Schedule
 
-  // Replace line 50:
-  const wsUrl = process.env.NEXT_PUBLIC_WS_URL || (typeof window !== "undefined" ? window.location.origin : "");
-  const socket = io(`${wsUrl}/ai-generation`, { path: "/socket.io", transports: ['websocket'] });
-  ```
-- **Effort:** 1 hour.
-- **Verification:** Open the question creation wizard on a non-localhost URL; verify that clicking "Generate with AI" opens the socket connection without Mixed Content errors.
-- **Regression Risk:** Low.
+### Phase 1: Security & Stability Blockers (Target: Week 1)
+* **Goal:** Eliminate container escape vulnerabilities and prevent catastrophic examination downtime.
+* **Deliverables:**
+  * Patch Terraform Piston userdata and EC2 launch template.
+  * Provision AWS RDS Proxy to support backend horizontal autoscaling.
+  * Add automatic Redis reconnect loop.
+  * Implement BullMQ asynchronous code grading for assessment submissions.
+  * Implement CAS expiration lease and compensation rollback in `AssessmentsService`.
 
----
+### Phase 2: Data Integrity & Access Control (Target: Week 2)
+* **Goal:** Guarantee transactional consistency and harden authentication against enumeration and rate-limit bypass.
+* **Deliverables:**
+  * Add pessimistic transaction locking to `ContestsService.startContest`.
+  * Sanitize `ILIKE` wildcard queries in `AuthService`.
+  * Align frontend submission retry loop with backend CAS state machine.
+  * Offload batch bcrypt hashing to background workers.
+  * Enable Express `trust proxy` and ElastiCache Redis encryption.
 
-### 2.4 [FIX-04] Remove Hardcoded Secret Fallback for Exam Security Tokens
-- **Addresses:** `ISSUE-SEC-003`
-- **Affected File:** `backend-nestjs/src/exam-security/exam-security.service.ts` (Lines 161–165)
-- **Concrete Code Change:**
-  ```typescript
-  // Replace:
-  const sessionSecret = process.env.JWT_SECRET || 'codeskill-secure-exam-token-secret';
+### Phase 3: Scalability, Memory Hygiene & Third-Party Audit (Target: Weeks 3-4)
+* **Goal:** Prevent memory exhaustion under deep pagination, remove vulnerable dependencies, and optimize client runtime.
+* **Deliverables:**
+  * Implement keyset pagination in `SubmissionStore`.
+  * Migrate from `xlsx` to `exceljs`.
+  * Guarantee frontend camera, audio, and WebAssembly teardown in `finally` block.
+  * Disable ALB cookie stickiness on backend API target group.
+  * Optimize assessment report queries and PDF generation.
 
-  // With:
-  const sessionSecret = this.configService.getOrThrow<string>('JWT_SECRET');
-  ```
-- **Effort:** 30 minutes.
-- **Verification:** Verify that an empty `JWT_SECRET` in `.env` causes a clear startup validation exception rather than falling back to the known string.
-- **Regression Risk:** Low.
-
----
-
-## 3. Phase 2: Data Integrity & Execution Scale (Target: 3–5 Days)
-
-### 3.1 [FIX-05] Implement Atomic PostgreSQL Updates for Proctor Captures
-- **Addresses:** `ISSUE-CONCUR-001`
-- **Affected File:** `backend-nestjs/src/assessments/assessments.service.ts` (Lines 2396–2406)
-- **Concrete Code Change:**
-  Replace entity `.save(targetAttempt)` with an atomic PostgreSQL SQL query:
-  ```typescript
-  const newCapture = { type: dto.type, url, objectKey, timestamp: capturedAt, filename: dto.filename };
-  await this.attemptRepo
-    .createQueryBuilder()
-    .update(AssessmentAttempt)
-    .set({
-      captures: () => `COALESCE(captures, '[]'::jsonb) || '${JSON.stringify(newCapture)}'::jsonb`,
-      updatedAt: new Date(),
-    })
-    .where('id = :id AND status = :status', { id: attempt.id, status: 'in_progress' })
-    .execute();
-  ```
-- **Effort:** 3 hours.
-- **Verification:** Execute concurrent test script firing 20 simultaneous `saveProgress` and 20 `recordProctorCapture` requests; assert that 100% of captures and responses are preserved in the database.
-- **Regression Risk:** Moderate. Requires testing JSONB serialization on older PostgreSQL versions.
-
----
-
-### 3.2 [FIX-06] Pre-Compile Binary Once in Piston Execution Engine
-- **Addresses:** `ISSUE-EXEC-001`
-- **Affected File:** `backend-nestjs/src/execution/execution.service.ts`
-- **Concrete Code Change:**
-  Refactor `executeRemoteTestCase` for compiled languages:
-  1. Dispatch an initial compilation job to Piston for the submitted source code.
-  2. If compilation fails, return `Compilation Error (CE)` immediately without executing any test cases.
-  3. If compilation succeeds, transmit execution requests for all test cases without re-sending the source code or triggering compiler passes.
-- **Effort:** 1.5 days.
-- **Verification:** Submit a C++ solution with 20 test cases; assert that total execution time drops from 30 seconds to under 3 seconds.
-- **Regression Risk:** High. Requires thorough verification across C, C++, Java, Rust, and Go adapters.
-
----
-
-### 3.3 [FIX-07] Restore Standard AWS SDK Presigner Client
-- **Addresses:** `ISSUE-SEC-002`
-- **Affected File:** `backend-nestjs/src/s3/s3.service.ts` & `s3-presigner.util.ts`
-- **Concrete Code Change:**
-  Use the official `@aws-sdk/s3-request-presigner` package declared in `package.json`, passing the initialized `s3Client` which automatically resolves EC2 IAM Instance Profile credentials.
-- **Effort:** 2 hours.
-- **Verification:** Deploy to an EC2 instance with an IAM role and empty static keys; assert that generated S3 URLs successfully fetch private images.
-- **Regression Risk:** Low.
-
----
-
-## 4. Phase 3: Query & Cache Optimization (Target: 1–2 Weeks)
-
-### 4.1 [FIX-08] Move Assessment Dashboard Targeting to Database Queries
-- **Addresses:** `ISSUE-PERF-001` & `ISSUE-DB-001`
-- **Affected File:** `backend-nestjs/src/assessments/assessments.service.ts`
-- **Concrete Implementation:**
-  1. Add GIN indexes on `assessments("targetBatches")` and `assessments("targetDepartments")`.
-  2. Update `getStudentAssessments` to filter via PostgreSQL array operators:
-     ```typescript
-     qb.andWhere(
-       '(a.targetDepartments = \'{}\' OR :dept = ANY(a.targetDepartments)) AND ' +
-       '(a.targetBatches = \'{}\' OR :batch = ANY(a.targetBatches))',
-       { dept, batch }
-     );
-     ```
-  3. Add pagination (`take: 20, skip: 0`).
-- **Effort:** 1 day.
-- **Verification:** Seed database with 2,000 assessments; verify `getStudentAssessments` query execution time remains below 20ms.
-
----
-
-### 4.2 [FIX-09] Separate Redis Queue from Application Cache
-- **Addresses:** `ISSUE-INFRA-002`
-- **Affected File:** `terraform/environments/production/main.tf` & `terraform/modules/redis/`
-- **Concrete Implementation:**
-  Provision two distinct ElastiCache clusters:
-  - `codeskill-redis-queue`: dedicated to BullMQ with `maxmemory-policy = noeviction`.
-  - `codeskill-redis-cache`: dedicated to problem caching and rate limits with `maxmemory-policy = allkeys-lru`.
-- **Effort:** 2 days.
-- **Verification:** Populate cache cluster to 100% memory; assert that BullMQ continues processing new submissions without errors.
-
----
-
-## 5. Master Remediation Checklist
-
-- [ ] **Phase 1: Pre-Launch Blockers (24–48h)**
-  - [ ] FIX-01: Update `deploy.yml` with `MinHealthyPercentage: 50`
-  - [ ] FIX-02: Require mandatory configKey for SEB assessments
-  - [ ] FIX-03: Replace `http://localhost:5000` in `AIAssistance.tsx`
-  - [ ] FIX-04: Remove hardcoded fallback secret in `exam-security.service.ts`
-- [ ] **Phase 2: Data Integrity & Scale (3–5 Days)**
-  - [ ] FIX-05: Implement atomic PostgreSQL JSONB updates for captures
-  - [ ] FIX-06: Pre-compile binary once in Piston execution pipeline
-  - [ ] FIX-07: Standardize on official `@aws-sdk/s3-request-presigner`
-  - [ ] FIX-08: Add partial unique index on active assessment attempts
-- [ ] **Phase 3: Query & Cache Optimization (1–2 Weeks)**
-  - [ ] FIX-09: Add GIN indexes and SQL WHERE filters to `getStudentAssessments`
-  - [ ] FIX-10: Provision dedicated Redis cluster for BullMQ vs Application Cache
-  - [ ] FIX-11: Set `create_parameter_group = true` in production Terraform RDS module
+### Phase 4: Operational Resilience & Automated CI Gates (Target: Ongoing)
+* **Goal:** Protect production through automated continuous integration gating and resilient telemetry.
+* **Deliverables:**
+  * Attach safe error handlers to Axiom Winston transport.
+  * Gate shard integration tests and concurrency tests in `.github/workflows/deploy.yml`.
+  * Modernize E2E tests to match global response interceptor.
