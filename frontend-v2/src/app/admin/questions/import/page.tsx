@@ -63,6 +63,7 @@ export default function ImportQuestionsPage() {
     message?: string;
   } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [committedRows, setCommittedRows] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -149,22 +150,49 @@ export default function ImportQuestionsPage() {
     if (!previewData || previewData.validRows.length === 0) return;
 
     setIsCommitting(true);
+    setCommittedRows(0);
     setErrorMessage(null);
+    let processedRows = 0;
     try {
-      const res = await adminQuestionsAPI.confirmImport(previewData.validRows, mergeStrategy);
-      const data = res.data;
+      // The API accepts up to 4 MiB of JSON. Keep each request well below that
+      // limit while preserving the selected merge strategy for every batch.
+      const maxBatchBytes = 2 * 1024 * 1024;
+      const batches: any[][] = [];
+      let batch: any[] = [];
+      let batchBytes = new Blob([JSON.stringify({ validRows: [], mergeStrategy })]).size;
+      for (const row of previewData.validRows) {
+        const rowBytes = new Blob([JSON.stringify(row)]).size + 1;
+        if (rowBytes + batchBytes > maxBatchBytes && batch.length > 0) {
+          batches.push(batch);
+          batch = [];
+          batchBytes = new Blob([JSON.stringify({ validRows: [], mergeStrategy })]).size;
+        }
+        if (rowBytes + batchBytes > maxBatchBytes) {
+          throw new Error("A question is too large to import. Reduce its code or test-case content and retry.");
+        }
+        batch.push(row);
+        batchBytes += rowBytes;
+      }
+      if (batch.length > 0) batches.push(batch);
+
+      const data = { totalProcessed: 0, insertedCount: 0, updatedCount: 0, skippedCount: 0 };
+      for (const rows of batches) {
+        const res = await adminQuestionsAPI.confirmImport(rows, mergeStrategy);
+        data.totalProcessed += res.data.totalProcessed ?? res.data.count ?? rows.length;
+        data.insertedCount += res.data.insertedCount ?? 0;
+        data.updatedCount += res.data.updatedCount ?? 0;
+        data.skippedCount += res.data.skippedCount ?? 0;
+        processedRows += rows.length;
+        setCommittedRows(processedRows);
+      }
       setImportResult({
-        totalProcessed: data.totalProcessed || data.count || previewData.validRows.length,
-        insertedCount: data.insertedCount ?? 0,
-        updatedCount: data.updatedCount ?? 0,
-        skippedCount: data.skippedCount ?? 0,
-        mergeStrategy: data.mergeStrategy || mergeStrategy,
-        message: data.message,
+        ...data,
+        mergeStrategy,
+        message: `Processed ${data.totalProcessed} questions in ${batches.length} batch${batches.length === 1 ? "" : "es"}.`,
       });
     } catch (err: any) {
       setErrorMessage(
-        err.response?.data?.message ||
-          "Failed to commit questions into database."
+        `${err.response?.data?.message || err.message || "Failed to commit questions into database."}${processedRows > 0 ? " Some earlier batches may have succeeded; retry with Skip to avoid duplicates." : ""}`
       );
     } finally {
       setIsCommitting(false);
@@ -601,7 +629,7 @@ export default function ImportQuestionsPage() {
                     {isCommitting ? (
                       <>
                         <Spinner className="w-4 h-4 animate-spin" />
-                        Executing Import…
+                        Executing Import… {committedRows > 0 ? `${committedRows}/${previewData.validRows.length}` : ""}
                       </>
                     ) : (
                       <>
