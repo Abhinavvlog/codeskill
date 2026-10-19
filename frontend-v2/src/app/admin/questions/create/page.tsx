@@ -215,8 +215,8 @@ function UnifiedQuestionForm() {
       let payload: any = {
         question: ["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType) ? store.statement.description : store.metadata.title,
         title: store.metadata.title,
-        slug: store.metadata.slug,
-        ...(["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType) ? { url_slug: store.metadata.slug } : {}),
+        slug: store.metadata.slug?.trim() || undefined,
+        ...(["MCQ", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType) ? { url_slug: store.metadata.slug?.trim() || undefined } : {}),
         visibility,
         contestOnly: store.publishing.contestOnly,
         topic: store.metadata.categories[0] || "General",

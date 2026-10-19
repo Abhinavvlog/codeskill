@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Brackets, In } from 'typeorm';
+import { Repository, Brackets, In, IsNull } from 'typeorm';
 import { Question as QuestionEntity } from '../database/entities/question.entity';
 import { QuestionBank as QuestionBankEntity } from '../database/entities/question-bank.entity';
 import { AuditLog as AuditLogEntity } from '../database/entities/audit-log.entity';
@@ -44,9 +44,27 @@ export class QuestionsService {
       .leftJoinAndSelect('question.approvedBy', 'approvedBy');
 
     if (query.status && query.status !== 'all') {
-      qb.andWhere('question.status = :status', { status: query.status });
+      const normalizedStatus = query.status.trim().toLowerCase();
+      const statusMap: Record<string, string[]> = {
+        active: ['approved', 'active'],
+        approved: ['approved', 'active'],
+        pending_review: ['pending', 'pending_review'],
+        pending: ['pending', 'pending_review'],
+        draft: ['draft'],
+        rejected: ['rejected'],
+      };
+      const allowedStatuses = statusMap[normalizedStatus] || [query.status];
+      if (['active', 'approved'].includes(normalizedStatus)) {
+        qb.andWhere('(question.status IN (:...statuses) OR question.status IS NULL)', {
+          statuses: allowedStatuses,
+        });
+      } else {
+        qb.andWhere('question.status IN (:...statuses)', { statuses: allowedStatuses });
+      }
     } else {
-      qb.andWhere('question.status != :archived', { archived: 'archived' });
+      qb.andWhere('(question.status IS NULL OR question.status != :archived)', {
+        archived: 'archived',
+      });
     }
 
     if (query.topic && query.topic.trim()) {
@@ -129,8 +147,12 @@ export class QuestionsService {
       }
     });
 
-    const pendingCount = await this.questionRepository.count({ where: { status: 'pending' } });
-    const approvedCount = await this.questionRepository.count({ where: { status: 'approved' } });
+    const pendingCount = await this.questionRepository.count({
+      where: [{ status: 'pending' }, { status: 'pending_review' }],
+    });
+    const approvedCount = await this.questionRepository.count({
+      where: [{ status: 'approved' }, { status: 'active' }, { status: IsNull() }],
+    });
 
     return {
       questions,
@@ -214,6 +236,7 @@ export class QuestionsService {
       visibility,
       contestOnly,
       url_slug,
+      slug: explicitSlug,
       ...rest
     } = dto;
     const type = String(dto.questionType || 'single_choice');
@@ -348,9 +371,47 @@ export class QuestionsService {
       ...(contestOnly !== undefined ? { contestOnly } : {}),
     };
     const isApproved = ['approved', 'active', 'published'].includes(status);
+    // Resolve clean slug and guarantee uniqueness
+    const rawSlugCandidate = (explicitSlug || url_slug || '').trim();
+    let baseSlug = '';
+    if (rawSlugCandidate) {
+      baseSlug = rawSlugCandidate
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '');
+    } else if (dto.title?.trim() || dto.question?.trim()) {
+      const source = (dto.title || dto.question || '').trim();
+      baseSlug = source
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '')
+        .slice(0, 100);
+    }
+
+    let finalSlug: string | null = null;
+    if (baseSlug) {
+      let candidate = baseSlug;
+      let counter = 1;
+      while (true) {
+        const existing = await this.questionRepository.findOne({
+          where: { slug: candidate },
+        });
+        if (!existing) {
+          finalSlug = candidate;
+          break;
+        }
+        counter++;
+        candidate = `${baseSlug}-${counter}`;
+        if (counter > 100) {
+          finalSlug = `${baseSlug}-${crypto.randomBytes(3).toString('hex')}`;
+          break;
+        }
+      }
+    }
+
     const newQuestion = this.questionRepository.create({
       ...rest,
-      ...(isChoice && (url_slug || dto.slug) ? { slug: url_slug || dto.slug } : {}),
+      slug: finalSlug,
       ...(categories !== undefined
         ? {
             topic: this.normalizeCategories(categories)[0] || 'General',
@@ -371,7 +432,21 @@ export class QuestionsService {
         : {}),
     } as any) as unknown as QuestionEntity;
 
-    const question = await this.questionRepository.save(newQuestion);
+    let question: QuestionEntity;
+    try {
+      question = await this.questionRepository.save(newQuestion);
+    } catch (err: any) {
+      if (
+        err?.code === '23505' ||
+        String(err?.message || '').includes('UQ_a9cd7cd3b1c78e50d8383aa0d79') ||
+        String(err?.message || '').includes('unique constraint')
+      ) {
+        newQuestion.slug = `${baseSlug || 'question'}-${crypto.randomBytes(3).toString('hex')}`;
+        question = await this.questionRepository.save(newQuestion);
+      } else {
+        throw err;
+      }
+    }
     if (isChoice) (question as any).url_slug = question.slug;
     await this.cacheService.invalidatePrefix('problems:');
 
@@ -556,6 +631,28 @@ export class QuestionsService {
       dto.question = dto.title;
     }
 
+    if (dto.slug !== undefined) {
+      const trimmedSlug = (dto.slug || '').trim();
+      if (!trimmedSlug) {
+        dto.slug = null as any;
+      } else {
+        const normalized = trimmedSlug
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)+/g, '');
+
+        const existing = await this.questionRepository.findOne({
+          where: { slug: normalized },
+        });
+        if (existing && existing.id !== question.id) {
+          throw new BadRequestException(
+            `URL slug "${normalized}" is already in use by another question.`,
+          );
+        }
+        dto.slug = normalized;
+      }
+    }
+
     const { categories, visibility, contestOnly, timeComplexity, spaceComplexity, ...updates } = dto;
     const existingCategories: unknown = question.metadata?.categories;
     if (categories !== undefined) {
@@ -737,7 +834,7 @@ export class QuestionsService {
       const rows = await this.questionRepository.query(
         `SELECT DISTINCT subtopic AS topic
          FROM questions
-         WHERE status = 'approved'
+         WHERE (status IS NULL OR status = 'approved' OR status = 'active')
            AND subtopic IS NOT NULL
            AND BTRIM(subtopic) <> ''
            AND (topic = $1 OR (metadata->'categories') ? $1)
@@ -754,19 +851,19 @@ export class QuestionsService {
         SUM(CASE WHEN difficulty = 'easy' THEN 1 ELSE 0 END) as easy,
         SUM(CASE WHEN difficulty = 'medium' THEN 1 ELSE 0 END) as medium,
         SUM(CASE WHEN difficulty = 'hard' THEN 1 ELSE 0 END) as hard,
-        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+        SUM(CASE WHEN status = 'approved' OR status = 'active' OR status IS NULL THEN 1 ELSE 0 END) as approved,
+        SUM(CASE WHEN status = 'pending' OR status = 'pending_review' THEN 1 ELSE 0 END) as pending
       FROM questions
       CROSS JOIN LATERAL (
         SELECT DISTINCT value AS category
         FROM jsonb_array_elements_text(
-          CASE WHEN jsonb_typeof(metadata->'categories') = 'array' AND metadata->'categories' <> '[]'::jsonb
+          CASE WHEN jsonb_typeof(COALESCE(metadata->'categories', '[]'::jsonb)) = 'array' AND COALESCE(metadata->'categories', '[]'::jsonb) <> '[]'::jsonb
             THEN metadata->'categories'
-            ELSE jsonb_build_array(COALESCE(topic, 'Unassigned'))
+            ELSE jsonb_build_array(COALESCE(NULLIF(topic, ''), 'General'))
           END
         )
       ) AS categories
-      WHERE status != 'archived'
+      WHERE (status IS NULL OR status != 'archived')
       GROUP BY category
       ORDER BY total DESC
     `);

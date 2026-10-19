@@ -1,7 +1,17 @@
+terraform {
+  required_version = ">= 1.5.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+  }
+}
+
 resource "aws_wafv2_web_acl" "main" {
   name        = "${var.name_prefix}-waf"
-  description = "WAF for ${var.name_prefix} ALB"
-  scope       = "REGIONAL"
+  description = "WAF for ${var.name_prefix}"
+  scope       = var.scope
 
   default_action {
     allow {}
@@ -37,6 +47,7 @@ resource "aws_wafv2_web_acl" "main" {
 }
 
 resource "aws_wafv2_web_acl_association" "alb" {
+  count        = var.scope == "REGIONAL" && var.alb_arn != "" ? 1 : 0
   resource_arn = var.alb_arn
   web_acl_arn  = aws_wafv2_web_acl.main.arn
 }

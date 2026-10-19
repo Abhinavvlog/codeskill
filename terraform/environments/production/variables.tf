@@ -73,25 +73,25 @@ variable "db_instance_class" {
 variable "frontend_image_tag" {
   description = "Docker image tag or immutable commit SHA for frontend container"
   type        = string
-  default     = "v2.0.0"
+  default     = "latest"
 }
 
 variable "backend_image_tag" {
   description = "Docker image tag or immutable commit SHA for backend container"
   type        = string
-  default     = "v2.0.0"
+  default     = "latest"
 }
 
 variable "piston_image_tag" {
   description = "Docker image tag for piston container"
   type        = string
-  default     = "v2.0.0"
+  default     = "latest"
 }
 
 variable "judge0_image_tag" {
   description = "Docker image tag for judge0 container"
   type        = string
-  default     = "v2.0.0"
+  default     = "latest"
 }
 
 # Sizing and Instance Types (Production capacity for 1,000 concurrent users)
@@ -110,13 +110,13 @@ variable "backend_instance_type" {
 variable "piston_instance_type" {
   description = "EC2 instance type for Piston execution engine (compute/RAM for concurrent sandbox runs)"
   type        = string
-  default     = "t3.large"
+  default     = "t3.small"
 }
 
 variable "judge0_instance_type" {
   description = "EC2 instance type for Judge0 execution engine"
   type        = string
-  default     = "t3.medium"
+  default     = "t3.small"
 }
 
 variable "backend_env_parameter_name" {

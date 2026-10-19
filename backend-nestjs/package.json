@@ -55,7 +55,7 @@
     "@nestjs/serve-static": "^5.0.5",
     "@nestjs/swagger": "^11.4.5",
     "@nestjs/throttler": "^6.5.0",
-    "@nestjs/typeorm": "^12.0.2",
+    "@nestjs/typeorm": "^11.0.3",
     "@nestjs/websockets": "^11.1.28",
     "@react-pdf/renderer": "^4.9.0",
     "@socket.io/redis-adapter": "^8.3.0",
