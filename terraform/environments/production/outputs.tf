@@ -45,3 +45,13 @@ output "redis_endpoint" {
   description = "Configuration endpoint of the ElastiCache Redis cluster"
   value       = module.redis.endpoint
 }
+
+output "cloudfront_distribution_id" {
+  description = "Identifier of the CloudFront distribution"
+  value       = module.cloudfront.distribution_id
+}
+
+output "cloudfront_domain_name" {
+  description = "Domain name corresponding to the CloudFront distribution"
+  value       = module.cloudfront.distribution_domain_name
+}

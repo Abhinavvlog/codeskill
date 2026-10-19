@@ -23,6 +23,18 @@ provider "aws" {
   }
 }
 
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+  default_tags {
+    tags = {
+      Project     = "CodeSkill"
+      Environment = "production"
+      ManagedBy   = "Terraform"
+    }
+  }
+}
+
 locals {
   name_prefix  = "codeskill-prod"
   domain_name  = var.domain_name
@@ -468,4 +480,89 @@ module "judge0_asg" {
 
   scheduled_exam_scale_up_cron   = var.exam_scale_up_cron
   scheduled_exam_scale_down_cron = var.exam_scale_down_cron
+}
+
+# -----------------------------------------------------------------------------
+# 9. Edge Delivery & Protection (Amazon CloudFront, AWS WAF & Route 53)
+# -----------------------------------------------------------------------------
+
+# Random secret token injected by CloudFront to prevent direct ALB bypass
+resource "random_password" "origin_verify_secret" {
+  length  = 32
+  special = false
+}
+
+# ACM Certificate for CloudFront (Must be provisioned in us-east-1)
+resource "aws_acm_certificate" "cloudfront" {
+  provider          = aws.us_east_1
+  domain_name       = local.domain_name
+  validation_method = "DNS"
+
+  tags = {
+    Name = "${local.name_prefix}-cloudfront-cert"
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Route 53 Public Hosted Zone Data Source
+data "aws_route53_zone" "main" {
+  name         = local.domain_name
+  private_zone = false
+}
+
+# DNS Validation records for CloudFront ACM Certificate
+resource "aws_route53_record" "cloudfront_cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.cloudfront.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+
+  allow_overwrite = true
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 60
+  type            = each.value.type
+  zone_id         = data.aws_route53_zone.main.zone_id
+}
+
+# Wait for ACM validation in us-east-1
+resource "aws_acm_certificate_validation" "cloudfront" {
+  provider                = aws.us_east_1
+  certificate_arn         = aws_acm_certificate.cloudfront.arn
+  validation_record_fqdns = [for record in aws_route53_record.cloudfront_cert_validation : record.fqdn]
+}
+
+# Edge WAF for CloudFront (scope = CLOUDFRONT in us-east-1)
+module "edge_waf" {
+  source      = "../../modules/waf"
+  providers   = { aws = aws.us_east_1 }
+  name_prefix = "${local.name_prefix}-edge"
+  scope       = "CLOUDFRONT"
+}
+
+# Amazon CloudFront Edge Distribution
+module "cloudfront" {
+  source                         = "../../modules/cloudfront"
+  name_prefix                    = local.name_prefix
+  domain_name                    = local.domain_name
+  alb_dns_name                   = module.alb.alb_dns_name
+  s3_bucket_regional_domain_name = module.s3.bucket_regional_domain_name
+  cloudfront_certificate_arn     = aws_acm_certificate_validation.cloudfront.certificate_arn
+  origin_verify_secret           = random_password.origin_verify_secret.result
+  web_acl_arn                    = module.edge_waf.web_acl_arn
+  price_class                    = var.cloudfront_price_class
+}
+
+# Route 53 DNS Alias pointing to CloudFront
+module "route53" {
+  source          = "../../modules/route53"
+  domain_name     = local.domain_name
+  target_dns_name = module.cloudfront.distribution_domain_name
+  target_zone_id  = module.cloudfront.distribution_hosted_zone_id
 }

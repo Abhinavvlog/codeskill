@@ -84,3 +84,10 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "origin_verify_secret" {
+  description = "Secret token expected in X-Origin-Verify header from CloudFront. If empty, all traffic is allowed without header check."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
