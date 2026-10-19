@@ -116,7 +116,7 @@ export class Question {
   title?: string;
 
   @Column({ type: 'varchar', length: 255, unique: true, nullable: true })
-  slug?: string;
+  slug?: string | null;
 
   @Column({ type: 'text', nullable: true })
   description?: string;
