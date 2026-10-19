@@ -27,6 +27,8 @@ import { adminQuestionsAPI } from "@/config/api";
 import { Spinner } from "@/components/ui/spinner";
 
 interface PreviewData {
+  sheetNames: string[];
+  selectedSheet: string | null;
   summary: {
     totalRows: number;
     validCount: number;
@@ -51,6 +53,7 @@ export default function ImportQuestionsPage() {
   const [mergeStrategy, setMergeStrategy] = useState<"skip" | "update" | "merge">("skip");
   const [activeTab, setActiveTab] = useState<"all" | "new" | "duplicates" | "conflicts" | "errors">("all");
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+  const [selectedSheet, setSelectedSheet] = useState("");
   const [importResult, setImportResult] = useState<{
     totalProcessed: number;
     insertedCount: number;
@@ -89,13 +92,10 @@ export default function ImportQuestionsPage() {
     setFile(selectedFile);
     setErrorMessage(null);
     setPreviewData(null);
+    setSelectedSheet("");
     setImportResult(null);
 
-    if (instantPush) {
-      handleOneAttemptAutoImport(selectedFile);
-    } else {
-      processPreview(selectedFile);
-    }
+    void processPreview(selectedFile, undefined, instantPush);
   };
 
   const handleOneAttemptAutoImport = async (selectedFile: File) => {
@@ -124,12 +124,17 @@ export default function ImportQuestionsPage() {
     }
   };
 
-  const processPreview = async (selectedFile: File) => {
+  const processPreview = async (selectedFile: File, sheetName?: string, autoIfSingleSheet = false) => {
     setIsValidating(true);
     setErrorMessage(null);
+    setPreviewData(null);
     try {
-      const res = await adminQuestionsAPI.importPreview(selectedFile);
+      const res = await adminQuestionsAPI.importPreview(selectedFile, sheetName);
       setPreviewData(res.data);
+      setSelectedSheet(res.data.selectedSheet || "");
+      if (autoIfSingleSheet && res.data.sheetNames.length === 1) {
+        await handleOneAttemptAutoImport(selectedFile);
+      }
     } catch (err: any) {
       setErrorMessage(
         err.response?.data?.message ||
@@ -431,6 +436,7 @@ export default function ImportQuestionsPage() {
               onClick={() => {
                 setFile(null);
                 setPreviewData(null);
+                setSelectedSheet("");
                 setImportResult(null);
               }}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border hover:bg-muted text-sm font-semibold transition-colors"
@@ -511,8 +517,32 @@ export default function ImportQuestionsPage() {
             </div>
           )}
 
+          {previewData && previewData.sheetNames.length > 1 && (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <label htmlFor="question-import-sheet" className="block text-sm font-semibold text-foreground">
+                Worksheet to import
+              </label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Choose a worksheet and review its questions before importing. One-click import applies to single-sheet files.
+              </p>
+              <select
+                id="question-import-sheet"
+                value={selectedSheet}
+                onChange={(event) => {
+                  const sheet = event.target.value;
+                  setSelectedSheet(sheet);
+                  if (file && sheet) void processPreview(file, sheet);
+                }}
+                className="mt-3 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground sm:max-w-sm"
+              >
+                <option value="">Select a worksheet</option>
+                {previewData.sheetNames.map((sheet) => <option key={sheet} value={sheet}>{sheet}</option>)}
+              </select>
+            </div>
+          )}
+
           {/* Preview Results */}
-          {previewData && !importResult && (
+          {previewData?.selectedSheet && !importResult && (
             <div className="space-y-6">
               {/* Summary Stats Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
