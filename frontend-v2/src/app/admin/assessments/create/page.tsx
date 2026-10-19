@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dayjs from "dayjs";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { adminAssessmentsAPI, adminQuestionsAPI, adminUsersAPI } from "@/config/api";
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { ToastProvider, useToast } from "../../questions/create/_components/Toast"; // Reuse toast
+import { formatAssessmentDateTime, formatScheduleDuration, getAssessmentScheduleState } from "@/lib/assessment-schedule";
 
 type StudentCohort = { semester: string; section: string };
 type AutoSelectionCriteria = {
@@ -82,10 +84,8 @@ function toggleValue(values: string[], value: string) {
 
 function toDateTimeLocal(value?: string | Date | null) {
   if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-  return date.toISOString().slice(0, 16);
+  const date = dayjs(value);
+  return date.isValid() ? date.format("YYYY-MM-DDTHH:mm") : "";
 }
 
 function MultiSelectDropdown({
@@ -159,6 +159,8 @@ function AssessmentBuilder() {
   const [targetGroup, setTargetGroup] = useState<"" | "a" | "b" | "both">("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [durationUnit, setDurationUnit] = useState<"minutes" | "hours">("minutes");
+  const [previewNow, setPreviewNow] = useState(() => Date.now());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formReady, setFormReady] = useState(false);
 
@@ -298,6 +300,11 @@ function AssessmentBuilder() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setPreviewNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const years = ["1", "2", "3", "4"];
   const allSemesters = ["1", "2", "3", "4", "5", "6", "7", "8"];
   const visibleSemesters = selectedYears.length
@@ -354,6 +361,16 @@ function AssessmentBuilder() {
     new Set(allSelectedQuestionIds.filter((questionId, index) => allSelectedQuestionIds.indexOf(questionId) !== index)),
   );
   const hasDuplicateQuestions = duplicateQuestionIds.length > 0;
+  const scheduleState = getAssessmentScheduleState(startTime || null, endTime || null, previewNow);
+  const scheduleIsValid = scheduleState !== "invalid";
+  const scheduleStatus = scheduleState === "invalid"
+    ? { title: "Schedule needs attention", detail: "Choose an end time later than the start time.", className: "border-rose-500/25 bg-rose-500/5 text-rose-700 dark:text-rose-300" }
+    : scheduleState === "upcoming"
+      ? { title: "Upcoming · Not yet available", detail: "Students can start when the scheduled window opens.", className: "border-amber-500/25 bg-amber-500/5 text-amber-700 dark:text-amber-300" }
+      : scheduleState === "expired"
+        ? { title: "Expired · No longer available", detail: "The scheduled access window has ended.", className: "border-rose-500/25 bg-rose-500/5 text-rose-700 dark:text-rose-300" }
+        : { title: "Live · Available now", detail: "Students can start now, while the schedule remains open.", className: "border-emerald-500/25 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300" };
+  const durationInputValue = durationUnit === "hours" ? Number(store.durationMinutes) / 60 : store.durationMinutes;
 
   const handlePublish = async (status: 'draft' | 'published') => {
     if (hasDuplicateQuestions) {
@@ -372,8 +389,12 @@ function AssessmentBuilder() {
       addToast("error", "Validation Error", "At least one question is required across sections.");
       return;
     }
-    if (!(Number(store.durationMinutes) > 0)) {
-      addToast("error", "Validation Error", "Duration must be at least 1 minute.");
+    if (!Number.isFinite(Number(store.durationMinutes)) || Number(store.durationMinutes) < 5) {
+      addToast("error", "Validation Error", "Assessment duration must be at least 5 minutes.");
+      return;
+    }
+    if ((startTime && !dayjs(startTime).isValid()) || (endTime && !dayjs(endTime).isValid()) || (startTime && endTime && !dayjs(endTime).isAfter(dayjs(startTime)))) {
+      addToast("error", "Validation Error", "Enter valid schedule dates and make sure the end time is later than the start time.");
       return;
     }
     if (store.passingMarks !== '' && (Number(store.passingMarks) < 0 || Number(store.passingMarks) > totalMarks)) {
@@ -393,8 +414,8 @@ function AssessmentBuilder() {
         targetSemesters: targetSemesters.length ? targetSemesters : selectedYears.length ? visibleSemesters : [],
         targetSections,
         targetGroups: targetGroup === "both" ? ["A", "B"] : targetGroup ? [targetGroup.toUpperCase()] : [],
-        startTime: startTime ? new Date(startTime).toISOString() : editingId ? null : undefined,
-        endTime: endTime ? new Date(endTime).toISOString() : editingId ? null : undefined,
+        startTime: startTime ? dayjs(startTime).toISOString() : editingId ? null : undefined,
+        endTime: endTime ? dayjs(endTime).toISOString() : editingId ? null : undefined,
         negativeMarking: store.negativeMarking,
         proctoring: store.proctoring,
         instructions: store.instructions,
@@ -495,10 +516,20 @@ function AssessmentBuilder() {
           <h2 className="text-base font-bold flex items-center gap-2">
             <Clock className="w-4 h-4 text-primary" /> Configuration & Proctoring
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 pb-5 border-b border-border">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pb-5 border-b border-border">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Duration (min)</label>
-              <input type="number" value={store.durationMinutes} onChange={e => store.setDurationMinutes(Number(e.target.value))} className="w-full px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm focus:ring-1 focus:ring-primary" />
+              <label htmlFor="assessment-duration" className="text-xs font-semibold">Assessment duration <span className="text-muted-foreground font-normal">(per attempt)</span></label>
+              <div className="flex gap-2">
+                <input id="assessment-duration" type="number" min={durationUnit === "hours" ? 5 / 60 : 5} step={durationUnit === "hours" ? "any" : 1} value={durationInputValue} onChange={(event) => {
+                  const value = Number(event.target.value);
+                  store.setDurationMinutes(Number.isFinite(value) ? Math.round(value * (durationUnit === "hours" ? 60 : 1)) : 0);
+                }} className="min-w-0 flex-1 px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm focus:ring-1 focus:ring-primary" />
+                <select aria-label="Duration unit" value={durationUnit} onChange={(event) => setDurationUnit(event.target.value as "minutes" | "hours")} className="w-28 px-3 bg-background border border-border rounded-xl text-sm focus:ring-1 focus:ring-primary">
+                  <option value="minutes">Minutes</option>
+                  <option value="hours">Hours</option>
+                </select>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Saved as {formatScheduleDuration(Number(store.durationMinutes))} for each attempt.</p>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold">Passing Marks</label>
@@ -778,13 +809,45 @@ function AssessmentBuilder() {
                 )}
               </p>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Available from</label>
-              <input type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="w-full px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm focus:ring-1 focus:ring-primary" />
+            <div className="space-y-1.5 md:col-span-2">
+              <label htmlFor="assessment-start-time" className="text-xs font-semibold">Available from <span className="text-muted-foreground font-normal">(optional)</span></label>
+              <input id="assessment-start-time" type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="w-full px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm focus:ring-1 focus:ring-primary" />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Available until</label>
-              <input type="datetime-local" value={endTime} onChange={(event) => setEndTime(event.target.value)} className="w-full px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm focus:ring-1 focus:ring-primary" />
+            <div className="space-y-1.5 md:col-span-2">
+              <label htmlFor="assessment-end-time" className="text-xs font-semibold">Available until <span className="text-muted-foreground font-normal">(optional)</span></label>
+              <input id="assessment-end-time" type="datetime-local" min={startTime || undefined} value={endTime} onChange={(event) => setEndTime(event.target.value)} className="w-full px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm focus:ring-1 focus:ring-primary" />
+            </div>
+            <div className={`md:col-span-4 overflow-hidden rounded-2xl border ${scheduleStatus.className}`}>
+              <div className="flex flex-col gap-3 border-b border-current/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-bold">{scheduleStatus.title}</p>
+                  <p className="mt-0.5 text-xs opacity-80">{scheduleStatus.detail}</p>
+                </div>
+                {store.title.trim() && <span className="max-w-full truncate rounded-lg bg-background/70 px-3 py-1.5 text-xs font-semibold text-foreground">{store.title}</span>}
+              </div>
+              <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl border border-border/70 bg-background/80 p-3 text-foreground">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Available from</p>
+                  <p className="mt-1 text-sm font-semibold">{startTime ? formatAssessmentDateTime(startTime, "D MMM YYYY") : "Immediately"}</p>
+                  <p className="text-xs text-muted-foreground">{startTime ? formatAssessmentDateTime(startTime, "h:mm A") : "No start restriction"}</p>
+                </div>
+                <div className="rounded-xl border border-border/70 bg-background/80 p-3 text-foreground">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Available until</p>
+                  <p className="mt-1 text-sm font-semibold">{endTime ? formatAssessmentDateTime(endTime, "D MMM YYYY") : "No expiry"}</p>
+                  <p className="text-xs text-muted-foreground">{endTime ? formatAssessmentDateTime(endTime, "h:mm A") : "Open schedule"}</p>
+                </div>
+                <div className="rounded-xl border border-border/70 bg-background/80 p-3 text-foreground">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Access window</p>
+                  <p className="mt-1 text-sm font-semibold">{!scheduleIsValid ? "Invalid window" : startTime && endTime ? formatScheduleDuration(dayjs(endTime).diff(dayjs(startTime), "minute")) : startTime || endTime ? "Open-ended" : "Available now"}</p>
+                  <p className="text-xs text-muted-foreground">Controls when attempts can begin</p>
+                </div>
+                <div className="rounded-xl border border-border/70 bg-background/80 p-3 text-foreground">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Duration per attempt</p>
+                  <p className="mt-1 text-sm font-semibold">{formatScheduleDuration(Number(store.durationMinutes))}</p>
+                  <p className="text-xs text-muted-foreground">Timer submits when time runs out</p>
+                </div>
+              </div>
+              {startTime && endTime && !scheduleIsValid && <p className="mx-3 mb-3 rounded-lg bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-700 dark:text-rose-300">End time must be later than start time.</p>}
             </div>
           </div>
         </section>

@@ -1,4 +1,5 @@
 import { type QuestionType } from "@/lib/question-types";
+import { getAssessmentScheduleState } from "@/lib/assessment-schedule";
 export interface AssignedAssessment {
   _id: string; id?: string; title: string; description?: string; code?: string;
   type?: string; questionTypes?: string[]; difficulties?: string[]; difficulty?: string;
@@ -34,10 +35,9 @@ export function assessmentCompleted(assessment: AssignedAssessment) {
 }
 export function assessmentWindow(assessment: AssignedAssessment, now = Date.now()) {
   if (!["published", "ongoing"].includes(assessment.status)) return assessment.status === "completed" ? "Completed" : "Unavailable";
-  const start = assessment.startTime ? new Date(assessment.startTime).getTime() : -Infinity;
-  const end = assessment.endTime ? new Date(assessment.endTime).getTime() : Infinity;
-  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return "Unavailable";
-  return now >= end ? "Completed" : now < start ? "Upcoming" : "Live";
+  const state = getAssessmentScheduleState(assessment.startTime, assessment.endTime, now);
+  if (state === "invalid") return "Unavailable";
+  return state === "expired" ? "Expired" : state === "upcoming" ? "Upcoming" : "Live";
 }
 export function canAttemptAssessment(assessment: AssignedAssessment, now = Date.now()) {
   if (assessment.attemptStatus === "in_progress") {
