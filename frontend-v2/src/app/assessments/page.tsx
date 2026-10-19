@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { getQuestionTypeLabel, type QuestionType } from "@/lib/question-types";
-import { assessmentTypes, assessmentCompleted, assessmentWindow, canAttemptAssessment, formatSemesterScope, type AssignedAssessment } from "@/lib/assessment-cards";
+import { assessmentTypes, assessmentCompleted, assessmentWindow, canAttemptAssessment, formatSemesterScope, formatAssessmentTimeLeft, type AssignedAssessment } from "@/lib/assessment-cards";
 
 const icons = { DSA: Code2, MCQ: ListChecks, MULTIPLE_CHOICE: CheckSquare2, TRUE_FALSE: ToggleLeft, CODE_OUTPUT: Terminal };
 const tabs = ["All Assessments", "DSA / Coding", "MCQs", "True / False", "Code Output"];
@@ -27,7 +27,7 @@ export default function StudentAssessmentsPage() {
   const loading = !!user && result?.key !== requestKey;
   const assessments = result?.key === requestKey ? result.assessments : [];
   const error = actionError || (result?.key === requestKey ? result.error : null);
-  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(timer); }, []);
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   useEffect(() => {
     if (authLoading) return;
     if (!user) return;
@@ -90,6 +90,8 @@ export default function StudentAssessmentsPage() {
         const remainingAttempts = assessment.allowedAttempts === 0
           ? "Unlimited attempts"
           : `${Math.max(0, (assessment.allowedAttempts || 1) - (assessment.completedAttemptsCount || 0))} attempt(s) remaining`;
+        const resumesLeft = assessment.resumeAttemptsRemaining ?? 3;
+        const resumeExpired = Boolean(assessment.attemptExpiresAt && new Date(assessment.attemptExpiresAt).getTime() <= now);
 
         return <article key={id} className="bg-card border border-border rounded-2xl p-6 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col gap-4">
           <div className="flex items-start justify-between gap-3">
@@ -124,12 +126,19 @@ export default function StudentAssessmentsPage() {
           )}
           <dl className="grid grid-cols-3 gap-2 border-y border-border py-4 text-sm">{[{ label: "Duration", value: `${assessment.durationMinutes} mins`, icon: Clock }, { label: "Questions", value: assessment.questionCount, icon: Layers }, { label: "Total marks", value: `${assessment.totalMarks} pts`, icon: Award }].map(({ label, value, icon: MetaIcon }) => <div key={label}><dt className="text-xs text-muted-foreground flex gap-1 items-center mb-1"><MetaIcon className="w-3.5 h-3.5 shrink-0" />{label}</dt><dd className="font-semibold">{value}</dd></div>)}</dl>
           <div className="text-xs text-muted-foreground flex flex-wrap gap-3">
-            <span>{remainingAttempts}</span>
+            <span>{inProgress ? "Attempt in progress" : remainingAttempts}</span>
             {levels.length > 0 && <span className="capitalize">Difficulty: {levels.length === 1 ? levels[0] : "Mixed"}</span>}
             {assessment.proctoring && Object.values(assessment.proctoring).some(Boolean) && <span className="flex gap-1 items-center"><ShieldCheck className="w-3.5 h-3.5" /> Proctored</span>}
             {assessment.code && <span className="font-mono">{assessment.code}</span>}
           </div>
-          <footer className="mt-auto pt-2 space-y-3">{completed && <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><span>Score: <strong>{assessment.attemptScore ?? 0} / {assessment.totalMarks} pts</strong></span><Link href={`/assessments/${id}/result`} className="font-semibold text-primary flex items-center gap-1 hover:underline"><BarChart3 className="w-4 h-4" />Scorecard</Link></div>}{canAttempt ? completed ? <Button className="w-full" onClick={() => retake(id)}>Re-attempt</Button> : <Link href={`/assessments/${id}`} className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg bg-foreground text-background font-semibold text-sm hover:opacity-90">{assessment.attemptStatus === "in_progress" ? "Resume Assessment" : "Attempt Now"}<ArrowRight className="w-4 h-4" /></Link> : <Button variant="outline" className="w-full" disabled>{status === "Upcoming" ? "Opens at the scheduled start time" : "Assessment closed"}</Button>}</footer>
+          <footer className="mt-auto pt-2 space-y-3">
+            {completed && <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><span>Score: <strong>{assessment.attemptScore ?? 0} / {assessment.totalMarks} pts</strong></span><Link href={`/assessments/${id}/result`} className="font-semibold text-primary flex items-center gap-1 hover:underline"><BarChart3 className="w-4 h-4" />Scorecard</Link></div>}
+            {inProgress && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground" aria-label="Assessment resume information">
+              <span className="inline-flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-primary" />Time left <strong className="font-mono text-sm text-foreground">{formatAssessmentTimeLeft(assessment.attemptExpiresAt, now)}</strong></span>
+              <span>Resumes left <strong className="font-mono text-sm text-foreground">{resumesLeft} / {assessment.maxResumeAttempts ?? 3}</strong></span>
+            </div>}
+            {canAttempt ? completed ? <Button className="w-full" onClick={() => retake(id)}>Re-attempt</Button> : <Link href={`/assessments/${id}`} className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg bg-foreground text-background font-semibold text-sm hover:opacity-90">{inProgress ? "Resume Assessment" : "Attempt Now"}<ArrowRight className="w-4 h-4" /></Link> : <Button variant="outline" className="w-full" disabled>{inProgress && resumeExpired ? "Time expired" : inProgress && resumesLeft <= 0 ? "Resume limit reached" : status === "Upcoming" ? "Opens at the scheduled start time" : "Assessment closed"}</Button>}
+          </footer>
         </article>;
       })}</div>}</div>
     </div>

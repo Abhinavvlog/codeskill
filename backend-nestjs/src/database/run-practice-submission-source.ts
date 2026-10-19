@@ -13,6 +13,7 @@ import { applyContestSecurityReattemptMigration } from './migrations/contest-sec
 import { applyAssessmentAudienceTargetingMigration } from './migrations/assessment-audience-targeting';
 import { applyAssessmentProctorCapturesMigration } from './migrations/assessment-proctor-captures';
 import { applyAssessmentProctoringModesMigration } from './migrations/assessment-proctoring-modes';
+import { applyAssessmentResumeLimitMigration } from './migrations/assessment-resume-limit';
 import { applyBugReportsMigration } from './migrations/bug-reports';
 
 export function practiceSubmissionMigrationOptions(): DataSourceOptions {
@@ -63,6 +64,7 @@ export async function runPracticeSubmissionSourceMigration(): Promise<void> {
         await applyAssessmentAudienceTargetingMigration(queryRunner);
         await applyAssessmentProctorCapturesMigration(queryRunner);
         await applyAssessmentProctoringModesMigration(queryRunner);
+        await applyAssessmentResumeLimitMigration(queryRunner);
         await applyBugReportsMigration(queryRunner);
         await queryRunner.commitTransaction();
       } catch (error) {

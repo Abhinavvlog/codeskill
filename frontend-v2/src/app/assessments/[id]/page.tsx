@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { studentAssessmentsAPI } from "@/config/api";
 import { useAuth } from "@/context/AuthContext";
+import { formatAssessmentTimeLeft } from "@/lib/assessment-cards";
 import { handoffAssessmentStream, releaseAssessmentStream, setPreferredAssessmentCamera } from "@/lib/assessment-media-session";
 import {
   clearAssessmentFaceReference,
@@ -42,6 +43,7 @@ export default function AssessmentBriefingPage({
   const [isLoading, setIsLoading] = useState(true);
   const [agreedToRules, setAgreedToRules] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [now, setNow] = useState(Date.now);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState("");
@@ -60,6 +62,11 @@ export default function AssessmentBriefingPage({
   useEffect(() => {
     clearAssessmentFaceReference(id);
   }, [id]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (cameraPreviewRef.current) cameraPreviewRef.current.srcObject = cameraStream;
@@ -145,24 +152,19 @@ export default function AssessmentBriefingPage({
   }, [id, router]);
 
   const assessment = data?.assessment;
+  const activeAttempt = data?.attempt?.status === "in_progress";
+  const resumesLeft = data?.attempt?.resumeAttemptsRemaining ?? 3;
+  const resumeExpired = Boolean(activeAttempt && data?.attempt?.attemptExpiresAt && new Date(data.attempt.attemptExpiresAt).getTime() <= now);
+  const resumeUnavailable = activeAttempt && (resumesLeft <= 0 || resumeExpired);
 
   const handleStartExam = async () => {
     const cameraRequired = assessment?.proctoring?.useCamera !== false;
-    if (!agreedToRules || (cameraRequired && (!cameraStreamRef.current || !getAssessmentFaceReference(id)))) return;
+    if (!agreedToRules || resumeUnavailable || (cameraRequired && (!cameraStreamRef.current || !getAssessmentFaceReference(id)))) return;
     setIsStarting(true);
 
     const attemptToken = Date.now();
-
-    // If re-attempting after completing, ensure fresh attempt is initialized
-    if (data?.completedAttemptsCount > 0 && data?.attempt?.status !== "in_progress") {
-      try {
-        await studentAssessmentsAPI.retakeAttempt(id);
-      } catch (e) {
-        console.error("Retake attempt error:", e);
-      }
-    }
-
-    router.push(`/assessments/${id}/take?attempt=${attemptToken}`);
+    const retake = data?.completedAttemptsCount > 0 && !activeAttempt;
+    router.push(`/assessments/${id}/take?attempt=${attemptToken}${retake ? "&retake=1" : ""}`);
   };
 
 
@@ -469,6 +471,11 @@ export default function AssessmentBriefingPage({
             </div>
           )}
 
+          {activeAttempt && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm">
+            <span className="inline-flex items-center gap-2 text-muted-foreground"><Clock className="h-4 w-4 text-primary" />Time left <strong className="font-mono text-foreground">{formatAssessmentTimeLeft(data.attempt.attemptExpiresAt, now)}</strong></span>
+            <span className="text-muted-foreground">Resumes left <strong className="font-mono text-foreground">{resumesLeft} / {data.attempt.maxResumeAttempts ?? 3}</strong></span>
+          </div>}
+
           {/* Start Action / Scorecard Redirect */}
           {data?.attempt?.status === "submitted" && data?.canRetake === false ? (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
@@ -486,7 +493,9 @@ export default function AssessmentBriefingPage({
           ) : (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
               <span className="text-xs text-muted-foreground">
-                {assessment.isAvailable === false
+                {resumeUnavailable
+                  ? resumeExpired ? "This attempt has run out of time." : "All three resume opportunities have been used."
+                  : assessment.isAvailable === false
                   ? "This assessment is currently not accepting new attempts."
                   : data?.completedAttemptsCount > 0
                     ? "Starting a new attempt will allow you to improve your score. The highest score is permanently saved."
@@ -495,15 +504,19 @@ export default function AssessmentBriefingPage({
 
               <button
                 onClick={handleStartExam}
-                disabled={!agreedToRules || (assessment.proctoring?.useCamera !== false && (!cameraStream || !selfieCaptured || isCheckingMedia || isCapturingSelfie)) || isStarting || assessment.isAvailable === false}
+                disabled={!agreedToRules || resumeUnavailable || (assessment.proctoring?.useCamera !== false && (!cameraStream || !selfieCaptured || isCheckingMedia || isCapturingSelfie)) || isStarting || assessment.isAvailable === false}
                 className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary/90 active:bg-primary/80 text-white font-semibold rounded-md text-xs sm:text-sm uppercase tracking-wider transition-all shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Maximize2 className="w-4 h-4" />
                 {isStarting
                   ? "Launching Exam..."
-                  : assessment.isAvailable === false
+                  : resumeExpired
+                    ? "Time Expired"
+                    : resumeUnavailable
+                    ? "Resume Limit Reached"
+                    : assessment.isAvailable === false
                     ? "Assessment Closed"
-                    : "Begin Assessment"}
+                    : activeAttempt ? "Resume Assessment" : "Begin Assessment"}
               </button>
             </div>
           )}
