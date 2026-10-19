@@ -15,13 +15,13 @@ interface AdminToSeed {
 const DEFAULT_ADMINS: AdminToSeed[] = [
   { name: 'Admin (Admin)', email: 'admin@codeskill.com', password: '12345678', role: 'super_admin' },
   { name: 'Platform Admin', email: 'admin@codeskill.io', password: '12345678', role: 'super_admin' },
-  { name: 'Venkatesh K', email: 'venkatesh@codeskill.com', password: '12345678', role: 'admin' },
+  { name: 'Venkatesh K', email: 'venkatesh@codeskill.com', password: '12345678', role: 'super_admin' },
   { name: 'Mustakim Shaikh', email: 'mustakim@codeskill.com', password: '12345678', role: 'super_admin' },
-  { name: 'maaz', email: 'maaz@codeskill.com', password: '12345678', role: 'admin' },
-  { name: 'Anmol', email: 'anmol@codeskill.com', password: '12345678', role: 'admin' },
-  { name: 'Tushar', email: 'tushar@codeskill.com', password: '12345678', role: 'admin' },
-  { name: 'Vishal', email: 'vishal@codeskill.com', password: '12345678', role: 'admin' },
-  { name: 'Abhinav', email: 'abhinav@codeskill.com', password: '12345678', role: 'admin' },
+  { name: 'maaz', email: 'maaz@codeskill.com', password: '12345678', role: 'super_admin' },
+  { name: 'Anmol', email: 'anmol@codeskill.com', password: '12345678', role: 'super_admin' },
+  { name: 'Tushar', email: 'tushar@codeskill.com', password: '12345678', role: 'super_admin' },
+  { name: 'Vishal', email: 'vishal@codeskill.com', password: '12345678', role: 'super_admin' },
+  { name: 'Abhinav', email: 'abhinav@codeskill.com', password: '12345678', role: 'super_admin' },
 ];
 
 async function seedBatch() {
