@@ -335,7 +335,7 @@ module "frontend_asg" {
   cpu_target_utilization = 65.0
 
   health_check_type         = "ELB"
-  health_check_grace_period = 180
+  health_check_grace_period = 300
   min_healthy_percentage    = 0
   instance_warmup           = var.asg_instance_warmup
 
@@ -372,7 +372,7 @@ module "backend_asg" {
   cpu_target_utilization = 60.0
 
   health_check_type         = "ELB"
-  health_check_grace_period = 180
+  health_check_grace_period = 300
   min_healthy_percentage    = 0
   instance_warmup           = var.asg_instance_warmup
 
@@ -388,7 +388,7 @@ module "backend_asg" {
     db_name                    = var.db_name
     redis_host                 = module.redis.endpoint
     redis_cluster_mode         = "true"
-    redis_tls                  = "true"
+    redis_tls                  = "false"
     backend_env_parameter_name = var.backend_env_parameter_name
     backend_service_id         = module.service_discovery.backend_service_id
     piston_base_url            = module.service_discovery.piston_base_url
@@ -420,14 +420,14 @@ module "piston_asg" {
   cpu_target_utilization = 60.0
 
   health_check_type         = "EC2"
-  health_check_grace_period = 180
+  health_check_grace_period = 300
   min_healthy_percentage    = 0
   instance_warmup           = 180
 
   user_data = templatefile("${path.module}/userdata/piston.sh.tftpl", {
     aws_region        = var.aws_region
     ecr_registry      = local.ecr_registry
-    piston_image      = "${module.ecr.piston_repository_url}:${var.piston_image_tag}"
+    piston_image      = "ghcr.io/engineer-man/piston:latest"
     piston_service_id = module.service_discovery.piston_service_id
   })
 
