@@ -679,7 +679,12 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
     ? (appTheme === "dark" ? "vs-dark" : "codeskill-hackerrank")
     : editorThemeName;
   const testCases = getTestCases();
-  const displaySamples = (problem.statement?.samples ?? []).filter(hasSampleContent);
+  // Left-panel examples fall back to the public (non-hidden) test cases.
+  const displaySamples = problem.statement?.samples?.length
+    ? problem.statement.samples.filter(hasSampleContent)
+    : (problem.testCases?.cases || [])
+        .filter((tc: any) => tc.isHidden !== true && hasSampleContent(tc))
+        .map((tc: any) => ({ input: tc.input, output: tc.output, explanation: tc.explanation }));
   const difficultyClass = DIFFICULTY_COLORS[problem.difficulty] || DIFFICULTY_COLORS.Easy;
   const displayedStats = problemStats ?? problem.stats;
   const totalProblemSubmissions = displayedStats?.totalSubmissions ?? 0;
@@ -1027,10 +1032,17 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
                     {activeSidebarTab === "samples" && (
                       <div className="p-5">
                         <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-3">
-                          Examples
+                          Sample Test Cases
                         </h3>
                         <SampleTestCasesPanel
                           samples={displaySamples}
+                          onLoad={(sample) => {
+                            const match = testCases.findIndex(
+                              (tc: any) => (tc.input || "") === (sample.input || ""),
+                            );
+                            setActiveTestCase(match >= 0 ? match : 0);
+                            setActiveBottomTab("testcases");
+                          }}
                         />
                       </div>
                     )}

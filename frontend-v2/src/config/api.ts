@@ -5,7 +5,6 @@ import { getBrowserApiBaseURL } from "@/lib/api-base-url";
 import { normalizeProblemQuery } from "@/lib/public-problems";
 import { logger } from "@/lib/logger";
 import { notifyMutationFailure, notifyMutationSuccess } from "@/lib/api-mutation-notifications";
-import { classifyCriticalApiFailure, redirectToCriticalErrorFallback } from "@/lib/error-fallback-navigation";
 
 // Dynamically determine the correct API base URL
 const getDynamicBaseURL = (): string => {
@@ -251,14 +250,6 @@ api.interceptors.response.use(
         }
       }
     }
-
-    const criticalFailure = classifyCriticalApiFailure({
-      status,
-      code: error.code,
-      hasResponse: Boolean(error.response),
-      method: originalRequest?.method,
-    });
-    if (criticalFailure) redirectToCriticalErrorFallback(criticalFailure);
     return Promise.reject(error);
   }
 );
