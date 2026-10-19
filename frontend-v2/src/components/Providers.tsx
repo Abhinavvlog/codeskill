@@ -7,6 +7,7 @@ import { googleClientId, googleOAuthEnabled } from "@/config/auth";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { Toaster } from "react-hot-toast";
 import { logger } from "@/lib/logger";
+import { redirectToCriticalErrorFallback } from "@/lib/error-fallback-navigation";
 
 export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
@@ -43,6 +44,7 @@ export function Providers({ children }: { children: ReactNode }) {
         },
         "GlobalErrorListener"
       );
+      redirectToCriticalErrorFallback("unexpected");
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
@@ -57,6 +59,10 @@ export function Providers({ children }: { children: ReactNode }) {
         },
         "GlobalPromiseRejectionListener"
       );
+      const status = event.reason?.response?.status;
+      if (!status || status >= 500 || status === 408) {
+        redirectToCriticalErrorFallback(status === 408 ? "timeout" : "unexpected");
+      }
     };
 
     window.addEventListener("error", handleError);
