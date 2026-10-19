@@ -469,3 +469,4 @@ module "judge0_asg" {
   scheduled_exam_scale_up_cron   = var.exam_scale_up_cron
   scheduled_exam_scale_down_cron = var.exam_scale_down_cron
 }
+

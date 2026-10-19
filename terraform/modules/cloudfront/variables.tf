@@ -20,8 +20,9 @@ variable "s3_bucket_regional_domain_name" {
 }
 
 variable "cloudfront_certificate_arn" {
-  description = "ACM Certificate ARN in us-east-1 for CloudFront"
+  description = "ACM Certificate ARN in us-east-1 for CloudFront (leave empty for default *.cloudfront.net certificate)"
   type        = string
+  default     = ""
 }
 
 variable "origin_verify_secret" {

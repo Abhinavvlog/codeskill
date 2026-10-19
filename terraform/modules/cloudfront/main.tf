@@ -31,7 +31,7 @@ resource "aws_cloudfront_distribution" "main" {
   enabled         = true
   is_ipv6_enabled = true
   comment         = "CodeSkill ${var.name_prefix} Edge Distribution"
-  aliases         = [var.domain_name]
+  aliases         = var.cloudfront_certificate_arn != "" ? [var.domain_name] : []
   price_class     = var.price_class
   web_acl_id      = var.web_acl_arn != "" ? var.web_acl_arn : null
 
@@ -139,9 +139,10 @@ resource "aws_cloudfront_distribution" "main" {
   }
 
   viewer_certificate {
-    acm_certificate_arn      = var.cloudfront_certificate_arn
-    ssl_support_method       = "sni-only"
-    minimum_protocol_version = "TLSv1.2_2021"
+    cloudfront_default_certificate = var.cloudfront_certificate_arn == "" ? true : null
+    acm_certificate_arn            = var.cloudfront_certificate_arn != "" ? var.cloudfront_certificate_arn : null
+    ssl_support_method             = var.cloudfront_certificate_arn != "" ? "sni-only" : null
+    minimum_protocol_version       = var.cloudfront_certificate_arn != "" ? "TLSv1.2_2021" : null
   }
 
   restrictions {
