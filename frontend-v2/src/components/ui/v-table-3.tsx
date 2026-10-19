@@ -186,7 +186,9 @@ export function VTable3({
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
-      case "active": return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
+      case "active":
+      case "approved": return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
+      case "pending":
       case "pending_review": return "bg-amber-500/10 text-amber-600 border-amber-500/20";
       case "draft": return "bg-slate-500/10 text-slate-600 border-slate-500/20";
       case "rejected": return "bg-rose-500/10 text-rose-600 border-rose-500/20";
@@ -308,8 +310,8 @@ export function VTable3({
             className="px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-amber-500"
           >
             <option value="">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="pending_review">Pending Review</option>
+            <option value="approved">Approved</option>
+            <option value="pending">Pending Review</option>
             <option value="draft">Draft</option>
             <option value="rejected">Rejected</option>
           </select>
