@@ -447,6 +447,51 @@ describe('Assessment Integrity & Server-Side Scoring (AUD-002, NEW-001, NEW-002,
     expect(mockAttemptRepo.save).not.toHaveBeenCalled();
   });
 
+  it('allows three resumes of the same attempt and rejects the fourth', async () => {
+    mockAssessmentRepo.findOne.mockResolvedValue({ ...mockAssessment, durationMinutes: 60 });
+    const activeAttempt = {
+      id: 'attempt-1', assessmentId, studentId: studentUser.id,
+      status: 'in_progress', startedAt: new Date(), questionOrder: [], responses: [], resumeCount: 0,
+    };
+    mockAttemptRepo.findOne.mockImplementation(async () => activeAttempt);
+    mockAttemptRepo.update.mockImplementation(async () => {
+      activeAttempt.resumeCount += 1;
+      return { affected: 1 };
+    });
+    mockQuestionRepo.find.mockResolvedValue([]);
+
+    for (let remaining = 2; remaining >= 0; remaining--) {
+      const result = await service.startStudentAttempt(assessmentId, studentUser);
+      expect(result.resumeAttemptsRemaining).toBe(remaining);
+      expect(result.startedAt).toBe(activeAttempt.startedAt);
+    }
+    await expect(service.startStudentAttempt(assessmentId, studentUser))
+      .rejects.toThrow('All 3 resume opportunities have been used');
+    expect(mockAttemptRepo.update).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not resume an attempt after its original timer expires', async () => {
+    mockAssessmentRepo.findOne.mockResolvedValue({ ...mockAssessment, durationMinutes: 60 });
+    mockAttemptRepo.findOne.mockResolvedValue({
+      id: 'attempt-1', assessmentId, studentId: studentUser.id,
+      status: 'in_progress', startedAt: new Date(Date.now() - 61 * 60_000), resumeCount: 0,
+    });
+    mockQuestionRepo.find.mockResolvedValue([]);
+
+    await expect(service.startStudentAttempt(assessmentId, studentUser))
+      .rejects.toThrow('run out of time');
+    expect(mockAttemptRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('does not let retake replace an in-progress attempt', async () => {
+    mockAssessmentRepo.findOne.mockResolvedValue(mockAssessment);
+    mockAttemptRepo.findOne.mockResolvedValue({ id: 'attempt-1', status: 'in_progress' });
+
+    await expect(service.retakeStudentAttempt(assessmentId, studentUser))
+      .rejects.toThrow('already in progress');
+    expect(mockAttemptRepo.save).not.toHaveBeenCalled();
+  });
+
   it('grades shuffled multiple-choice answers using the stored order, ignoring client mappings', async () => {
     mockAssessmentRepo.findOne.mockResolvedValue(mockAssessment);
     mockAttemptRepo.findOne.mockResolvedValue({

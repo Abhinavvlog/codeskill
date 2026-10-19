@@ -11,7 +11,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, Not } from 'typeorm';
+import { Repository, In, Not, LessThan } from 'typeorm';
 import { Assessment } from '../database/entities/assessment.entity';
 import { AssessmentAttempt } from '../database/entities/assessment-attempt.entity';
 import { Question } from '../database/entities/question.entity';
@@ -35,6 +35,8 @@ function codingTestCases(question: Question): Array<{ id: string | number; input
   }));
 }
 
+const MAX_RESUME_ATTEMPTS = 3;
+
 @Injectable()
 export class AssessmentsService {
   private readonly logger = new Logger(AssessmentsService.name);
@@ -54,6 +56,27 @@ export class AssessmentsService {
     private readonly s3Service?: S3Service,
     @Optional() @InjectQueue('submissions') private readonly codeQueue?: Queue,
   ) {}
+
+  private attemptExpiresAt(assessment: Assessment, attempt: AssessmentAttempt): Date {
+    const durationMinutes = Number(assessment.durationMinutes) > 0
+      ? Number(assessment.durationMinutes)
+      : 45;
+    const durationDeadline = new Date(attempt.startedAt).getTime() + durationMinutes * 60_000;
+    const windowDeadline = assessment.endTime
+      ? new Date(assessment.endTime).getTime()
+      : Infinity;
+    return new Date(Math.min(durationDeadline, windowDeadline));
+  }
+
+  private resumeDetails(assessment: Assessment, attempt: AssessmentAttempt) {
+    const resumeAttemptsUsed = Math.max(0, attempt.resumeCount || 0);
+    return {
+      attemptExpiresAt: this.attemptExpiresAt(assessment, attempt),
+      resumeAttemptsUsed,
+      resumeAttemptsRemaining: Math.max(0, MAX_RESUME_ATTEMPTS - resumeAttemptsUsed),
+      maxResumeAttempts: MAX_RESUME_ATTEMPTS,
+    };
+  }
 
   private shuffleList<T>(items: T[]): T[] {
     const next = [...items];
@@ -1146,11 +1169,17 @@ export class AssessmentsService {
               .map((q) => q.difficulty),
           ),
         ],
-        attemptStatus: isCompleted
-          ? 'submitted'
-          : inProgressAttempt
-            ? 'in_progress'
+        attemptStatus: inProgressAttempt
+          ? 'in_progress'
+          : isCompleted
+            ? 'submitted'
             : 'not_started',
+        ...(inProgressAttempt
+          ? {
+              attemptStartedAt: inProgressAttempt.startedAt,
+              ...this.resumeDetails(a, inProgressAttempt),
+            }
+          : {}),
         attemptScore: maxScore,
         attemptPassed: hasPassed,
         highestScore: maxScore,
@@ -1260,6 +1289,9 @@ export class AssessmentsService {
           startedAt: latestAttempt.startedAt,
           submittedAt: latestAttempt.submittedAt,
           attemptNumber: latestAttempt.attemptNumber,
+          ...(latestAttempt.status === 'in_progress'
+            ? this.resumeDetails(assessment, latestAttempt)
+            : {}),
         }
         : null,
       canRetake,
@@ -1352,6 +1384,7 @@ export class AssessmentsService {
         status: 'in_progress',
         startedAt: new Date(),
         attemptNumber: attemptNum,
+        resumeCount: 0,
         highestScore: highestPreviousScore,
         questionOrder: orderedIds,
         maxScore: assessment.totalMarks,
@@ -1369,6 +1402,33 @@ export class AssessmentsService {
       });
 
       await this.attemptRepo.save(attempt);
+    } else {
+      if (now.getTime() >= this.attemptExpiresAt(assessment, attempt).getTime()) {
+        throw new BadRequestException('This assessment attempt has run out of time.');
+      }
+      const previousResumeCount = attempt.resumeCount || 0;
+      if (previousResumeCount >= MAX_RESUME_ATTEMPTS) {
+        throw new BadRequestException('All 3 resume opportunities have been used for this attempt.');
+      }
+
+      // The database claims one resume atomically, including when two tabs open together.
+      const claimed = await this.attemptRepo.update(
+        {
+          id: attempt.id,
+          studentId,
+          status: 'in_progress',
+          resumeCount: LessThan(MAX_RESUME_ATTEMPTS),
+        },
+        { resumeCount: () => '"resumeCount" + 1' },
+      );
+      if (!claimed.affected) {
+        throw new BadRequestException('No resume opportunities remain for this assessment attempt.');
+      }
+      const updatedAttempt = await this.attemptRepo.findOne({ where: { id: attempt.id } });
+      attempt.resumeCount = Math.max(
+        previousResumeCount + 1,
+        updatedAttempt?.resumeCount || 0,
+      );
     }
 
     const sanitizedQuestions = (attempt.questionOrder || [])
@@ -1431,6 +1491,7 @@ export class AssessmentsService {
       _id: attempt.id,
       startedAt: attempt.startedAt,
       durationMinutes: assessment.durationMinutes,
+      ...this.resumeDetails(assessment, attempt),
       proctoring: assessment.proctoring,
       questions: sanitizedQuestions,
       savedResponses: attempt.responses,
@@ -1447,11 +1508,12 @@ export class AssessmentsService {
       throw new ForbiddenException('This assessment is not assigned to your student account.');
     }
 
-    await this.attemptRepo.delete({
-      assessmentId: assessment.id,
-      studentId,
-      status: 'in_progress',
+    const activeAttempt = await this.attemptRepo.findOne({
+      where: { assessmentId: assessment.id, studentId, status: 'in_progress' },
     });
+    if (activeAttempt) {
+      throw new BadRequestException('An attempt is already in progress. Resume it instead of starting over.');
+    }
 
     return this.startStudentAttempt(assessment.id, studentUser);
   }

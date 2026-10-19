@@ -6,6 +6,8 @@ export interface AssignedAssessment {
   startTime?: string; endTime?: string; status: string; attemptStatus?: string;
   attemptScore?: number; attemptPassed?: boolean; canRetake?: boolean; allowedAttempts?: number;
   completedAttemptsCount?: number;
+  attemptStartedAt?: string; attemptExpiresAt?: string;
+  resumeAttemptsUsed?: number; resumeAttemptsRemaining?: number; maxResumeAttempts?: number;
   targetSemesters?: string[]; targetSections?: string[]; targetGroups?: string[];
   targetCourses?: string[]; targetDepartments?: string[]; targetBatches?: string[];
   proctoring?: Record<string, unknown>;
@@ -38,5 +40,20 @@ export function assessmentWindow(assessment: AssignedAssessment, now = Date.now(
   return now >= end ? "Completed" : now < start ? "Upcoming" : "Live";
 }
 export function canAttemptAssessment(assessment: AssignedAssessment, now = Date.now()) {
+  if (assessment.attemptStatus === "in_progress") {
+    if (assessment.resumeAttemptsRemaining !== undefined && assessment.resumeAttemptsRemaining <= 0) return false;
+    if (assessment.attemptExpiresAt && new Date(assessment.attemptExpiresAt).getTime() <= now) return false;
+  }
   return assessmentWindow(assessment, now) === "Live" && (!assessmentCompleted(assessment) || assessment.canRetake === true);
+}
+
+export function formatAssessmentTimeLeft(expiresAt: string | undefined, now: number): string {
+  if (!expiresAt) return "—";
+  const seconds = Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now) / 1000));
+  if (seconds <= 0) return "0m 00s";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return hours > 0
+    ? `${hours}h ${String(minutes).padStart(2, "0")}m`
+    : `${minutes}m ${String(seconds % 60).padStart(2, "0")}s`;
 }

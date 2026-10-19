@@ -124,6 +124,7 @@ export default function TakeAssessmentPage({
   const [durationMinutes, setDurationMinutes] = useState(45);
   const [startedAt, setStartedAt] = useState<Date>(new Date());
   const [timeLeftSeconds, setTimeLeftSeconds] = useState(2700);
+  const [attemptDeadlineAt, setAttemptDeadlineAt] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [proctoring, setProctoring] = useState<AssessmentProctoring | null>(null);
@@ -304,9 +305,11 @@ export default function TakeAssessmentPage({
       const start = new Date(data.startedAt || new Date());
       setStartedAt(start);
 
-      const totalSecs = (data.durationMinutes || 45) * 60;
-      const elapsedSecs = Math.floor((Date.now() - start.getTime()) / 1000);
-      setTimeLeftSeconds(Math.max(0, totalSecs - elapsedSecs));
+      const deadline = data.attemptExpiresAt
+        ? new Date(data.attemptExpiresAt).getTime()
+        : start.getTime() + (data.durationMinutes || 45) * 60_000;
+      setAttemptDeadlineAt(deadline);
+      setTimeLeftSeconds(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
 
       if (data.proctoring?.maxTabSwitches) {
         setMaxTabSwitches(data.proctoring.maxTabSwitches);
@@ -609,27 +612,20 @@ export default function TakeAssessmentPage({
     };
   }, [id, isLoading, isSubmitting, loadedAssessmentId]);
 
-  // 4. Countdown Clock
+  // 4. Countdown Clock: derive from the server deadline so a sleeping tab cannot pause the exam.
   useEffect(() => {
-    if (isLoading || isSubmitting) return;
-    if (timeLeftSeconds <= 0) {
-      void submitExam(true);
-      return;
-    }
-
-    const timer = setInterval(() => {
-      setTimeLeftSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          submitExam(true);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
+    if (isLoading || isSubmitting || attemptDeadlineAt === null) return;
+    const updateClock = () => setTimeLeftSeconds(Math.max(0, Math.ceil((attemptDeadlineAt - Date.now()) / 1000)));
+    updateClock();
+    const timer = setInterval(updateClock, 1000);
     return () => clearInterval(timer);
-  }, [isLoading, isSubmitting, submitExam, timeLeftSeconds]);
+  }, [attemptDeadlineAt, isLoading, isSubmitting]);
+
+  useEffect(() => {
+    if (!isLoading && !isSubmitting && loadedAssessmentId === id && timeLeftSeconds <= 0) {
+      void submitExam(true);
+    }
+  }, [id, isLoading, isSubmitting, loadedAssessmentId, submitExam, timeLeftSeconds]);
 
   // 5. Autosave Progress Interval (Every 15 Seconds)
   useEffect(() => {
