@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { adminQuestionsAPI, adminQuestionBanksAPI, adminProblemsAPI } from "@/config/api";
 import Link from "next/link";
 import { VTable3 } from "@/components/ui/v-table-3";
+import { useDeleteConfirmation } from "@/hooks/use-delete-confirmation";
 import MCQQuestionDetails from "./_components/MCQQuestionDetails";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
@@ -60,6 +61,11 @@ function QuestionsAdminContent() {
   const [topicsList, setTopicsList] = useState<any[]>([]);
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
   const [deletingQuestions, setDeletingQuestions] = useState(false);
+  const [deletingQuestionId, setDeletingQuestionId] = useState<string | null>(null);
+  const [deletingPracticeId, setDeletingPracticeId] = useState<string | null>(null);
+  const [deleteFeedback, setDeleteFeedback] = useState<{ error: boolean; message: string } | null>(null);
+  const deleteInFlight = useRef(false);
+  const { confirmDelete, deleteConfirmationDialog } = useDeleteConfirmation();
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [bulkForm, setBulkForm] = useState({
@@ -331,16 +337,47 @@ function QuestionsAdminContent() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Archive this assessment question? Archived questions are removed from the active question bank.")) return;
+    if (deleteInFlight.current) return;
+    const question = questions.find(item => String(item._id || item.id || item.mongoId) === String(id));
+    const title = question?.title || question?.question || "this question";
+    if (!await confirmDelete({ title: "Delete Question Bank question?", description: `Delete "${title}" from Question Bank? The question will be archived and removed from the active catalog. Existing assessment records are kept.` })) return;
+    deleteInFlight.current = true;
+    setDeletingQuestionId(id);
+    setDeleteFeedback(null);
     try {
       await adminQuestionsAPI.delete(id);
-      fetchQuestions();
+      setQuestions(current => current.filter(item => String(item._id || item.id || item.mongoId) !== String(id)));
+      setTotalQuestions(current => Math.max(0, current - 1));
       setSelectedQuestionIds((current) => current.filter((selectedId) => selectedId !== id));
       const currentId = inspectQuestion?._id || inspectQuestion?.id;
       if (currentId === id) setInspectQuestion(null);
-    } catch (err) {
-      console.error("Failed to delete question", err);
-      alert("Failed to archive question. Please try again.");
+      setDeleteFeedback({ error: false, message: "Question archived and removed from the active catalog." });
+      if (questions.length === 1 && page > 1) setPage(current => current - 1);
+      else await fetchQuestions();
+    } catch {
+      setDeleteFeedback({ error: true, message: "Could not delete this question. Please try again." });
+    } finally {
+      deleteInFlight.current = false;
+      setDeletingQuestionId(null);
+    }
+  };
+
+  const handleDeletePractice = async (problem: { id?: string; _id?: string; title?: string }) => {
+    const id = problem.id || problem._id;
+    if (!id || deleteInFlight.current) return;
+    if (!await confirmDelete({ title: "Delete practice problem?", description: `Permanently delete the practice problem "${problem.title || "Untitled problem"}"? Any original Question Bank question is kept.` })) return;
+    deleteInFlight.current = true;
+    setDeletingPracticeId(id);
+    setDeleteFeedback(null);
+    try {
+      await adminProblemsAPI.delete(id);
+      setCodingProblems(current => current.filter(item => (item.id || item._id) !== id));
+      setDeleteFeedback({ error: false, message: "Practice problem deleted." });
+    } catch {
+      setDeleteFeedback({ error: true, message: "Could not delete this practice problem. Please try again." });
+    } finally {
+      deleteInFlight.current = false;
+      setDeletingPracticeId(null);
     }
   };
 
@@ -362,9 +399,10 @@ function QuestionsAdminContent() {
 
   const handleBulkDelete = async () => {
     const ids = [...selectedQuestionIds];
-    if (ids.length === 0 || deletingQuestions) return;
-    if (!confirm(`Archive ${ids.length} selected question${ids.length === 1 ? "" : "s"}? They will be removed from the active question bank.`)) return;
+    if (ids.length === 0 || deletingQuestions || deleteInFlight.current) return;
+    if (!await confirmDelete({ title: "Delete selected questions?", description: `Archive ${ids.length} selected question${ids.length === 1 ? "" : "s"}? They will be removed from the active question bank. Existing assessment records are kept.` })) return;
 
+    deleteInFlight.current = true;
     setDeletingQuestions(true);
     const failedIds: string[] = [];
     try {
@@ -379,9 +417,12 @@ function QuestionsAdminContent() {
       setSelectedQuestionIds(failedIds);
       await fetchQuestions();
       if (failedIds.length > 0) {
-        alert(`${ids.length - failedIds.length} question${ids.length - failedIds.length === 1 ? "" : "s"} archived. ${failedIds.length} could not be archived and remain selected.`);
+        setDeleteFeedback({ error: true, message: `${ids.length - failedIds.length} question${ids.length - failedIds.length === 1 ? "" : "s"} archived. ${failedIds.length} could not be archived and remain selected.` });
+      } else {
+        setDeleteFeedback({ error: false, message: `${ids.length} question${ids.length === 1 ? "" : "s"} archived and removed from the active catalog.` });
       }
     } finally {
+      deleteInFlight.current = false;
       setDeletingQuestions(false);
     }
   };
@@ -530,6 +571,13 @@ function QuestionsAdminContent() {
       </div>
 
       {/* Tab 1: Assessment Questions */}
+      {deleteConfirmationDialog}
+      {deleteFeedback && (
+        <p role={deleteFeedback.error ? "alert" : "status"} className={`rounded-xl border px-4 py-3 text-sm ${deleteFeedback.error ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"}`}>
+          {deleteFeedback.message}
+        </p>
+      )}
+
       {activeTab === "questions" && (
         <VTable3
           questions={questions}
@@ -584,6 +632,7 @@ function QuestionsAdminContent() {
           onClearSelection={() => setSelectedQuestionIds([])}
           onBulkDelete={handleBulkDelete}
           deletingQuestions={deletingQuestions}
+          deletingQuestionId={deletingQuestionId}
           onBulkEdit={() => setBulkEditOpen(true)}
         />
       )}
@@ -671,6 +720,7 @@ function QuestionsAdminContent() {
                 <th className="px-6 py-3">Difficulty</th>
                 <th className="px-6 py-3">Visibility</th>
                 <th className="px-6 py-3">Created</th>
+                <th className="px-6 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -690,6 +740,18 @@ function QuestionsAdminContent() {
                   </td>
                   <td className="px-6 py-4 text-xs font-mono">
                     {new Date(prob.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button
+                      type="button"
+                      aria-label={`Delete ${prob.title || "practice problem"}`}
+                      disabled={Boolean(deletingPracticeId) || deletingQuestions || Boolean(deletingQuestionId) || !(prob.id || prob._id)}
+                      onClick={() => handleDeletePractice(prob)}
+                      className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {deletingPracticeId === (prob.id || prob._id) ? "Deleting…" : "Delete"}
+                    </button>
                   </td>
                 </tr>
               ))}
