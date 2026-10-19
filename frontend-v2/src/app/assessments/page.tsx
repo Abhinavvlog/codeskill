@@ -9,10 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { getQuestionTypeLabel, type QuestionType } from "@/lib/question-types";
 import { assessmentTypes, assessmentCompleted, assessmentWindow, canAttemptAssessment, formatSemesterScope, formatAssessmentTimeLeft, type AssignedAssessment } from "@/lib/assessment-cards";
+import { formatAssessmentDateTime } from "@/lib/assessment-schedule";
 
 const icons = { DSA: Code2, MCQ: ListChecks, MULTIPLE_CHOICE: CheckSquare2, TRUE_FALSE: ToggleLeft, CODE_OUTPUT: Terminal };
 const tabs = ["All Assessments", "DSA / Coding", "MCQs", "True / False", "Code Output"];
-const availabilityOptions = ["All availability", "Live / Available", "In Progress", "Upcoming", "Completed"];
+const availabilityOptions = ["All availability", "Live / Available", "In Progress", "Upcoming", "Expired", "Completed"];
 
 export default function StudentAssessmentsPage() {
   const router = useRouter(); const { user, loading: authLoading } = useAuth();
@@ -43,14 +44,15 @@ export default function StudentAssessmentsPage() {
     const types = assessmentTypes(assessment); const completed = assessmentCompleted(assessment);
     const inProgress = assessment.attemptStatus === "in_progress";
     const windowStatus = assessmentWindow(assessment, now);
-    const status = completed ? "Completed" : inProgress ? "In Progress" : windowStatus;
+    const status = completed ? "Completed" : inProgress && windowStatus === "Live" ? "In Progress" : windowStatus;
     const tabTypes: Record<string, QuestionType[]> = { "DSA / Coding": ["DSA"], MCQs: ["MCQ", "MULTIPLE_CHOICE"], "True / False": ["TRUE_FALSE"], "Code Output": ["CODE_OUTPUT"] };
     const matchesAvailability =
       availability === "All availability" ||
       availability === status ||
       (availability === "Live / Available" && (status === "Live" || windowStatus === "Live")) ||
-      (availability === "In Progress" && inProgress) ||
+      (availability === "In Progress" && status === "In Progress") ||
       (availability === "Upcoming" && status === "Upcoming") ||
+      (availability === "Expired" && status === "Expired") ||
       (availability === "Completed" && status === "Completed");
 
     return assessment.title.toLowerCase().includes(search.trim().toLowerCase())
@@ -84,7 +86,7 @@ export default function StudentAssessmentsPage() {
         const completed = assessmentCompleted(assessment);
         const inProgress = assessment.attemptStatus === "in_progress";
         const windowStatus = assessmentWindow(assessment, now);
-        const status = completed ? "Completed" : inProgress ? "In Progress" : windowStatus;
+        const status = completed ? "Completed" : inProgress && windowStatus === "Live" ? "In Progress" : windowStatus;
         const canAttempt = canAttemptAssessment(assessment, now); const id = assessment.id || assessment._id;
         const levels = assessment.difficulties?.length ? assessment.difficulties : assessment.difficulty ? [assessment.difficulty] : [];
         const remainingAttempts = assessment.allowedAttempts === 0
@@ -102,7 +104,7 @@ export default function StudentAssessmentsPage() {
               <span className="text-[11px] px-2.5 py-0.5 rounded-full font-semibold bg-primary/10 text-primary border border-primary/20 flex items-center gap-1">
                 <GraduationCap className="w-3 h-3" />{formatSemesterScope(assessment.targetSemesters)}
               </span>
-              <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold border ${status === "Live" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" : status === "In Progress" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 animate-pulse" : status === "Upcoming" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30" : "bg-muted text-muted-foreground border-border"}`}>{status}</span>
+              <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold border ${status === "Live" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" : status === "In Progress" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 animate-pulse" : status === "Upcoming" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30" : status === "Expired" ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30" : "bg-muted text-muted-foreground border-border"}`}>{status}</span>
             </div>
           </div>
           <div className="space-y-2">
@@ -118,9 +120,9 @@ export default function StudentAssessmentsPage() {
             <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 bg-muted/40 p-2 rounded-lg border border-border/50">
               <Clock className="w-3.5 h-3.5 text-primary shrink-0" />
               <span>
-                {assessment.startTime ? new Date(assessment.startTime).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Immediate"}
+                {assessment.startTime ? formatAssessmentDateTime(assessment.startTime, "MMM D, h:mm A") : "Immediate"}
                 {" → "}
-                {assessment.endTime ? new Date(assessment.endTime).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Open"}
+                {assessment.endTime ? formatAssessmentDateTime(assessment.endTime, "MMM D, h:mm A") : "Open"}
               </span>
             </div>
           )}
