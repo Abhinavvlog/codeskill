@@ -313,14 +313,14 @@ module "rds" {
 }
 
 module "redis" {
-  source                     = "../../modules/redis"
-  name_prefix                = local.name_prefix
-  vpc_id                     = module.vpc.vpc_id
-  private_db_subnet_ids      = module.vpc.private_db_subnet_ids
+  source                        = "../../modules/redis"
+  name_prefix                   = local.name_prefix
+  vpc_id                        = module.vpc.vpc_id
+  private_db_subnet_ids         = module.vpc.private_db_subnet_ids
   authorized_security_group_ids = [aws_security_group.backend.id]
-  node_type                  = "cache.t4g.small"
-  transit_encryption_enabled = true
-  at_rest_encryption_enabled = true
+  node_type                     = "cache.t4g.small"
+  transit_encryption_enabled    = true
+  at_rest_encryption_enabled    = true
 }
 
 # -----------------------------------------------------------------------------
@@ -483,7 +483,10 @@ module "judge0_asg" {
 }
 
 # -----------------------------------------------------------------------------
-# 9. Edge Delivery & Protection (Amazon CloudFront, AWS WAF & Route 53)
+# 9. Edge Delivery & Protection (Amazon CloudFront & AWS WAF)
+# Note: Domain DNS is managed externally at Hostinger (not Route 53).
+# Add the CNAME output from `cloudfront_acm_validation_records` to Hostinger
+# to validate the certificate, then set enable_cloudfront = true.
 # -----------------------------------------------------------------------------
 
 # Random secret token injected by CloudFront to prevent direct ALB bypass
@@ -507,62 +510,25 @@ resource "aws_acm_certificate" "cloudfront" {
   }
 }
 
-# Route 53 Public Hosted Zone Data Source
-data "aws_route53_zone" "main" {
-  name         = local.domain_name
-  private_zone = false
-}
-
-# DNS Validation records for CloudFront ACM Certificate
-resource "aws_route53_record" "cloudfront_cert_validation" {
-  for_each = {
-    for dvo in aws_acm_certificate.cloudfront.domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  }
-
-  allow_overwrite = true
-  name            = each.value.name
-  records         = [each.value.record]
-  ttl             = 60
-  type            = each.value.type
-  zone_id         = data.aws_route53_zone.main.zone_id
-}
-
-# Wait for ACM validation in us-east-1
-resource "aws_acm_certificate_validation" "cloudfront" {
-  provider                = aws.us_east_1
-  certificate_arn         = aws_acm_certificate.cloudfront.arn
-  validation_record_fqdns = [for record in aws_route53_record.cloudfront_cert_validation : record.fqdn]
-}
-
 # Edge WAF for CloudFront (scope = CLOUDFRONT in us-east-1)
 module "edge_waf" {
+  count       = var.enable_cloudfront ? 1 : 0
   source      = "../../modules/waf"
   providers   = { aws = aws.us_east_1 }
   name_prefix = "${local.name_prefix}-edge"
   scope       = "CLOUDFRONT"
 }
 
-# Amazon CloudFront Edge Distribution
+# Amazon CloudFront Edge Distribution (Active once enable_cloudfront = true)
 module "cloudfront" {
+  count                          = var.enable_cloudfront ? 1 : 0
   source                         = "../../modules/cloudfront"
   name_prefix                    = local.name_prefix
   domain_name                    = local.domain_name
   alb_dns_name                   = module.alb.alb_dns_name
   s3_bucket_regional_domain_name = module.s3.bucket_regional_domain_name
-  cloudfront_certificate_arn     = aws_acm_certificate_validation.cloudfront.certificate_arn
+  cloudfront_certificate_arn     = var.cloudfront_certificate_arn != "" ? var.cloudfront_certificate_arn : aws_acm_certificate.cloudfront.arn
   origin_verify_secret           = random_password.origin_verify_secret.result
-  web_acl_arn                    = module.edge_waf.web_acl_arn
+  web_acl_arn                    = length(module.edge_waf) > 0 ? module.edge_waf[0].web_acl_arn : ""
   price_class                    = var.cloudfront_price_class
-}
-
-# Route 53 DNS Alias pointing to CloudFront
-module "route53" {
-  source          = "../../modules/route53"
-  domain_name     = local.domain_name
-  target_dns_name = module.cloudfront.distribution_domain_name
-  target_zone_id  = module.cloudfront.distribution_hosted_zone_id
 }
