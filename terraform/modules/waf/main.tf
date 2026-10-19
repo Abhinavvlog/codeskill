@@ -1,3 +1,13 @@
+terraform {
+  required_version = ">= 1.5.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+  }
+}
+
 resource "aws_wafv2_web_acl" "main" {
   name        = "${var.name_prefix}-waf"
   description = "WAF for ${var.name_prefix}"
