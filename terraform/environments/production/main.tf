@@ -296,7 +296,7 @@ module "rds" {
   max_allocated_storage   = 500
   multi_az                = true
   backup_retention_period = 30
-  storage_encrypted       = true
+  storage_encrypted       = false
   deletion_protection     = true
 }
 
@@ -307,8 +307,8 @@ module "redis" {
   private_db_subnet_ids         = module.vpc.private_db_subnet_ids
   authorized_security_group_ids = [aws_security_group.backend.id]
   node_type                     = "cache.t4g.small"
-  transit_encryption_enabled    = true
-  at_rest_encryption_enabled    = true
+  transit_encryption_enabled    = false
+  at_rest_encryption_enabled    = false
 }
 
 # -----------------------------------------------------------------------------
