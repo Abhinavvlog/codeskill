@@ -573,18 +573,20 @@ export const adminQuestionsAPI = {
   approve: (id: string) => api.put(`/admin/questions/${id}/approve`),
   reject: (id: string, reason: string) => api.put(`/admin/questions/${id}/reject`, { reason }),
   getTopics: (topic?: string) => api.get("/admin/questions/topics", { params: { topic } }),
-  importPreview: (file: File) => {
+  importPreview: (file: File, sheetName?: string) => {
     const formData = new FormData();
     formData.append("file", file);
+    if (sheetName) formData.append("sheetName", sheetName);
     return api.post("/admin/questions/import", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
   confirmImport: (validRows: any[], mergeStrategy?: 'skip' | 'update' | 'merge') =>
     api.post("/admin/questions/import/confirm", { validRows, mergeStrategy }),
-  autoImport: (file: File, mergeStrategy?: 'skip' | 'update' | 'merge') => {
+  autoImport: (file: File, mergeStrategy?: 'skip' | 'update' | 'merge', sheetName?: string) => {
     const formData = new FormData();
     formData.append("file", file);
+    if (sheetName) formData.append("sheetName", sheetName);
     return api.post(`/admin/questions/import/auto${mergeStrategy ? `?mergeStrategy=${mergeStrategy}` : ""}`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });

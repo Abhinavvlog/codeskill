@@ -987,7 +987,7 @@ export class QuestionsService {
       .filter(Boolean);
   }
 
-  async parseAndValidateQuestionsImport(fileBuffer: Buffer) {
+  async parseAndValidateQuestionsImport(fileBuffer: Buffer, sheetName?: string) {
     const workbook = XLSX.read(fileBuffer, {
       type: 'buffer',
       cellFormula: false,
@@ -998,14 +998,32 @@ export class QuestionsService {
       raw: true,
       dense: true,
     });
-    const firstSheetName = workbook.SheetNames[0];
-    if (!firstSheetName) {
+    const sheetNames = workbook.SheetNames;
+    if (!sheetNames.length) {
       throw new BadRequestException(
         'The uploaded spreadsheet contains no sheets.',
       );
     }
 
-    const worksheet = workbook.Sheets[firstSheetName];
+    const selectedSheet = sheetName || (sheetNames.length === 1 ? sheetNames[0] : null);
+    if (selectedSheet && !sheetNames.includes(selectedSheet)) {
+      throw new BadRequestException('Selected worksheet does not exist in the uploaded file.');
+    }
+    if (!selectedSheet) {
+      return {
+        sheetNames,
+        selectedSheet: null,
+        summary: {
+          totalRows: 0, validCount: 0, invalidCount: 0, duplicateCount: 0,
+          newCount: 0, exactDuplicateCount: 0, conflictCount: 0,
+          toInsertCount: 0, toUpdateCount: 0,
+        },
+        validRows: [],
+        errors: [],
+      };
+    }
+
+    const worksheet = workbook.Sheets[selectedSheet];
     const rawParsed: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
     if (!rawParsed || rawParsed.length === 0) {
@@ -1679,6 +1697,8 @@ export class QuestionsService {
     }
 
     return {
+      sheetNames,
+      selectedSheet,
       summary: {
         totalRows: parsedRows.length,
         validCount: validRows.length,
@@ -1951,8 +1971,12 @@ export class QuestionsService {
     ip = '',
     userAgent = '',
     mergeStrategy: 'skip' | 'update' | 'merge' = 'skip',
+    sheetName?: string,
   ) {
-    const preview = await this.parseAndValidateQuestionsImport(fileBuffer);
+    const preview = await this.parseAndValidateQuestionsImport(fileBuffer, sheetName);
+    if (!preview.selectedSheet) {
+      throw new BadRequestException('Select a worksheet before importing questions.');
+    }
     if (!preview.validRows || preview.validRows.length === 0) {
       throw new BadRequestException(
         preview.errors?.[0]?.error || 'No valid question rows found in file.',

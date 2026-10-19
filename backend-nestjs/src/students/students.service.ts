@@ -365,6 +365,7 @@ export class StudentsService {
       defaultGroup?: string;
       defaultYear?: number;
       defaultUniversity?: string;
+      sheetName?: string;
     },
   ) {
     let workbook: xlsx.WorkBook;
@@ -385,15 +386,33 @@ export class StudentsService {
       );
     }
 
-    const firstSheetName = workbook.SheetNames[0];
-    if (!firstSheetName) {
+    const sheetNames = workbook.SheetNames;
+    if (!sheetNames.length) {
       throw new BadRequestException(
         'The uploaded spreadsheet contains no sheets',
       );
     }
 
+    const selectedSheet = defaultOptions?.sheetName || (sheetNames.length === 1 ? sheetNames[0] : null);
+    if (selectedSheet && !sheetNames.includes(selectedSheet)) {
+      throw new BadRequestException('Selected worksheet does not exist in the uploaded file');
+    }
+    if (!selectedSheet) {
+      return {
+        sheetNames,
+        selectedSheet: null,
+        total: 0,
+        valid: 0,
+        invalid: 0,
+        duplicates: 0,
+        errors: [],
+        previewRows: [],
+        validRows: [],
+      };
+    }
+
     const rawParsed = xlsx.utils.sheet_to_json<Record<string, any>>(
-      workbook.Sheets[firstSheetName],
+      workbook.Sheets[selectedSheet],
       { defval: '' },
     );
 
@@ -424,11 +443,12 @@ export class StudentsService {
       return clean;
     });
 
+    const normalizeHeader = (value: string) => value.trim().toLowerCase().replace(/[\s\-_.]/g, '');
     const findField = (row: Record<string, any>, aliases: string[]): string => {
       const rowKeys = Object.keys(row);
       for (const alias of aliases) {
         const foundKey = rowKeys.find(
-          (k) => k.trim().toLowerCase() === alias.toLowerCase(),
+          (k) => normalizeHeader(k) === normalizeHeader(alias),
         );
         if (foundKey && row[foundKey] !== undefined && row[foundKey] !== null) {
           return String(row[foundKey]).trim();
@@ -448,6 +468,7 @@ export class StudentsService {
         'roll_no',
         'rollno',
         'roll number',
+        'roll no',
         'student_id',
         'studentid',
         'registration_no',
@@ -468,6 +489,7 @@ export class StudentsService {
         'student_email',
         'student email',
         'email_address',
+        'email id',
         'mail',
       ]).toLowerCase();
 
@@ -478,6 +500,7 @@ export class StudentsService {
         'phone_number',
         'contact',
         'contact_number',
+        'contact no',
         'mobile_no',
         'phoneno',
       ]);
@@ -663,6 +686,8 @@ export class StudentsService {
     }
 
     return {
+      sheetNames,
+      selectedSheet,
       total: parsedRows.length,
       valid: validRows.length,
       invalid,
