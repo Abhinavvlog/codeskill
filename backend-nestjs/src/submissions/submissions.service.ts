@@ -22,8 +22,10 @@ import {
   SUPPORTED_LANGUAGES,
   canonicalLanguage,
 } from '../execution/execution.types';
-import { ProblemsService } from '../problems/problems.service';
+import { ProblemsService, type ExecutionProblem } from '../problems/problems.service';
 import { ExecutionAdmissionService } from '../execution/admission/execution-admission.service';
+import { Contest } from '../database/entities/contest.entity';
+import { ContestAttempt } from '../database/entities/contest-attempt.entity';
 
 export enum SubmissionStatus {
   QUEUED = 'queued',
@@ -53,13 +55,15 @@ export class SubmissionsService {
     private readonly problemsService: ProblemsService,
     @Optional() private readonly executionService?: ExecutionService,
     @Optional() private readonly admission?: ExecutionAdmissionService,
+    @Optional() @InjectRepository(Contest) private readonly contestRepo?: Repository<Contest>,
+    @Optional() @InjectRepository(ContestAttempt) private readonly contestAttemptRepo?: Repository<ContestAttempt>,
   ) {}
 
   async createSubmission(userId: string, data: unknown) {
     if (!data || typeof data !== 'object') {
       throw new BadRequestException('Invalid submission payload');
     }
-    const { code, language, problemId } = data as Record<string, unknown>;
+    const { code, language, problemId, contestId } = data as Record<string, unknown>;
 
     if (typeof code !== 'string' || !code) {
       throw new BadRequestException('Missing or invalid code');
@@ -70,6 +74,9 @@ export class SubmissionsService {
     if (typeof problemId !== 'string' || !problemId.trim()) {
       throw new BadRequestException('Missing problemId');
     }
+    const contestSubmission = typeof contestId === 'string' && contestId.trim()
+      ? await this.validateContestSubmission(contestId.trim(), problemId.trim(), userId)
+      : false;
 
     const langLower = language.trim().toLowerCase();
     const resolvedLanguage = canonicalLanguage(langLower);
@@ -84,9 +91,19 @@ export class SubmissionsService {
     }
 
     // Resolve publication and judge data on the server; client source/state is ignored.
-    const problem = await this.problemsService.getExecutionProblem(
-      problemId.trim(),
-    );
+    let contestOnlySubmission = false;
+    let problem: ExecutionProblem;
+    if (contestSubmission) {
+      try {
+        problem = await this.problemsService.getExecutionProblem(problemId.trim());
+      } catch (error) {
+        if (!(error instanceof NotFoundException)) throw error;
+        problem = await this.problemsService.getExecutionProblem(problemId.trim(), 'contest-question');
+        contestOnlySubmission = true;
+      }
+    } else {
+      problem = await this.problemsService.getExecutionProblem(problemId.trim());
+    }
     const allowedLanguages = problem.config.supportedLanguages;
     if (
       allowedLanguages.length > 0 &&
@@ -133,7 +150,7 @@ export class SubmissionsService {
       userId,
       user: { id: userId },
       problemId: problem.id,
-      problemSource: problem.source,
+      problemSource: contestOnlySubmission ? 'contest-question' : problem.source,
       code,
       language: langLower,
       status: SubmissionStatus.QUEUED,
@@ -147,7 +164,7 @@ export class SubmissionsService {
         {
           submissionId: submission.id,
           problemId: problem.id,
-          problemSource: problem.source,
+          problemSource: contestOnlySubmission ? 'contest-question' : problem.source,
           code,
           language: langLower,
           userId,
@@ -202,6 +219,22 @@ export class SubmissionsService {
     });
 
     return { ...submission, _id: submission.id };
+  }
+
+  private async validateContestSubmission(contestId: string, problemId: string, userId: string) {
+    if (!this.contestRepo || !this.contestAttemptRepo)
+      throw new ForbiddenException('Contest submission is unavailable');
+    const contest = await this.contestRepo.findOne({ where: { id: contestId, isPublished: true } });
+    if (!contest || !contest.participants?.includes(userId))
+      throw new ForbiddenException('Register for this contest first');
+    if (contest.format === 'mcq' || !contest.problems?.includes(problemId))
+      throw new ForbiddenException('This coding problem is not selected for the contest');
+    const attempt = await this.contestAttemptRepo.findOne({
+      where: { contest_id: contest.id, user_id: userId, status: 'InProgress' },
+    });
+    if (!attempt)
+      throw new ForbiddenException('An active contest attempt is required');
+    return true;
   }
 
   async getSubmissionById(

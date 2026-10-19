@@ -8,10 +8,11 @@ import { ArrowLeft, Save, Search, CheckCircle2, ShieldCheck } from "lucide-react
 import { Spinner } from "@/components/ui/spinner";
 import { isAxiosError } from "axios";
 
-interface ProblemOption { _id: string; title: string; slug: string; difficulty: string }
+type ContestFormat = "mcq" | "coding" | "mixed";
+interface ProblemOption { _id: string; title: string; slug: string; difficulty: string; type: "mcq" | "coding"; eligible?: boolean }
 interface ContestData {
   title: string; slug: string; description: string; startTime: string; endTime: string;
-  isPrivate: boolean; password?: string; isPublished: boolean; problems: string[];
+  isPrivate: boolean; password?: string; isPublished: boolean; problems: string[]; format?: ContestFormat;
   antiCheatConfig?: {
     enableTabSwitchDetection?: boolean;
     enableFullscreenCheck?: boolean;
@@ -61,23 +62,37 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
     maxTabSwitchViolations: 3,
     actionOnMaxViolations: "auto_submit" as "auto_submit" | "lock_attempt" | "flag_review",
     resultsPublished: false,
+    format: "coding" as ContestFormat,
   });
   
   // Problems State
   const [allProblems, setAllProblems] = useState<ProblemOption[]>([]);
   const [selectedProblems, setSelectedProblems] = useState<string[]>([]);
   const [problemSearch, setProblemSearch] = useState("");
+  const [selectionNotice, setSelectionNotice] = useState("");
 
   useEffect(() => {
     let active = true;
     Promise.all([
-      adminProblemsAPI.getAll(),
+      adminContestsAPI.getEligibleQuestions(),
       contestId ? adminContestsAPI.getById(contestId) : Promise.resolve(null),
-    ]).then(([problemsResponse, contestResponse]) => {
+    ]).then(async ([problemsResponse, contestResponse]) => {
       if (!active) return;
-      setAllProblems(problemsResponse.data.problems || []);
+      setAllProblems(problemsResponse.data.questions || []);
       if (contestResponse) {
         const contest: ContestData = contestResponse.data.contest || contestResponse.data;
+        const selected = contest.problems || [];
+        const availableIds = new Set((problemsResponse.data.questions || []).map((problem: ProblemOption) => problem._id));
+        const legacySelections = await Promise.all(selected.filter((id) => !availableIds.has(id)).map(async (id) => {
+          try {
+            const response = await adminProblemsAPI.getById(id);
+            const problem = response.data.problem || response.data.data || response.data;
+            return { _id: problem.id || problem._id || id, title: problem.title || "Previously selected coding question", slug: problem.slug || id, difficulty: problem.difficulty || "", type: "coding" as const, eligible: false };
+          } catch {
+            return { _id: id, title: "Previously selected question", slug: id, difficulty: "", type: "coding" as const, eligible: false };
+          }
+        }));
+        if (active) setAllProblems([...(problemsResponse.data.questions || []), ...legacySelections]);
         const antiCheat = contest.antiCheatConfig || {};
         setFormData({
           title: contest.title,
@@ -93,8 +108,9 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
           maxTabSwitchViolations: antiCheat.maxTabSwitchViolations ?? antiCheat.warningLimit ?? 3,
           actionOnMaxViolations: antiCheat.actionOnMaxViolations || "auto_submit",
           resultsPublished: contest.resultsPublished === true,
+          format: contest.format || "coding",
         });
-        setSelectedProblems(contest.problems || []);
+        setSelectedProblems(selected);
       }
       setLoaded(true);
       setLoadError(null);
@@ -104,7 +120,7 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
     return () => { active = false; };
   }, [contestId, retry]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     
     // Auto-generate slug from title
@@ -122,10 +138,22 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
     }
   };
 
+  const handleFormatChange = (format: ContestFormat) => {
+    const compatible = allProblems.filter((problem) => format === "mixed" || problem.type === format);
+    const compatibleIds = new Set(compatible.map((problem) => problem._id));
+    const retained = selectedProblems.filter((id) => compatibleIds.has(id));
+    const removed = selectedProblems.length - retained.length;
+    setSelectedProblems(retained);
+    setFormData((prev) => ({ ...prev, format }));
+    setSelectionNotice(removed ? `${removed} incompatible selected ${removed === 1 ? "question was" : "questions were"} removed when the format changed.` : "");
+  };
+
   const toggleProblemSelection = (id: string) => {
-    setSelectedProblems(prev => 
-      prev.includes(id) ? prev.filter(pId => pId !== id) : [...prev, id]
-    );
+    setSelectedProblems((previous) => {
+      if (previous.includes(id)) return previous.filter((problemId) => problemId !== id);
+      if (allProblems.find((problem) => problem._id === id)?.eligible === false) return previous;
+      return [...previous, id];
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -158,6 +186,7 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
         password: formData.password,
         isPublished: formData.isPublished,
         problems: selectedProblems,
+        format: formData.format,
         antiCheatConfig: {
           enableTabSwitchDetection: formData.enableTabSwitchDetection,
           enableFullscreenCheck: formData.enableFullscreenCheck,
@@ -177,9 +206,10 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
     }
   };
 
-  const filteredProblems = allProblems.filter(p => 
-    p.title.toLowerCase().includes(problemSearch.toLowerCase()) ||
-    p.slug.toLowerCase().includes(problemSearch.toLowerCase())
+  const filteredProblems = allProblems.filter(p =>
+    (formData.format === "mixed" || p.type === formData.format) &&
+    (p.title.toLowerCase().includes(problemSearch.toLowerCase()) ||
+    p.slug.toLowerCase().includes(problemSearch.toLowerCase()))
   );
 
   if (!loaded) {
@@ -199,7 +229,7 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
           <ArrowLeft className="w-4 h-4" /> Back to Contests
         </Link>
         <h1 className="text-2xl font-bold text-foreground">{isEditing ? "Edit Contest" : "Create New Contest"}</h1>
-        <p className="text-muted-foreground text-sm mt-1">{isEditing ? "Update the contest details, schedule, and selected problems." : "Schedule a new coding competition and select problems."}</p>
+      <p className="text-muted-foreground text-sm mt-1">{isEditing ? "Update the contest details, schedule, and selected problems." : "Schedule a new contest and select questions."}</p>
       </div>
 
       {loadError && <div className="mb-6 space-y-2">
@@ -296,12 +326,21 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
 
             {/* Problem Selection Section */}
             <div className="bg-card border border-border rounded-xl shadow-sm p-6 space-y-6 flex flex-col h-[500px]">
+              <fieldset className="space-y-2">
+                <label htmlFor="contest-format" className="text-sm font-medium text-foreground">Contest Format</label>
+                <select id="contest-format" value={formData.format} onChange={(event) => handleFormatChange(event.target.value as ContestFormat)} className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                  <option value="mcq">MCQ-Based Contest</option>
+                  <option value="coding">Coding-Based Contest</option>
+                  <option value="mixed">Mixed Contest (MCQ + Coding)</option>
+                </select>
+              </fieldset>
               <div className="flex items-center justify-between border-b border-border pb-2">
                 <h2 className="text-lg font-semibold text-foreground">Select Problems <span className="text-red-500">*</span></h2>
                 <span className="text-sm font-medium text-primary bg-primary/10 px-2.5 py-0.5 rounded-full">
                   {selectedProblems.length} Selected
                 </span>
               </div>
+              {selectionNotice && <p role="status" className="text-sm text-amber-700 dark:text-amber-300">{selectionNotice}</p>}
               
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -316,26 +355,30 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
 
               <div className="flex-1 overflow-y-auto space-y-2 pr-2">
                 {filteredProblems.length === 0 ? (
-                  <div className="text-center text-muted-foreground text-sm py-8">No problems found.</div>
+                  <div className="text-center text-muted-foreground text-sm py-8">No eligible {formData.format === "mcq" ? "MCQ" : formData.format === "coding" ? "coding" : "contest"} questions found.</div>
                 ) : (
                   filteredProblems.map(problem => {
                     const isSelected = selectedProblems.includes(problem._id);
+                    const isEligible = problem.eligible !== false;
                     return (
-                      <div 
+                      <button
+                        type="button"
                         key={problem._id}
                         onClick={() => toggleProblemSelection(problem._id)}
+                        disabled={!isEligible && !isSelected}
+                        aria-pressed={isSelected}
                         className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
                           isSelected 
                             ? 'border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(37,99,235,0.2)]' 
                             : 'border-border hover:border-muted-foreground/40 hover:bg-muted/40'
                         }`}
                       >
-                        <div>
+                        <div className="text-left">
                           <p className={`text-sm font-medium ${isSelected ? 'text-primary' : 'text-foreground'}`}>{problem.title}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{problem.difficulty} • {problem.slug}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{problem.difficulty}{problem.difficulty ? " · " : ""}{problem.slug}{!isEligible ? " · Previously selected; remove to save" : ""}</p>
                         </div>
                         {isSelected && <CheckCircle2 className="w-5 h-5 text-primary" />}
-                      </div>
+                      </button>
                     )
                   })
                 )}

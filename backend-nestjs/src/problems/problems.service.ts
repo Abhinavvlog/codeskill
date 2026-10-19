@@ -119,7 +119,7 @@ const bankPublicSql = `lower(q."questionType") IN ('dsa', 'coding', 'algorithmic
   AND lower(q.status) IN ('approved', 'active', 'published')
   AND lower(btrim(q.metadata->>'visibility')) IN ('published', 'public')
   AND coalesce(q.metadata->>'contestOnly', 'false') <> 'true'`;
-function bankPublished(question: Question) {
+function bankPublished(question: Question, allowContestOnly = false) {
   const metadata = object(question.metadata);
   return (
     codingTypes.includes(text(question.questionType).toLowerCase()) &&
@@ -127,7 +127,7 @@ function bankPublished(question: Question) {
       text(question.status).toLowerCase(),
     ) &&
     published(metadata.visibility) &&
-    metadata.contestOnly !== true
+    (allowContestOnly || metadata.contestOnly !== true)
   );
 }
 function bankSlug(question: Question) {
@@ -332,7 +332,7 @@ export class ProblemsService {
     };
   }
 
-  async getProblemBySlug(slug: string) {
+  async getProblemBySlug(slug: string, allowContestOnly = false) {
     // Read current publication status before returning any body or test data.
     const metadata = await this.metadataBySlug(slug);
     if (metadata) {
@@ -380,7 +380,7 @@ export class ProblemsService {
       .getOne();
     if (question) {
       if (
-        !bankPublished(question) ||
+        !bankPublished(question, allowContestOnly) ||
         (await this.hasMetadataCounterpart(question))
       )
         throw new NotFoundException('Problem not found');
@@ -462,9 +462,13 @@ export class ProblemsService {
     };
   }
 
+  async getContestProblemBySlug(slug: string) {
+    return this.getProblemBySlug(slug, true);
+  }
+
   async getExecutionProblem(
     id: string,
-    source?: 'problem' | 'metadata' | 'question',
+    source?: 'problem' | 'metadata' | 'question' | 'contest-question',
   ): Promise<ExecutionProblem> {
     if (
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -503,11 +507,13 @@ export class ProblemsService {
       if (source === 'metadata')
         throw new NotFoundException('Problem not found');
     }
-    if (!source || source === 'question') {
+    if (!source || source === 'question' || source === 'contest-question') {
       const question = await this.questionRepository.findOne({ where: { id } });
       if (question) {
+        const isContestQuestion = source === 'contest-question';
         if (
-          !bankPublished(question) ||
+          !bankPublished(question, isContestQuestion) ||
+          (isContestQuestion && question.metadata?.contestOnly !== true) ||
           (await this.hasMetadataCounterpart(question))
         )
           throw new NotFoundException('Problem not found');
@@ -520,7 +526,7 @@ export class ProblemsService {
           config: this.bankConfig(question),
         };
       }
-      if (source === 'question')
+      if (source === 'question' || source === 'contest-question')
         throw new NotFoundException('Problem not found');
     }
     if (source && source !== 'problem')
