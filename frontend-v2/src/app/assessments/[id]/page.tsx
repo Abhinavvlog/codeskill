@@ -1,8 +1,38 @@
 "use client";
 
-import { useEffect, useRef, useState, use } from "react";
-import Countdown from "react-countdown";
+import { useEffect, useRef, useState, use, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+
+function Countdown({
+  date,
+  onComplete,
+  renderer,
+}: {
+  date: number;
+  onComplete?: () => void;
+  renderer: (props: { days: number; hours: number; minutes: number; seconds: number; completed: boolean }) => ReactNode;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (current >= date) {
+        onComplete?.();
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [date, onComplete]);
+
+  const diff = Math.max(0, date - now);
+  const completed = diff <= 0;
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+  return <>{renderer({ days, hours, minutes, seconds, completed })}</>;
+}
 import Link from "next/link";
 import {
   Clock,
