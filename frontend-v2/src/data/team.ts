@@ -8,7 +8,13 @@ export interface TeamMember {
 }
 
 export const team: readonly TeamMember[] = [
-  { name: "Venkatesh", role: "Technical Trainer", image: "/images/skill-development/team/member-01.jpg" },
+  {
+    name: "Venkatesh K",
+    role: "Technical Trainer | Ex-Oracle",
+    image: "/images/skill-development/team/member-01.jpg",
+    linkedin: "https://www.linkedin.com/in/venkatesh-k-20b610109/",
+    github: "https://github.com/VenkateshW22",
+  },
   { name: "Mustakim", role: "Technical Trainer", image: "/images/skill-development/team/member-02.jpg" },
   { name: "Vishal", role: "Technical Trainer", image: "/images/skill-development/team/member-03.jpg" },
   { name: "Neeraj", role: "Assistant Professor", image: "/images/skill-development/team/member-04.jpg" },
