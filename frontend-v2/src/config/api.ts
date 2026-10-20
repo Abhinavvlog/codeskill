@@ -100,14 +100,30 @@ api.interceptors.response.use(
 
     notifyMutationFailure(reqUrl, error.config?.method || "", error);
 
-    if (status && status >= 400) {
+    if (status && status >= 500) {
+      logger.error("API service error", {
+        requestId,
+        status,
+        url: reqUrl,
+        message: error.code === "ECONNABORTED"
+          ? "Request timed out"
+          : error.message === "Network Error"
+            ? "Network unavailable"
+            : "Server returned an error",
+      }, "APIClient");
+    } else if (!status) {
+      logger.warn("API request could not reach the service", {
+        requestId,
+        url: reqUrl,
+        message: error.code === "ECONNABORTED" ? "Request timed out" : "Network unavailable",
+      }, "APIClient");
+    } else if (status >= 400) {
       logger.warn(
         `API request failed: [${status}] ${reqUrl}`,
         {
           requestId,
           status,
           url: reqUrl,
-          response: error.response?.data,
         },
         "APIClient"
       );
