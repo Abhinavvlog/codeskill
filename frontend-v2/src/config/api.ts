@@ -406,7 +406,7 @@ export const discussionsAPI = {
 
 // ── Admin ──
 export const adminProblemsAPI = {
-  getAll: (params?: { page?: number; limit?: number; search?: string }, signal?: AbortSignal) =>
+  getAll: (params?: { page?: number; limit?: number; search?: string; contestEligible?: boolean }, signal?: AbortSignal) =>
     api.get("/admin/problems", { params, signal }),
   getById: (id: string) => api.get(`/admin/problems/${id}`),
   create: (data: any) => api.post("/admin/problems", data),

@@ -16,14 +16,14 @@ jest.mock("@/config/api", () => ({
 }));
 
 const id = "00000000-0000-4000-8000-000000000001";
-const original = { id, _id: id, title: "Existing Contest", slug: "existing-contest", description: "Original description", startTime: "2026-11-01T04:30:00.000Z", endTime: "2026-11-01T06:30:00.000Z", isPrivate: true, password: "access-code", isPublished: true, problems: ["p1"] };
+const original = { id, _id: id, title: "Existing Contest", slug: "existing-contest", description: "Original description", startTime: "2026-11-01T04:30:00.000Z", endTime: "2026-11-01T06:30:00.000Z", isPrivate: true, password: "access-code", isPublished: true, contestFormat: "coding" as const, problems: ["p1"] };
 let saved = { ...original };
 
 beforeEach(() => {
   jest.clearAllMocks();
   saved = { ...original };
   jest.mocked(useParams).mockReturnValue({ id });
-  jest.mocked(adminProblemsAPI.getAll).mockResolvedValue({ data: { problems: [{ _id: "p1", title: "Two Sum", slug: "two-sum", difficulty: "easy" }, { _id: "p2", title: "Trees", slug: "trees", difficulty: "medium" }] } });
+  jest.mocked(adminProblemsAPI.getAll).mockResolvedValue({ data: { problems: [{ _id: "p1", title: "Two Sum", slug: "two-sum", difficulty: "easy", questionType: "coding" }, { _id: "p2", title: "Trees", slug: "trees", difficulty: "medium", questionType: "DSA" }, { _id: "p3", title: "Published MCQ", slug: "published-mcq", difficulty: "easy", questionType: "single_choice" }] } });
   jest.mocked(adminContestsAPI.getById).mockImplementation(async () => ({ data: { ...saved } }));
   jest.mocked(adminContestsAPI.getAll).mockImplementation(async () => ({ data: { contests: [{ ...saved }] } }));
   jest.mocked(adminContestsAPI.update).mockImplementation(async (_id, payload) => { saved = { ...saved, ...payload }; return { data: { contest: saved } }; });
@@ -40,6 +40,8 @@ it("loads, edits, saves the intended ID, and reloads persisted values without a 
   expect(screen.getByLabelText("Private Contest")).toBeChecked();
   expect(screen.getByLabelText("Publish Contest")).toBeChecked();
   expect(screen.getByLabelText("Contest Password")).toHaveValue("access-code");
+  expect(screen.getByLabelText("Contest Format")).toHaveValue("coding");
+  expect(screen.queryByText("Published MCQ", { exact: true })).not.toBeInTheDocument();
   const start = screen.getByLabelText(/Start Time/) as HTMLInputElement;
   expect(new Date(start.value).toISOString()).toBe(original.startTime);
   expect(screen.getByText("1 Selected")).toBeInTheDocument();
@@ -79,6 +81,24 @@ it("preserves creation and slug generation using the same form", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Create Contest" }));
   await waitFor(() => expect(adminContestsAPI.create).toHaveBeenCalledWith(expect.objectContaining({ slug: "new-contest", problems: ["p1"] })));
   expect(adminContestsAPI.update).not.toHaveBeenCalled();
+});
+
+it("filters questions by format and removes incompatible selections when switched", async () => {
+  render(<ContestForm />);
+  const format = await screen.findByLabelText("Contest Format");
+  await waitFor(() => expect(adminProblemsAPI.getAll).toHaveBeenCalledWith({ contestEligible: true }));
+  expect(await screen.findByText("Two Sum", { exact: true })).toBeInTheDocument();
+  expect(screen.queryByText("Published MCQ", { exact: true })).not.toBeInTheDocument();
+  fireEvent.change(format, { target: { value: "mcq" } });
+  expect(screen.getByText("Published MCQ", { exact: true })).toBeInTheDocument();
+  expect(screen.queryByText("Two Sum", { exact: true })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText("Published MCQ", { exact: true }));
+  fireEvent.change(format, { target: { value: "coding" } });
+  expect(await screen.findByRole("alert")).toHaveTextContent("1 incompatible selected question was removed");
+  expect(screen.getByText("0 Selected")).toBeInTheDocument();
+  fireEvent.change(format, { target: { value: "mixed" } });
+  expect(screen.getByText("Published MCQ", { exact: true })).toBeInTheDocument();
+  expect(screen.getByText("Two Sum", { exact: true })).toBeInTheDocument();
 });
 
 it("shows load failures and allows retry without submitting an empty edit", async () => {
