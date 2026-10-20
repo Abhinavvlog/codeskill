@@ -17,6 +17,8 @@ describe('contest security and reattempts schema migration', () => {
     // 1. resultsPublished
     expect(executedQueries[0]).toContain('resultsPublished');
     expect(executedQueries[0]).toContain('ALTER TABLE "contests" ADD COLUMN "resultsPublished"');
+    expect(executedQueries[0]).toContain('contestFormat');
+    expect(executedQueries[0]).toContain("DEFAULT 'coding'");
     // 2. attemptNumber, score, problemsSolved
     expect(executedQueries[1]).toContain('attemptNumber');
     expect(executedQueries[1]).toContain('score');

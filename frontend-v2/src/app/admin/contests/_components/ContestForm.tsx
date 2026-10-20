@@ -8,10 +8,11 @@ import { ArrowLeft, Save, Search, CheckCircle2, ShieldCheck } from "lucide-react
 import { Spinner } from "@/components/ui/spinner";
 import { isAxiosError } from "axios";
 
-interface ProblemOption { _id: string; title: string; slug: string; difficulty: string }
+type ContestFormat = "mcq" | "coding" | "mixed";
+interface ProblemOption { _id: string; title: string; slug: string; difficulty: string; questionType: string }
 interface ContestData {
   title: string; slug: string; description: string; startTime: string; endTime: string;
-  isPrivate: boolean; password?: string; isPublished: boolean; problems: string[];
+  isPrivate: boolean; password?: string; isPublished: boolean; problems: string[]; contestFormat?: ContestFormat;
   antiCheatConfig?: {
     enableTabSwitchDetection?: boolean;
     enableFullscreenCheck?: boolean;
@@ -56,13 +57,14 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
     isPrivate: false,
     password: "",
     isPublished: false,
+    contestFormat: "coding" as ContestFormat,
     enableTabSwitchDetection: true,
     enableFullscreenCheck: true,
     maxTabSwitchViolations: 3,
     actionOnMaxViolations: "auto_submit" as "auto_submit" | "lock_attempt" | "flag_review",
     resultsPublished: false,
   });
-  
+
   // Problems State
   const [allProblems, setAllProblems] = useState<ProblemOption[]>([]);
   const [selectedProblems, setSelectedProblems] = useState<string[]>([]);
@@ -71,7 +73,7 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
   useEffect(() => {
     let active = true;
     Promise.all([
-      adminProblemsAPI.getAll(),
+      adminProblemsAPI.getAll({ contestEligible: true }),
       contestId ? adminContestsAPI.getById(contestId) : Promise.resolve(null),
     ]).then(([problemsResponse, contestResponse]) => {
       if (!active) return;
@@ -88,6 +90,7 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
           isPrivate: !!contest.isPrivate,
           password: contest.password || "",
           isPublished: !!contest.isPublished,
+          contestFormat: contest.contestFormat || "coding",
           enableTabSwitchDetection: antiCheat.enableTabSwitchDetection !== false,
           enableFullscreenCheck: antiCheat.enableFullscreenCheck !== false,
           maxTabSwitchViolations: antiCheat.maxTabSwitchViolations ?? antiCheat.warningLimit ?? 3,
@@ -106,7 +109,7 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
-    
+
     // Auto-generate slug from title
     if (name === "title" && !isEditing) {
       const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
@@ -123,9 +126,25 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
   };
 
   const toggleProblemSelection = (id: string) => {
-    setSelectedProblems(prev => 
+    setSelectedProblems(prev =>
       prev.includes(id) ? prev.filter(pId => pId !== id) : [...prev, id]
     );
+  };
+
+  const changeContestFormat = (contestFormat: ContestFormat) => {
+    setFormData((prev) => ({ ...prev, contestFormat }));
+    const compatible = new Set(
+      allProblems
+        .filter((problem) => {
+          const type = String(problem.questionType || "coding").toLowerCase();
+          const isMcq = ["mcq", "single_choice", "multiple_choice", "true_false"].includes(type);
+          return contestFormat === "mixed" || (contestFormat === "mcq" ? isMcq : !isMcq);
+        })
+        .map((problem) => problem._id),
+    );
+    const removedCount = selectedProblems.filter((id) => !compatible.has(id)).length;
+    setSelectedProblems((current) => current.filter((id) => compatible.has(id)));
+    setError(removedCount ? `${removedCount} incompatible selected ${removedCount === 1 ? "question was" : "questions were"} removed.` : null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -157,6 +176,7 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
         isPrivate: formData.isPrivate,
         password: formData.password,
         isPublished: formData.isPublished,
+        contestFormat: formData.contestFormat,
         problems: selectedProblems,
         antiCheatConfig: {
           enableTabSwitchDetection: formData.enableTabSwitchDetection,
@@ -177,10 +197,16 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
     }
   };
 
-  const filteredProblems = allProblems.filter(p => 
-    p.title.toLowerCase().includes(problemSearch.toLowerCase()) ||
-    p.slug.toLowerCase().includes(problemSearch.toLowerCase())
-  );
+  const filteredProblems = allProblems.filter((problem) => {
+    const type = String(problem.questionType || "coding").toLowerCase();
+    const isMcq = ["mcq", "single_choice", "multiple_choice", "true_false"].includes(type);
+    const matchesFormat = formData.contestFormat === "mixed" ||
+      (formData.contestFormat === "mcq" ? isMcq : !isMcq);
+    return matchesFormat && (
+      problem.title.toLowerCase().includes(problemSearch.toLowerCase()) ||
+      problem.slug.toLowerCase().includes(problemSearch.toLowerCase())
+    );
+  });
 
   if (!loaded) {
     return <div className="p-4 sm:p-8 max-w-5xl mx-auto space-y-4">
@@ -218,12 +244,12 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-card border border-border rounded-xl shadow-sm p-6 space-y-6">
               <h2 className="text-lg font-semibold text-foreground border-b border-border pb-2">Contest Details</h2>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label htmlFor="contest-title" className="text-sm font-medium text-foreground">Contest Title <span className="text-red-500">*</span></label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     id="contest-title"
                     name="title"
                     value={formData.title}
@@ -236,8 +262,8 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
 
                 <div className="space-y-2">
                   <label htmlFor="contest-slug" className="text-sm font-medium text-foreground">URL Slug <span className="text-red-500">*</span></label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     id="contest-slug"
                     name="slug"
                     value={formData.slug}
@@ -251,9 +277,9 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
 
               <div className="space-y-2">
                 <label htmlFor="contest-description" className="text-sm font-medium text-foreground">Description <span className="text-red-500">*</span></label>
-                <textarea 
+                <textarea
                   id="contest-description"
-                    name="description"
+                  name="description"
                   value={formData.description}
                   onChange={handleChange}
                   required
@@ -266,9 +292,9 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label htmlFor="contest-startTime" className="text-sm font-medium text-foreground">Start Time <span className="text-red-500">*</span></label>
-                  <input 
+                  <input
                     type="datetime-local"
-                    step="any" 
+                    step="any"
                     id="contest-startTime"
                     name="startTime"
                     value={formData.startTime}
@@ -280,9 +306,9 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
 
                 <div className="space-y-2">
                   <label htmlFor="contest-endTime" className="text-sm font-medium text-foreground">End Time <span className="text-red-500">*</span></label>
-                  <input 
+                  <input
                     type="datetime-local"
-                    step="any" 
+                    step="any"
                     id="contest-endTime"
                     name="endTime"
                     value={formData.endTime}
@@ -296,18 +322,31 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
 
             {/* Problem Selection Section */}
             <div className="bg-card border border-border rounded-xl shadow-sm p-6 space-y-6 flex flex-col h-[500px]">
+              <div className="space-y-2">
+                <label htmlFor="contest-format" className="text-sm font-medium text-foreground">Contest Format</label>
+                <select
+                  id="contest-format"
+                  value={formData.contestFormat}
+                  onChange={(event) => changeContestFormat(event.target.value as ContestFormat)}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                >
+                  <option value="mcq">MCQ-Based Contest</option>
+                  <option value="coding">Coding-Based Contest</option>
+                  <option value="mixed">Mixed Contest (MCQ + Coding)</option>
+                </select>
+              </div>
               <div className="flex items-center justify-between border-b border-border pb-2">
                 <h2 className="text-lg font-semibold text-foreground">Select Problems <span className="text-red-500">*</span></h2>
                 <span className="text-sm font-medium text-primary bg-primary/10 px-2.5 py-0.5 rounded-full">
                   {selectedProblems.length} Selected
                 </span>
               </div>
-              
+
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input 
-                  type="text" 
-                  placeholder="Search problem bank..." 
+                <input
+                  type="text"
+                  placeholder="Search problem bank..."
                   value={problemSearch}
                   onChange={(e) => setProblemSearch(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
@@ -316,23 +355,22 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
 
               <div className="flex-1 overflow-y-auto space-y-2 pr-2">
                 {filteredProblems.length === 0 ? (
-                  <div className="text-center text-muted-foreground text-sm py-8">No problems found.</div>
+                  <div className="text-center text-muted-foreground text-sm py-8">No eligible questions found for this format.</div>
                 ) : (
                   filteredProblems.map(problem => {
                     const isSelected = selectedProblems.includes(problem._id);
                     return (
-                      <div 
+                      <div
                         key={problem._id}
                         onClick={() => toggleProblemSelection(problem._id)}
-                        className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
-                          isSelected 
-                            ? 'border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(37,99,235,0.2)]' 
+                        className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${isSelected
+                            ? 'border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(37,99,235,0.2)]'
                             : 'border-border hover:border-muted-foreground/40 hover:bg-muted/40'
-                        }`}
+                          }`}
                       >
                         <div>
                           <p className={`text-sm font-medium ${isSelected ? 'text-primary' : 'text-foreground'}`}>{problem.title}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{problem.difficulty} • {problem.slug}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{problem.difficulty} • {problem.slug} • {problem.questionType || "coding"}</p>
                         </div>
                         {isSelected && <CheckCircle2 className="w-5 h-5 text-primary" />}
                       </div>
@@ -347,11 +385,11 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
           <div className="space-y-6">
             <div className="bg-card border border-border rounded-xl shadow-sm p-6 space-y-6">
               <h2 className="text-lg font-semibold text-foreground border-b border-border pb-2">Access & Publishing</h2>
-              
+
               <div className="space-y-4">
                 <div className="flex items-start gap-3">
                   <div className="flex items-center h-5">
-                    <input 
+                    <input
                       type="checkbox"
                       id="isPrivate"
                       name="isPrivate"
@@ -369,10 +407,10 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
                 {formData.isPrivate && (
                   <div className="space-y-2 pt-2 animate-in fade-in slide-in-from-top-2 duration-200">
                     <label htmlFor="contest-password" className="text-sm font-medium text-foreground">Contest Password</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       id="contest-password"
-                    name="password"
+                      name="password"
                       value={formData.password}
                       onChange={handleChange}
                       placeholder="Enter access code..."
@@ -380,12 +418,12 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
                     />
                   </div>
                 )}
-                
+
                 <hr className="border-border my-4" />
 
                 <div className="flex items-start gap-3">
                   <div className="flex items-center h-5">
-                    <input 
+                    <input
                       type="checkbox"
                       id="isPublished"
                       name="isPublished"
@@ -404,7 +442,7 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
 
                 <div className="flex items-start gap-3">
                   <div className="flex items-center h-5">
-                    <input 
+                    <input
                       type="checkbox"
                       id="resultsPublished"
                       name="resultsPublished"
@@ -427,11 +465,11 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
                 <ShieldCheck className="w-5 h-5 text-sky-500" />
                 <h2 className="text-lg font-semibold text-foreground">Exam Security & Anti-Cheat</h2>
               </div>
-              
+
               <div className="space-y-4">
                 <div className="flex items-start gap-3">
                   <div className="flex items-center h-5">
-                    <input 
+                    <input
                       type="checkbox"
                       id="enableTabSwitchDetection"
                       name="enableTabSwitchDetection"
@@ -448,7 +486,7 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
 
                 <div className="flex items-start gap-3">
                   <div className="flex items-center h-5">
-                    <input 
+                    <input
                       type="checkbox"
                       id="enableFullscreenCheck"
                       name="enableFullscreenCheck"
@@ -467,7 +505,7 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
                   <label htmlFor="maxTabSwitchViolations" className="text-sm font-medium text-foreground">
                     Max Violation Count (Default: 3)
                   </label>
-                  <input 
+                  <input
                     type="number"
                     min="1"
                     max="20"
@@ -502,7 +540,7 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
 
             {/* Action Buttons */}
             <div className="flex flex-col gap-3">
-              <button 
+              <button
                 type="submit"
                 disabled={loading}
                 className="flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-primary rounded-xl hover:bg-primary/90 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
@@ -510,7 +548,7 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
                 {loading ? <Spinner className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                 {loading ? "Saving..." : isEditing ? "Save Changes" : "Create Contest"}
               </button>
-              <Link 
+              <Link
                 href="/admin/contests"
                 className="flex items-center justify-center px-6 py-3 text-sm font-medium text-muted-foreground bg-card border border-border rounded-xl hover:bg-muted/40 transition-colors shadow-sm"
               >
