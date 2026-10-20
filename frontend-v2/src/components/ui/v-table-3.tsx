@@ -104,6 +104,8 @@ interface VTable3Props {
   deletingQuestions: boolean;
   deletingQuestionId?: string | null;
   onBulkEdit?: () => void;
+  showBulkEdit?: boolean;
+  showFilterSubmit?: boolean;
 }
 
 export function VTable3({
@@ -138,6 +140,8 @@ export function VTable3({
   deletingQuestions,
   deletingQuestionId,
   onBulkEdit,
+  showBulkEdit = true,
+  showFilterSubmit = true,
 }: VTable3Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -226,7 +230,7 @@ export function VTable3({
             </button>
             {selectionMode && selectedQuestionIds.length > 0 && (
               <>
-                {onBulkEdit && (
+                {showBulkEdit && onBulkEdit && (
                   <button
                     type="button"
                     onClick={onBulkEdit}
@@ -319,12 +323,12 @@ export function VTable3({
             <option value="rejected">Rejected</option>
           </select>
 
-          <button
+          {showFilterSubmit && <button
             type="submit"
             className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors"
           >
             Filter
-          </button>
+          </button>}
           
           {hasFilters && (
             <button

@@ -634,6 +634,8 @@ function QuestionsAdminContent() {
           deletingQuestions={deletingQuestions}
           deletingQuestionId={deletingQuestionId}
           onBulkEdit={() => setBulkEditOpen(true)}
+          showBulkEdit={false}
+          showFilterSubmit={false}
         />
       )}
 
