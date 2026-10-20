@@ -1,5 +1,8 @@
 # CodeSkill team portrait direction
 
+This note describes the previous fan-out design from PR #122. For the current
+helix implementation and its settings, see [team-helix-gallery.md](team-helix-gallery.md).
+
 The section uses the existing `motion/react` dependency and existing photos. The
 row occupies its final layout from the first render, so the entrance cannot move
 the next section or create a long pinned scroll area. On desktop the centre card
