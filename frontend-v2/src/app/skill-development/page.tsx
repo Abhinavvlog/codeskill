@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import MentorGratitude from '@/components/skill-development/MentorGratitude';
-import DominoGallery from '@/components/ui/domino-gallery';
+import TeamSection from '@/components/skill-development/TeamSection';
 import {
   ArrowDownRight,
   ArrowLeft,
@@ -9,7 +9,6 @@ import {
   Lightbulb,
   Rocket,
   Target,
-  UsersRound,
 } from 'lucide-react';
 
 export const metadata = {
@@ -44,18 +43,6 @@ const learningSteps = [
   ['02', 'Practice', 'Apply it to a problem, then test and refine your solution.'],
   ['03', 'Reflect', 'Review what worked, where you got stuck, and why.'],
   ['04', 'Grow', 'Carry that learning into a more challenging task or project.'],
-];
-
-const teamMembers = [
-  { name: 'Venkatesh', role: 'Technical Trainer', image: '/images/skill-development/team/member-01.jpg' },
-  { name: 'Mustakim', role: 'Technical Trainer', image: '/images/skill-development/team/member-02.jpg' },
-  { name: 'Vishal', role: 'Technical Trainer', image: '/images/skill-development/team/member-03.jpg' },
-  { name: 'Neeraj', role: 'Assistant Professor', image: '/images/skill-development/team/member-04.jpg' },
-  { name: 'Shadab', role: 'Technical Trainer', image: '/images/skill-development/team/member-05.jpg' },
-  { name: 'Tushar', role: 'Technical Trainer', image: '/images/skill-development/team/member-06.jpg' },
-  { name: 'Mazz', role: 'Technical Trainer', image: '/images/skill-development/team/member-07.jpg' },
-  { name: 'Anmol', role: 'Technical Trainer', image: '/images/skill-development/team/member-08.jpg' },
-  { name: 'Abhinav', role: 'Technical Trainer', image: '/images/skill-development/team/member-09.jpg' },
 ];
 
 export default function SkillDevelopmentPage() {
@@ -94,38 +81,7 @@ export default function SkillDevelopmentPage() {
 
         <MentorGratitude />
 
-        <section
-          className="mx-auto mt-14 max-w-screen-2xl rounded-[2rem] border border-emerald-900/10 bg-card/90 p-5 shadow-sm dark:border-emerald-100/10 sm:mt-16 sm:p-8 lg:p-10 2xl:p-12"
-          aria-labelledby="team-title"
-        >
-          <div className="mb-8 text-center sm:mb-10">
-            <span className="inline-flex items-center gap-3 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300 sm:text-sm">
-              <UsersRound className="h-5 w-5" aria-hidden="true" />
-              <span className="h-5 w-px bg-primary/50" aria-hidden="true" />
-              Our developers &amp; contributors
-            </span>
-            <h2 id="team-title" className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
-                Meet the Team Behind CodeSkill
-            </h2>
-            <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base lg:text-lg">
-              The team building practical, hands-on learning experiences.
-            </p>
-            <span className="mx-auto mt-5 block h-1 w-12 rounded-full bg-primary" aria-hidden="true" />
-          </div>
-
-          <DominoGallery
-            items={teamMembers.map((member) => ({
-              src: member.image,
-              alt: `Portrait of ${member.name}, ${member.role}`,
-              title: `${member.name} · ${member.role}`,
-            }))}
-            cardWidth={210}
-            cardHeight={315}
-            gap={16}
-            scrollLength={1400}
-            standAngle={94}
-          />
-        </section>
+        <TeamSection />
 
         <section className="mx-auto mt-16 grid max-w-5xl gap-5 md:grid-cols-2">
           <article className="rounded-3xl border border-border/70 bg-card/75 p-7 shadow-sm sm:p-9">
