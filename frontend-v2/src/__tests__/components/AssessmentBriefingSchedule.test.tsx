@@ -21,6 +21,27 @@ const overview = (start: number, end: number, isAvailable: boolean) => ({ data: 
 beforeEach(() => { jest.clearAllMocks(); jest.useFakeTimers(); jest.setSystemTime(now); });
 afterEach(() => jest.useRealTimers());
 
+it("shows a retryable server failure instead of claiming an existing assessment is missing", async () => {
+  jest.mocked(studentAssessmentsAPI.getOverview)
+    .mockRejectedValueOnce({ response: { status: 500 } })
+    .mockResolvedValue(overview(now - 60_000, now + 60_000, true));
+  render(<Page params={Promise.resolve({ id: "exam" })} />);
+  await act(async () => { await Promise.resolve(); });
+  expect(screen.getByRole("heading", { name: "Assessment couldn’t be loaded" })).toBeInTheDocument();
+  expect(screen.queryByText("Assessment Not Found")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  await act(async () => { await Promise.resolve(); });
+  expect(screen.getByText("Scheduled assessment")).toBeInTheDocument();
+});
+
+it.each([[403, "Assessment not assigned"], [404, "Assessment Not Found"]])("distinguishes HTTP %s from server failures", async (status, title) => {
+  jest.mocked(studentAssessmentsAPI.getOverview).mockRejectedValue({ response: { status } });
+  render(<Page params={Promise.resolve({ id: "exam" })} />);
+  await act(async () => { await Promise.resolve(); });
+  expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+});
+
 it("closes the Begin button at the scheduled end without submitting an attempt", async () => {
   jest.mocked(studentAssessmentsAPI.getOverview).mockResolvedValue(overview(now - 60_000, now + 2_000, true));
   render(<Page params={Promise.resolve({ id: "exam" })} />);

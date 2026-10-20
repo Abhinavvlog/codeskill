@@ -39,10 +39,14 @@ export default function AssessmentBriefingPage({
   const resolvedParams = use(params);
   const id = resolvedParams.id;
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const isSignedIn = Boolean(user);
+  const userKey = user?.id || user?._id || user?.uid;
 
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<{ status?: number; message: string } | null>(null);
+  const [loadRetry, setLoadRetry] = useState(0);
   const [scheduleNow, setScheduleNow] = useState(() => Date.now());
   const [agreedToRules, setAgreedToRules] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -126,16 +130,27 @@ export default function AssessmentBriefingPage({
   };
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!isSignedIn) {
+      setIsLoading(false);
+      setData(null);
+      return;
+    }
+    let active = true;
     const fetchOverview = async () => {
       setIsLoading(true);
+      setData(null);
+      setLoadError(null);
       try {
         const res = await studentAssessmentsAPI.getOverview(id);
+        if (!active) return;
         const nextData = res.data as {
           assessment?: Record<string, unknown> | null;
           attempt?: { status?: string } | null;
           canRetake?: boolean;
           completedAttemptsCount?: number;
         };
+        if (!nextData.assessment) throw new Error("Invalid assessment response");
         setData(nextData);
         // Only redirect to result if student finished and cannot retake
         if (
@@ -144,15 +159,24 @@ export default function AssessmentBriefingPage({
         ) {
           router.replace(`/assessments/${id}/result`);
         }
-      } catch (err) {
-        console.error("Failed to load assessment overview:", err);
+      } catch (err: unknown) {
+        if (!active) return;
+        const status = (err as { response?: { status?: number } }).response?.status;
+        setLoadError({ status, message: status === 404
+          ? "This assessment link is no longer available. Check the link with your instructor."
+          : status === 403
+            ? "This assessment is not assigned to your account. Ask your instructor to check your batch or semester."
+            : status === 401
+              ? "Your session has expired. Sign in again to open this assessment."
+              : "We couldn’t load this assessment. Please try again. If this continues, contact your instructor." });
       } finally {
-        setIsLoading(false);
+        if (active) setIsLoading(false);
       }
     };
 
-    fetchOverview();
-  }, [id, router]);
+    void fetchOverview();
+    return () => { active = false; };
+  }, [id, router, authLoading, isSignedIn, userKey, loadRetry]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setScheduleNow(Date.now()), 1000);
@@ -231,7 +255,7 @@ export default function AssessmentBriefingPage({
     }
   };
 
-  if (isLoading) {
+  if (authLoading || isLoading) {
     return (
       <div className="flex-1 min-h-screen bg-background flex items-center justify-center font-sans">
         <div className="text-center space-y-2">
@@ -247,10 +271,9 @@ export default function AssessmentBriefingPage({
       <div className="flex-1 min-h-screen bg-background flex items-center justify-center font-sans p-6">
         <div className="text-center space-y-4 max-w-sm">
           <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto" />
-          <h2 className="text-lg font-bold text-foreground">Assessment Not Found</h2>
-          <p className="text-xs text-muted-foreground">
-            This assessment does not exist or you may not have permission to view it.
-          </p>
+          <h2 className="text-lg font-bold text-foreground">{!isSignedIn || loadError?.status === 401 ? "Sign in to continue" : loadError?.status === 404 ? "Assessment Not Found" : loadError?.status === 403 ? "Assessment not assigned" : "Assessment couldn’t be loaded"}</h2>
+          <p role="alert" className="text-sm text-muted-foreground">{!isSignedIn ? "Sign in with your student account to open this assessment." : loadError?.message}</p>
+          {(!isSignedIn || loadError?.status === 401) ? <Link href="/login" className="inline-flex px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold">Sign in</Link> : loadError?.status !== 404 && loadError?.status !== 403 ? <button type="button" onClick={() => setLoadRetry(value => value + 1)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold"><RefreshCw className="w-4 h-4" />Try again</button> : null}
           <Link
             href="/assessments"
             className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 text-zinc-950 font-semibold rounded-xl text-xs hover:bg-amber-600 transition-colors"
