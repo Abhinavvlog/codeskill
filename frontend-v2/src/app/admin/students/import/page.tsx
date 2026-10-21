@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { adminStudentsAPI } from "@/config/api";
 import { Spinner } from "@/components/ui/spinner";
+import { SUPPORTED_SECTIONS } from "@/lib/sections";
 
 interface PreviewData {
   total: number;
@@ -38,6 +39,7 @@ interface DefaultBatchOptions {
   defaultDepartment: string;
   defaultCourse: string;
   defaultSemester: string;
+  defaultSection: string;
   defaultYear: string;
 }
 
@@ -53,6 +55,7 @@ export default function ImportStudentsPage() {
     defaultDepartment: "",
     defaultCourse: "",
     defaultSemester: "",
+    defaultSection: "",
     defaultYear: "",
   });
   const [showBatchDefaults, setShowBatchDefaults] = useState(false);
@@ -295,7 +298,7 @@ CU202600103,Rohan Verma,rohan.verma@university.edu,+919876543212,Chandigarh Univ
         </div>
 
         {showBatchDefaults && (
-          <div className="mt-4 pt-4 border-t border-border grid grid-cols-1 sm:grid-cols-5 gap-3">
+          <div className="mt-4 pt-4 border-t border-border grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <div>
               <label className="text-[11px] font-semibold text-muted-foreground uppercase">Default Batch</label>
               <input
@@ -337,6 +340,22 @@ CU202600103,Rohan Verma,rohan.verma@university.edu,+919876543212,Chandigarh Univ
                 onChange={(e) => setDefaultOptions({ ...defaultOptions, defaultSemester: e.target.value })}
                 className="mt-1 w-full px-3 py-1.5 rounded-lg border border-border bg-background text-xs"
               />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-muted-foreground uppercase">Section</label>
+              <select
+                id="import-default-section"
+                value={defaultOptions.defaultSection}
+                onChange={(e) => setDefaultOptions({ ...defaultOptions, defaultSection: e.target.value })}
+                className="mt-1 w-full px-3 py-1.5 rounded-lg border border-border bg-background text-xs"
+              >
+                <option value="">None / From File</option>
+                {SUPPORTED_SECTIONS.map((sec) => (
+                  <option key={sec} value={sec}>
+                    Section {sec}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="text-[11px] font-semibold text-muted-foreground uppercase">Graduation Year</label>
@@ -615,6 +634,7 @@ CU202600103,Rohan Verma,rohan.verma@university.edu,+919876543212,Chandigarh Univ
                         <th className="py-2.5 px-3">Mobile</th>
                         <th className="py-2.5 px-3">Department</th>
                         <th className="py-2.5 px-3">Batch</th>
+                        <th className="py-2.5 px-3">Section</th>
                         <th className="py-2.5 px-3">Status</th>
                       </tr>
                     </thead>
@@ -655,6 +675,9 @@ CU202600103,Rohan Verma,rohan.verma@university.edu,+919876543212,Chandigarh Univ
                             </td>
                             <td className="py-2.5 px-3 text-muted-foreground">
                               {row.batch || "—"}
+                            </td>
+                            <td className="py-2.5 px-3 text-muted-foreground font-mono font-semibold">
+                              {row.section || "—"}
                             </td>
                             <td className="py-2.5 px-3">
                               {rowError ? (

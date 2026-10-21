@@ -63,18 +63,9 @@ type AssessmentApiData = {
   startTime?: string | Date | null;
   endTime?: string | Date | null;
 };
-function yearLabel(year: string) {
-  const suffix = Number(year) % 10 === 1 && Number(year) !== 11 ? "st"
-    : Number(year) % 10 === 2 && Number(year) !== 12 ? "nd"
-      : Number(year) % 10 === 3 && Number(year) !== 13 ? "rd" : "th";
-  return `${year}${suffix} Year`;
-}
 
-function optionLabel(label: string, value: string) {
-  if (label === "Year") return yearLabel(value);
-  if (label === "Semester") return `Semester ${value}`;
-  return value;
-}
+import { MultiSelectDropdown } from "@/components/ui/MultiSelectDropdown";
+import { getStandardizedSectionOptions } from "@/lib/sections";
 
 function toggleValue(values: string[], value: string) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
@@ -86,52 +77,6 @@ function toDateTimeLocal(value?: string | Date | null) {
   if (Number.isNaN(date.getTime())) return "";
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
   return date.toISOString().slice(0, 16);
-}
-
-function MultiSelectDropdown({
-  label,
-  placeholder,
-  options,
-  selected,
-  onChange,
-  disabled = false,
-}: {
-  label: string;
-  placeholder: string;
-  options: string[];
-  selected: string[];
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative space-y-1.5">
-      <label className="text-xs font-semibold">{label}</label>
-      <button
-        type="button"
-        disabled={disabled}
-        aria-expanded={open}
-        aria-label={`Choose ${label.toLowerCase()}`}
-        onClick={() => setOpen((value) => !value)}
-        className="w-full min-h-11 px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm text-left flex items-center justify-between gap-3 disabled:opacity-50 disabled:cursor-not-allowed focus:ring-1 focus:ring-primary"
-      >
-        <span className={selected.length ? "text-foreground truncate" : "text-muted-foreground truncate"}>
-          {selected.length ? selected.map((value) => optionLabel(label, value)).join(", ") : placeholder}
-        </span>
-        <span aria-hidden="true" className="text-muted-foreground">{open ? "▴" : "▾"}</span>
-      </button>
-      {open && !disabled && (
-        <div className="absolute z-30 mt-1 w-full max-h-52 overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow-lg">
-          {options.length ? options.map((option) => (
-            <label key={option} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm hover:bg-muted/60">
-              <input type="checkbox" checked={selected.includes(option)} onChange={() => onChange(option)} className="rounded text-primary focus:ring-primary" />
-              <span>{optionLabel(label, option)}</span>
-            </label>
-          )) : <p className="px-2.5 py-2 text-xs text-muted-foreground">No {label.toLowerCase()} options found in student profiles.</p>}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export default function AssessmentBuilderWrapper() {
@@ -306,19 +251,17 @@ function AssessmentBuilder() {
         return [String(firstSemester), String(firstSemester + 1)];
       }))).sort((a, b) => Number(a) - Number(b))
     : allSemesters;
-  const visibleSections = Array.from(new Set([
+  const sectionOptions = getStandardizedSectionOptions([
+    ...targetSections,
     ...cohorts
       .filter((cohort) => !targetSemesters.length || targetSemesters.includes(cohort.semester))
-      .map((cohort) => cohort.section).filter(Boolean),
-    ...targetSections,
-  ])).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  const sectionOptions = visibleSections;
+      .map((cohort) => cohort.section)
+      .filter(Boolean),
+  ]);
 
   const updateYears = (year: string) => {
     setSelectedYears((current) => toggleValue(current, year));
     setTargetSemesters([]);
-    setTargetSections([]);
-    setTargetGroup("");
   };
 
   const updateSemesters = (semester: string) => {
@@ -330,8 +273,6 @@ function AssessmentBuilder() {
       }
       return updated;
     });
-    setTargetSections([]);
-    setTargetGroup("");
   };
 
   const updateGroup = (group: "a" | "b" | "both") => {
@@ -742,16 +683,15 @@ function AssessmentBuilder() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-            <MultiSelectDropdown label="Year" placeholder="Choose student year(s)" options={years} selected={selectedYears} onChange={updateYears} />
-            <MultiSelectDropdown label="Semester" placeholder="Choose semester(s)" options={visibleSemesters} selected={targetSemesters} onChange={updateSemesters} />
-            <MultiSelectDropdown label="Section" placeholder={targetSemesters.length ? "Choose section(s)" : "Choose semester first"} options={sectionOptions} selected={targetSections} onChange={(section) => {
+            <MultiSelectDropdown id="assessment-target-year" label="Year" placeholder="Choose student year(s)" options={years} selected={selectedYears} onChange={updateYears} />
+            <MultiSelectDropdown id="assessment-target-semester" label="Semester" placeholder="Choose semester(s)" options={visibleSemesters} selected={targetSemesters} onChange={updateSemesters} />
+            <MultiSelectDropdown id="assessment-target-section" label="Section" placeholder="Choose section(s)" options={sectionOptions} selected={targetSections} onChange={(section) => {
               setTargetSections((current) => toggleValue(current, section));
-              setTargetGroup("");
-            }} disabled={!targetSemesters.length} />
+            }} />
             <div className="space-y-1.5">
               <label htmlFor="assessment-target-group" className="text-xs font-semibold">Group</label>
-              <select id="assessment-target-group" value={targetGroup} onChange={(event) => updateGroup(event.target.value as "a" | "b" | "both")} disabled={!targetSections.length} className="w-full min-h-11 px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm focus:ring-1 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed">
-                <option value="" disabled>Choose section first</option>
+              <select id="assessment-target-group" value={targetGroup} onChange={(event) => updateGroup(event.target.value as "a" | "b" | "both")} className="w-full min-h-11 px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm focus:ring-1 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed">
+                <option value="">All Groups</option>
                 <option value="a">Group A</option>
                 <option value="b">Group B</option>
                 <option value="both">Both</option>

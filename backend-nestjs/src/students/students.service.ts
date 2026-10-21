@@ -18,6 +18,10 @@ import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { QueryStudentsDto } from './dto/query-students.dto';
 import { encryptTemporaryPassword } from './utils/credential-crypto.util';
+import {
+  normalizeSectionIdentifier,
+  isValidSectionFormat,
+} from '../common/constants/sections.constant';
 
 @Injectable()
 export class StudentsService {
@@ -494,10 +498,11 @@ export class StudentsService {
         findField(row, ['batch', 'year_of_study']) ||
         defaultOptions?.defaultBatch ||
         '';
-      const section =
+      const rawSection =
         findField(row, ['section', 'sec']) ||
         defaultOptions?.defaultSection ||
         '';
+      const section = normalizeSectionIdentifier(rawSection);
       const group =
         findField(row, ['group', 'grp']) ||
         defaultOptions?.defaultGroup ||
@@ -618,6 +623,12 @@ export class StudentsService {
         row.semester > 12
       ) {
         rowErrors.push('Semester must be a number between 1 and 12');
+      }
+
+      if (row.section && !isValidSectionFormat(row.section)) {
+        rowErrors.push(
+          `Invalid section '${row.section}' (must be a valid section identifier such as A1, B4)`,
+        );
       }
 
       if (!row.email) {
@@ -810,7 +821,9 @@ export class StudentsService {
             course: row.course || defaultOptions?.defaultCourse || '',
             semester:
               row.semester || defaultOptions?.defaultSemester || 1,
-            section: row.section || defaultOptions?.defaultSection || '',
+            section: normalizeSectionIdentifier(
+              row.section || defaultOptions?.defaultSection || '',
+            ),
             group: row.group || defaultOptions?.defaultGroup || '',
             batch: row.batch || defaultOptions?.defaultBatch || '',
             year:
