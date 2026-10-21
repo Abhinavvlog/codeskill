@@ -133,15 +133,15 @@ export default function PublicCertificateVerificationPage({
         </div>
       </header>
 
-      <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+      <main className="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-4 lg:p-6 space-y-4">
         {/* Verification Status Overview Banner (Hidden on Print) */}
-        <div className="print:hidden text-center max-w-3xl mx-auto space-y-3 pt-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase bg-muted text-foreground border border-border">
-            <GraduationCap className="w-4 h-4 text-primary" />
+        <div className="print:hidden text-center max-w-2xl mx-auto space-y-2 pt-1">
+          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[11px] font-bold tracking-wide uppercase bg-muted text-foreground border border-border">
+            <GraduationCap className="w-3.5 h-3.5 text-primary" />
             <span>Chandigarh University · Verifiable Digital Credential</span>
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+          <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-foreground">
             Certificate Authenticity Record
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
