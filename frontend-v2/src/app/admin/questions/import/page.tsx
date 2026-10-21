@@ -24,6 +24,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { adminQuestionsAPI } from "@/config/api";
+import { importErrorMessage } from "@/lib/import-error";
 import { Spinner } from "@/components/ui/spinner";
 
 interface PreviewData {
@@ -90,6 +91,10 @@ export default function ImportQuestionsPage() {
       setErrorMessage("Please upload a valid CSV or Excel spreadsheet (.csv, .xlsx, .xls).");
       return;
     }
+    if (selectedFile.size > 15 * 1024 * 1024) {
+      setErrorMessage("Question files must be 15 MiB or smaller.");
+      return;
+    }
     setFile(selectedFile);
     setErrorMessage(null);
     setPreviewData(null);
@@ -116,8 +121,7 @@ export default function ImportQuestionsPage() {
       });
     } catch (err: any) {
       setErrorMessage(
-        err.response?.data?.message ||
-          "Failed to automatically upload and push questions in one attempt. Please check the CSV or Excel format."
+        importErrorMessage(err, "Failed to automatically import questions.")
       );
     } finally {
       setIsValidating(false);
@@ -138,8 +142,7 @@ export default function ImportQuestionsPage() {
       }
     } catch (err: any) {
       setErrorMessage(
-        err.response?.data?.message ||
-          "Failed to parse and validate question spreadsheet. Please check columns format."
+        importErrorMessage(err, "Could not validate the question spreadsheet. Please check the file format and required columns.")
       );
     } finally {
       setIsValidating(false);
@@ -192,7 +195,7 @@ export default function ImportQuestionsPage() {
       });
     } catch (err: any) {
       setErrorMessage(
-        `${err.response?.data?.message || err.message || "Failed to commit questions into database."}${processedRows > 0 ? " Some earlier batches may have succeeded; retry with Skip to avoid duplicates." : ""}`
+        `${importErrorMessage(err, "Failed to commit questions into database.")}${processedRows > 0 ? " Some earlier batches may have succeeded; retry with Skip to avoid duplicates." : ""}`
       );
     } finally {
       setIsCommitting(false);

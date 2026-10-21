@@ -1,5 +1,7 @@
 "use client";
 
+import { editorStarterCode } from "@/lib/editor-languages";
+
 import { useExecutionRuntimes } from "@/hooks/useExecutionRuntimes";
 
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,8 +16,9 @@ import {
 } from "lucide-react";
 import { ProgrammingLanguageIcon } from "@/components/ui/ProgrammingLanguageIcon";
 import SampleTestCasesPanel, { hasSampleContent } from "@/components/problems/SampleTestCasesPanel";
+import { publicProblemRunCases } from "@/lib/problem-run-cases";
 import Link from "next/link";
-import { useState, useEffect, useCallback, use, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, use, useRef } from "react";
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
 import Editor from "@monaco-editor/react";
 import { submissionAPI, runAPI, problemsAPI, discussionsAPI } from "@/config/api";
@@ -77,6 +80,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
   const { theme } = useTheme();
   
   const [problem, setProblem] = useState<any>(null);
+  const testCases = useMemo(() => publicProblemRunCases(problem), [problem]);
   const [loading, setLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -162,7 +166,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
       setCode(savedDraft);
     } else {
       // Use starter code from problem config if available, else language default
-      const starterCode = problem.config?.starterCode?.[language];
+      const starterCode = editorStarterCode(problem.config?.starterCode, language);
       const defaultCode = starterCode || LANGUAGES.find(l => l.id === language)?.defaultCode || "";
       setCode(defaultCode);
     }
@@ -313,15 +317,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
     setEditorInst(editor);
   };
 
-  const getTestCases = () => {
-    if (!problem || !problem.testCases || !problem.testCases.cases || problem.testCases.cases.length === 0) {
-      return [];
-    }
-    // Only public cases are shown and run in the terminal; hidden cases are judge-only.
-    return problem.testCases.cases
-      .filter((tc: any) => tc.isHidden !== true && hasSampleContent(tc))
-      .map((tc: any, i: number) => ({ id: i + 1, input: tc.input, expected: tc.output }));
-  };
+  const getTestCases = () => testCases;
 
   const executeCode = async () => {
     const apiTestCases = getTestCases().map((tc: any) => ({
@@ -519,7 +515,7 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
 
   const handleResetCode = () => {
     if (!problem) return;
-    const starterCode = problem.config?.starterCode?.[language];
+    const starterCode = editorStarterCode(problem.config?.starterCode, language);
     const defaultCode = starterCode || LANGUAGES.find(l => l.id === language)?.defaultCode || "";
     setCode(defaultCode);
     localStorage.removeItem(`codeskill_draft_${problem.slug}_${language}`);
@@ -574,7 +570,6 @@ export default function ProblemWorkspace({ params, embedded = false }: { params:
   }
 
   const editorTheme = theme === "dark" ? "vs-dark" : "light";
-  const testCases = getTestCases();
   // Left-panel examples fall back to the public (non-hidden) test cases.
   const displaySamples = problem.statement?.samples?.length
     ? problem.statement.samples.filter(hasSampleContent)
