@@ -71,7 +71,7 @@ export default function StudentAssessmentsPage() {
     setTab(tabs[nextIndex]);
     requestAnimationFrame(() => document.getElementById(`assessment-tab-${nextIndex}`)?.focus());
   };
-  return <main className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-28 pb-12">
+  return <main className="relative w-full max-w-7xl mx-auto px-4 sm:px-6 pt-28 pb-12">
     <div aria-hidden={showGuestPrompt} inert={showGuestPrompt} className={`space-y-7 transition-[filter,opacity] duration-300 ${showGuestPrompt ? "pointer-events-none select-none blur-[3px] opacity-45" : ""}`}>
       <header className="flex flex-col sm:flex-row justify-between gap-5 sm:items-end"><div><p className="text-primary text-sm font-semibold flex gap-2 items-center mb-2"><GraduationCap className="w-4 h-4" /> CodeSkill assessment portal</p><h1 className="text-3xl font-bold tracking-tight">Assessments &amp; Technical Tests</h1><p className="text-muted-foreground mt-2 max-w-2xl">Build confidence with coding challenges and technical tests. Find your assigned assessments and track your results.</p></div><Button variant="outline" aria-label="Refresh assessments" disabled={loading || !user} onClick={() => setRetry(value => value + 1)}><RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /></Button></header>
       <div className="min-w-0 overflow-x-auto overscroll-x-contain border-b border-border pb-4" role="tablist" aria-label="Assessment categories">
