@@ -177,6 +177,11 @@ export class PistonService implements OnModuleDestroy {
           Number.isFinite(value)
             ? Math.max(minimum, Math.min(fallback, Number(value)))
             : fallback;
+        const isJava = canonical === 'java';
+        const timeMultiplier = isJava
+          ? Math.max(this.config.timeMultiplier, 2)
+          : this.config.timeMultiplier;
+        const memoryFloor = isJava ? 384 * 1048576 : 33554432;
         const request: PistonRequest = {
           language: runtime.language,
           version: runtime.version,
@@ -186,9 +191,9 @@ export class PistonService implements OnModuleDestroy {
             bounded(
               limits.timeLimit === undefined
                 ? undefined
-                : limits.timeLimit * this.config.timeMultiplier,
-              this.config.runTimeout,
-              100,
+                : limits.timeLimit * timeMultiplier,
+              isJava ? Math.max(this.config.runTimeout, 5000) : this.config.runTimeout,
+              isJava ? 2000 : 100,
             ),
           ),
           compile_timeout: this.config.compileTimeout,
@@ -198,7 +203,7 @@ export class PistonService implements OnModuleDestroy {
                 ? undefined
                 : limits.memoryLimit * 1048576,
               this.config.memory,
-              33554432,
+              memoryFloor,
             ),
           ),
           compile_memory_limit: this.config.compileMemory,

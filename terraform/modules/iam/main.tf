@@ -87,7 +87,12 @@ resource "aws_iam_policy" "cloudmap_register" {
           "servicediscovery:DeregisterInstance",
           "servicediscovery:GetInstance",
           "servicediscovery:GetInstancesHealthStatus",
-          "servicediscovery:GetOperation"
+          "servicediscovery:GetOperation",
+          "servicediscovery:ListServices",
+          "route53:CreateHealthCheck",
+          "route53:GetHealthCheck",
+          "route53:DeleteHealthCheck",
+          "route53:UpdateHealthCheck"
         ]
         Resource = "*"
       }
