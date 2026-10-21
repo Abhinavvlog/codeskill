@@ -14,6 +14,7 @@ import { applyAssessmentAudienceTargetingMigration } from './migrations/assessme
 import { applyAssessmentProctorCapturesMigration } from './migrations/assessment-proctor-captures';
 import { applyAssessmentProctoringModesMigration } from './migrations/assessment-proctoring-modes';
 import { applyBugReportsMigration } from './migrations/bug-reports';
+import { applyLearningModuleMigration } from './migrations/learning-module';
 
 export function practiceSubmissionMigrationOptions(): DataSourceOptions {
   const postgres = databaseConfig().postgres;
@@ -64,6 +65,7 @@ export async function runPracticeSubmissionSourceMigration(): Promise<void> {
         await applyAssessmentProctorCapturesMigration(queryRunner);
         await applyAssessmentProctoringModesMigration(queryRunner);
         await applyBugReportsMigration(queryRunner);
+        await applyLearningModuleMigration(queryRunner);
         await queryRunner.commitTransaction();
       } catch (error) {
         await queryRunner.rollbackTransaction();

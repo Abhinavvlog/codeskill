@@ -381,6 +381,25 @@ export default function CourseWorkspacePage({
                             <div className="space-y-2">
                               {q.options.map((opt, optIdx) => {
                                 const isSelected = selectedAnswers[q.id] === optIdx;
+                                const qResult = quizResults?.results?.find(
+                                  (r: any) => r.questionId === q.id,
+                                );
+                                let optionClasses =
+                                  "bg-zinc-950/40 border-zinc-800 text-zinc-300 hover:border-zinc-700";
+
+                                if (qResult) {
+                                  if (optIdx === qResult.correctAnswer) {
+                                    optionClasses =
+                                      "bg-emerald-500/20 border-emerald-500 text-emerald-200 font-semibold";
+                                  } else if (isSelected && !qResult.isCorrect) {
+                                    optionClasses =
+                                      "bg-rose-500/20 border-rose-500 text-rose-200 font-semibold";
+                                  }
+                                } else if (isSelected) {
+                                  optionClasses =
+                                    "bg-indigo-600/20 border-indigo-500 text-indigo-200";
+                                }
+
                                 return (
                                   <button
                                     key={optIdx}
@@ -390,11 +409,7 @@ export default function CourseWorkspacePage({
                                         [q.id]: optIdx,
                                       })
                                     }
-                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
-                                      isSelected
-                                        ? "bg-indigo-600/20 border-indigo-500 text-indigo-200"
-                                        : "bg-zinc-950/40 border-zinc-800 text-zinc-300 hover:border-zinc-700"
-                                    }`}
+                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-medium border transition-all cursor-pointer ${optionClasses}`}
                                   >
                                     <span className="mr-2 font-mono text-zinc-500">
                                       {String.fromCharCode(65 + optIdx)}.
@@ -404,6 +419,36 @@ export default function CourseWorkspacePage({
                                 );
                               })}
                             </div>
+
+                            {/* Detailed Explanation Box */}
+                            {quizResults?.results?.find((r: any) => r.questionId === q.id) && (
+                              <div
+                                className={`mt-3 p-3.5 rounded-xl border text-xs leading-relaxed ${
+                                  quizResults.results.find((r: any) => r.questionId === q.id)
+                                    ?.isCorrect
+                                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                                    : "bg-amber-500/10 border-amber-500/30 text-amber-200"
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5 font-bold mb-1">
+                                  <Lightbulb className="w-3.5 h-3.5" />
+                                  <span>
+                                    {quizResults.results.find(
+                                      (r: any) => r.questionId === q.id,
+                                    )?.isCorrect
+                                      ? "Correct Concept Verified"
+                                      : "Explanation & In-Depth Review"}
+                                  </span>
+                                </div>
+                                <p className="text-zinc-300 text-xs">
+                                  {
+                                    quizResults.results.find(
+                                      (r: any) => r.questionId === q.id,
+                                    )?.explanation
+                                  }
+                                </p>
+                              </div>
+                            )}
                           </div>
                         ))}
 
