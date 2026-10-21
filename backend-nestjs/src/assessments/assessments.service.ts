@@ -26,6 +26,7 @@ import { S3Service } from '../s3/s3.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { EvaluateAssessmentCodeDto } from './dto/evaluate-code.dto';
+import { normalizeSectionIdentifier } from '../common/constants/sections.constant';
 
 function codingTestCases(question: Question): Array<{ id: string | number; input: string; expected: string; isHidden: boolean }> {
   const cases = question.testCases?.length ? question.testCases : (question.metadata as any)?.testCases || [];
@@ -432,7 +433,7 @@ export class AssessmentsService {
       targetBatches: dto.targetBatches || [],
       targetDepartments: dto.targetDepartments || [],
       targetCourses: dto.targetCourses || [],
-      targetSections: dto.targetSections || [],
+      targetSections: this.normalizeTargetSections(dto.targetSections),
       targetGroups: this.normalizeTargetGroups(dto.targetGroups || []),
       targetStudentIds: dto.targetStudentIds || [],
       targetSemesters: dto.targetSemesters || [],
@@ -661,7 +662,7 @@ export class AssessmentsService {
     if (dto.targetCourses !== undefined)
       assessment.targetCourses = dto.targetCourses;
     if (dto.targetSections !== undefined)
-      assessment.targetSections = dto.targetSections;
+      assessment.targetSections = this.normalizeTargetSections(dto.targetSections);
     if (dto.targetGroups !== undefined)
       assessment.targetGroups = this.normalizeTargetGroups(dto.targetGroups);
     if (dto.targetStudentIds !== undefined)
@@ -1054,15 +1055,34 @@ export class AssessmentsService {
       !normalizedTargetSemesters.length ||
       (!!studentSem && normalizedTargetSemesters.includes(studentSem));
 
+    const studentSection = normalizeSectionIdentifier(profile.section || '');
+    const normalizedTargetSections = this.normalizeTargetSections(
+      assessment.targetSections,
+    );
+    const matchesSection =
+      !normalizedTargetSections.length ||
+      (!!studentSection &&
+        normalizedTargetSections
+          .map((s) => s.toLowerCase())
+          .includes(studentSection.toLowerCase()));
+
     return (
       (!assessment.targetStudentIds?.length || studentKeys.some((key) => assessment.targetStudentIds.includes(key))) &&
       matches(assessment.targetBatches, batch) &&
       matches(assessment.targetDepartments, dept) &&
       matches(assessment.targetCourses, profile.course || '') &&
       matchesSemester &&
-      matches(assessment.targetSections, profile.section || '') &&
+      matchesSection &&
       matches(assessment.targetGroups, group)
     );
+  }
+
+  private normalizeTargetSections(sections?: string[]): string[] {
+    if (!sections || !Array.isArray(sections)) return [];
+    const normalized = sections
+      .map((sec) => normalizeSectionIdentifier(sec))
+      .filter(Boolean);
+    return [...new Set(normalized)];
   }
 
   private normalizeTargetGroups(groups: string[]): string[] {

@@ -115,6 +115,7 @@ export class AuthService {
     const user = await this.userRepository.findOne({
       where: [
         { email: ILike(escaped) },
+        { name: ILike(escaped) },
         { uid: ILike(escaped) },
         { username: ILike(escaped) },
       ],
@@ -216,6 +217,7 @@ export class AuthService {
     const user = await this.userRepository.findOne({
       where: [
         { email: ILike(escaped) },
+        { name: ILike(escaped) },
         { uid: ILike(escaped) },
         { username: ILike(escaped) },
       ],

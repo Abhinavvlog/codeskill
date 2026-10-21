@@ -25,6 +25,8 @@ import { Question } from '../database/entities/question.entity';
 import { CacheService } from '../redis/cache.service';
 import { TokenService } from '../auth/token.service';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
+import { CreateAdminUserDto } from './dto/create-admin-user.dto';
+import { validatePasswordPolicy } from '../auth/password.util';
 
 const mcqQuestionTypes = new Set([
   'mcq',
@@ -303,6 +305,52 @@ export class AdminService {
       message: `${user.email} is no longer an admin`,
       user,
     };
+  }
+
+  async createAdminUser(
+    dto: CreateAdminUserDto,
+    actor?: { id?: string; role?: string; isAdmin?: boolean },
+  ) {
+    const targetRole = dto.role || 'admin';
+    const isActorSuperAdmin = actor && actor.role === 'super_admin';
+
+    if (actor && !isActorSuperAdmin) {
+      throw new ForbiddenException(
+        'Only super_admin can create administrative users',
+      );
+    }
+
+    const policyErr = validatePasswordPolicy(dto.password);
+    if (policyErr) {
+      throw new BadRequestException(policyErr);
+    }
+
+    const email = dto.email.trim().toLowerCase();
+    const existing = await this.userRepo.findOne({
+      where: { email },
+    });
+    if (existing) {
+      throw new ConflictException('A user with this email already exists');
+    }
+
+    const user = this.userRepo.create({
+      name: dto.name.trim(),
+      email,
+      password: dto.password,
+      role: targetRole,
+      isAdmin: true,
+      isActive: true,
+      forcePasswordChange: false,
+      authProvider: 'local',
+      stats: {},
+      profile: { role: targetRole },
+      studentProfile: {},
+    });
+
+    await this.userRepo.save(user);
+
+    const { password, mfaSecret, ...rest } = user;
+    return { ...rest, _id: user.id };
   }
 
   async getReport(userId: string) {
