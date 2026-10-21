@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -18,10 +18,15 @@ import {
   Lightbulb,
   Award,
   AlertCircle,
+  FileText,
+  Copy,
+  ChevronLeft,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { learningAPI } from "@/config/api";
 import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
+import { useTheme } from "@/context/ThemeContext";
 
 interface LessonData {
   id: string;
@@ -68,6 +73,176 @@ interface CourseSidebarData {
   }>;
 }
 
+// Professional Markdown Content Renderer (No external library dependency, works in both Light and Dark modes)
+function RichContentRenderer({ content }: { content: string }) {
+  const renderedSections = useMemo(() => {
+    if (!content) return [];
+    const lines = content.split("\n");
+    const sections: React.ReactNode[] = [];
+    let inCodeBlock = false;
+    let codeLanguage = "";
+    let codeLines: string[] = [];
+    let tableLines: string[] = [];
+
+    const flushTable = (key: string) => {
+      if (tableLines.length === 0) return;
+      const rows = tableLines.map((l) =>
+        l
+          .split("|")
+          .map((c) => c.trim())
+          .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1)
+      );
+      if (rows.length >= 2) {
+        const headers = rows[0];
+        const dataRows = rows.slice(2); // skip separator row like |---|---|
+        sections.push(
+          <div
+            key={key}
+            className="my-5 overflow-x-auto border border-border rounded-xl bg-card shadow-sm"
+          >
+            <table className="w-full text-left text-xs sm:text-sm border-collapse">
+              <thead className="bg-muted/60 border-b border-border">
+                <tr>
+                  {headers.map((h, hIdx) => (
+                    <th
+                      key={hIdx}
+                      className="px-4 py-2.5 font-semibold text-foreground"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {dataRows.map((row, rIdx) => (
+                  <tr key={rIdx} className="hover:bg-muted/30 transition-colors">
+                    {row.map((cell, cIdx) => (
+                      <td
+                        key={cIdx}
+                        className="px-4 py-2.5 text-muted-foreground font-mono text-xs"
+                      >
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+      tableLines = [];
+    };
+
+    lines.forEach((line, idx) => {
+      // Code block start / end
+      if (line.trim().startsWith("```")) {
+        if (inCodeBlock) {
+          // close code block
+          const codeSnippet = codeLines.join("\n");
+          sections.push(
+            <div
+              key={`code-${idx}`}
+              className="my-5 rounded-xl border border-border bg-muted/60 p-4 font-mono text-xs overflow-x-auto text-foreground shadow-sm relative group"
+            >
+              {codeLanguage && (
+                <span className="absolute top-2 right-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                  {codeLanguage}
+                </span>
+              )}
+              <pre>
+                <code>{codeSnippet}</code>
+              </pre>
+            </div>
+          );
+          codeLines = [];
+          codeLanguage = "";
+          inCodeBlock = false;
+        } else {
+          flushTable(`table-before-code-${idx}`);
+          inCodeBlock = true;
+          codeLanguage = line.trim().replace(/^```/, "").trim();
+        }
+        return;
+      }
+
+      if (inCodeBlock) {
+        codeLines.push(line);
+        return;
+      }
+
+      // Table line
+      if (line.trim().startsWith("|") && line.trim().endsWith("|")) {
+        tableLines.push(line.trim());
+        return;
+      } else {
+        flushTable(`table-${idx}`);
+      }
+
+      // Headers
+      if (line.startsWith("### ")) {
+        sections.push(
+          <h3
+            key={`h3-${idx}`}
+            className="text-lg sm:text-xl font-bold tracking-tight text-foreground mt-6 mb-2.5"
+          >
+            {line.replace(/^### /, "")}
+          </h3>
+        );
+      } else if (line.startsWith("#### ")) {
+        sections.push(
+          <h4
+            key={`h4-${idx}`}
+            className="text-base font-semibold text-foreground mt-4 mb-2"
+          >
+            {line.replace(/^#### /, "")}
+          </h4>
+        );
+      } else if (line.startsWith("> ")) {
+        // Blockquote / Important callout
+        sections.push(
+          <div
+            key={`quote-${idx}`}
+            className="my-4 border-l-4 border-primary bg-primary/5 p-4 rounded-r-xl text-xs sm:text-sm text-foreground flex items-start gap-2.5"
+          >
+            <Lightbulb className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              {line.replace(/^> /, "").replace(/\*\*(.*?)\*\*/g, "$1")}
+            </div>
+          </div>
+        );
+      } else if (line.trim().startsWith("- ")) {
+        // Bullet point
+        sections.push(
+          <div
+            key={`li-${idx}`}
+            className="flex items-start gap-2 my-1.5 text-xs sm:text-sm text-muted-foreground"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
+            <span className="leading-relaxed">
+              {line.trim().replace(/^- /, "")}
+            </span>
+          </div>
+        );
+      } else if (line.trim().length > 0) {
+        sections.push(
+          <p
+            key={`p-${idx}`}
+            className="my-2.5 text-xs sm:text-sm text-muted-foreground leading-relaxed"
+          >
+            {line}
+          </p>
+        );
+      }
+    });
+
+    flushTable("table-end");
+    return sections;
+  }, [content]);
+
+  return <div className="space-y-1">{renderedSections}</div>;
+}
+
 export default function CourseWorkspacePage({
   params,
 }: {
@@ -75,8 +250,11 @@ export default function CourseWorkspacePage({
 }) {
   const { pathSlug, courseSlug } = use(params);
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
 
   const [course, setCourse] = useState<CourseSidebarData | null>(null);
+  const [pathTitle, setPathTitle] = useState<string>("");
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [lesson, setLesson] = useState<LessonData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -105,9 +283,10 @@ export default function CourseWorkspacePage({
   const loadCourse = async () => {
     try {
       setLoading(true);
-      // Fetch path to resolve course ID
       const pathRes = await learningAPI.getPathBySlug(pathSlug);
       const pathData = pathRes.data?.data || pathRes.data;
+      setPathTitle(pathData?.title || "Learning Path");
+
       const foundCourse = (pathData?.courses || []).find(
         (c: any) => c.slug === courseSlug,
       );
@@ -117,7 +296,6 @@ export default function CourseWorkspacePage({
       const courseData = courseRes.data?.data || courseRes.data;
       setCourse(courseData);
 
-      // Select first lesson by default
       const firstLesson = courseData?.modules?.[0]?.lessons?.[0];
       if (firstLesson) {
         setActiveLessonId(firstLesson.id);
@@ -139,7 +317,6 @@ export default function CourseWorkspacePage({
       const lessonData = res.data?.data || res.data;
       setLesson(lessonData);
 
-      // Set starter code if coding exercise present
       const codingEx = lessonData?.exercises?.find(
         (e: any) => e.type === "coding" || e.type === "debugging",
       );
@@ -163,12 +340,12 @@ export default function CourseWorkspacePage({
       const res = await learningAPI.submitExercise(exerciseId, {
         answers: selectedAnswers,
       });
-      setQuizResults(res.data.feedback);
-      if (res.data.xpAwarded > 0) {
-        setXpCelebration(res.data.xpAwarded);
+      const submissionData = res.data?.data || res.data;
+      setQuizResults(submissionData?.feedback || submissionData);
+      if (submissionData?.xpAwarded > 0) {
+        setXpCelebration(submissionData.xpAwarded);
       }
-      if (res.data.passed) {
-        // Refresh lesson completion status
+      if (submissionData?.passed) {
         loadLesson(activeLessonId!);
         loadCourse();
       }
@@ -186,11 +363,12 @@ export default function CourseWorkspacePage({
         code,
         language,
       });
-      setExecutionFeedback(res.data.feedback);
-      if (res.data.xpAwarded > 0) {
-        setXpCelebration(res.data.xpAwarded);
+      const submissionData = res.data?.data || res.data;
+      setExecutionFeedback(submissionData?.feedback || submissionData);
+      if (submissionData?.xpAwarded > 0) {
+        setXpCelebration(submissionData.xpAwarded);
       }
-      if (res.data.passed) {
+      if (submissionData?.passed) {
         loadLesson(activeLessonId!);
         loadCourse();
       }
@@ -220,377 +398,430 @@ export default function CourseWorkspacePage({
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#08080a] flex items-center justify-center">
-        <Spinner className="w-8 h-8 text-indigo-500" />
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center pt-24 font-sans text-foreground">
+        <Spinner className="w-8 h-8 text-primary animate-spin mb-3" />
+        <p className="text-sm text-muted-foreground">Loading course workspace...</p>
       </div>
     );
   }
 
   if (!course) {
     return (
-      <div className="min-h-screen bg-[#08080a] text-zinc-100 flex flex-col items-center justify-center p-6">
+      <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center pt-24 p-6 font-sans">
         <h2 className="text-xl font-bold">Course not found</h2>
         <Link
           href={`/learning/${pathSlug}`}
-          className="mt-4 text-indigo-400 hover:text-indigo-300"
+          className="mt-4 text-primary hover:underline inline-flex items-center gap-1.5"
         >
-          Back to Path Overview
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Path Overview</span>
         </Link>
       </div>
     );
   }
 
-  return (
-    <div className="flex h-screen bg-background text-foreground overflow-hidden font-sans">
-      {/* ── Left Sidebar Curriculum Navigation ──────────────────────────────── */}
-      <div className="w-80 flex-shrink-0 border-r border-border bg-card flex flex-col">
-        {/* Course Header */}
-        <div className="p-4 border-b border-border">
-          <Link
-            href={`/learning/${pathSlug}`}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors mb-2"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Path Overview</span>
-          </Link>
-          <h2 className="text-sm font-bold text-foreground truncate">{course.title}</h2>
-        </div>
+  // All lessons flat array for progress calculation
+  const allLessons = course.modules.flatMap((m) => m.lessons);
+  const currentLessonIndex = allLessons.findIndex((l) => l.id === activeLessonId);
 
-        {/* Modules & Lessons Tree */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-4">
-          {course.modules.map((mod, mIdx) => (
-            <div key={mod.id}>
-              <div className="px-2 py-1 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                {mod.title}
-              </div>
-              <div className="mt-1 space-y-0.5">
-                {mod.lessons.map((l) => {
-                  const isActive = l.id === activeLessonId;
-                  return (
-                    <button
-                      key={l.id}
-                      onClick={() => setActiveLessonId(l.id)}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2.5 transition-all cursor-pointer ${
-                        isActive
-                          ? "bg-primary/10 text-primary border border-primary/20 font-semibold"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                      }`}
-                    >
-                      {l.isCompleted ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                      ) : (
-                        <div
-                          className={`w-4 h-4 rounded-full border flex-shrink-0 ${
-                            isActive
-                              ? "border-primary bg-primary/20"
-                              : "border-border"
-                          }`}
-                        />
-                      )}
-                      <span className="truncate flex-1">{l.title}</span>
-                    </button>
-                  );
-                })}
-              </div>
+  return (
+    <div className="min-h-screen bg-background text-foreground pt-20 flex flex-col font-sans">
+      {/* ── Top Workspace Sub-Header ────────────────────────────────────────── */}
+      <div className="sticky top-16 z-20 border-b border-border bg-card/90 backdrop-blur-md px-6 py-3 shadow-xs">
+        <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 truncate">
+            <Link
+              href={`/learning/${pathSlug}`}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Back to Path</span>
+            </Link>
+            <span className="text-border">|</span>
+            <div className="truncate">
+              <span className="text-xs text-muted-foreground hidden md:inline">
+                {pathTitle} /{" "}
+              </span>
+              <span className="text-sm font-bold text-foreground truncate">
+                {course.title}
+              </span>
             </div>
-          ))}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              Lesson {currentLessonIndex + 1} of {allLessons.length}
+            </span>
+
+            <Button
+              size="sm"
+              onClick={handleCompleteAndNext}
+              disabled={completing}
+              className="h-8 px-3.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs gap-1.5"
+            >
+              <span>{completing ? "Saving..." : lesson?.nextLessonId ? "Next Lesson" : "Finish Course"}</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* ── Main Lesson & Practice Content Area ────────────────────────────── */}
-      <div className="flex-1 flex flex-col h-full overflow-y-auto bg-background">
-        {lessonLoading || !lesson ? (
-          <div className="flex-1 flex items-center justify-center">
-            <Spinner className="w-8 h-8 text-primary animate-spin" />
+      {/* ── Two-Pane Studio Workspace ───────────────────────────────────────── */}
+      <div className="flex-1 flex max-w-[1600px] mx-auto w-full">
+        {/* Left Navigation Sidebar */}
+        <aside className="w-80 flex-shrink-0 border-r border-border bg-card/40 hidden md:flex flex-col h-[calc(100vh-7.5rem)] sticky top-28 overflow-y-auto p-4">
+          <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4 px-2">
+            Curriculum Modules
           </div>
-        ) : (
-          <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full p-6 sm:p-10">
-            {/* XP Celebration Banner */}
-            {xpCelebration && (
-              <div className="mb-6 p-4 rounded-xl bg-primary/10 border border-primary/30 flex items-center gap-3 animate-bounce">
-                <Sparkles className="w-5 h-5 text-primary" />
-                <span className="text-sm font-bold text-primary">
-                  +{xpCelebration} XP Earned for Verified Progress!
-                </span>
-              </div>
-            )}
 
-            {/* Lesson Title & Objectives */}
-            <div className="pb-6 border-b border-border">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-muted text-muted-foreground uppercase border border-border">
-                  Lesson · {lesson.type}
-                </span>
-                {lesson.isCompleted && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Completed</span>
+          <div className="space-y-4">
+            {course.modules.map((mod) => (
+              <div key={mod.id}>
+                <div className="px-2 py-1 text-xs font-bold text-foreground flex items-center justify-between">
+                  <span>{mod.title}</span>
+                  <span className="text-[10px] text-muted-foreground font-normal">
+                    {mod.lessons.length}
                   </span>
-                )}
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-                {lesson.title}
-              </h1>
+                </div>
 
-              {lesson.learningObjectives && lesson.learningObjectives.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {lesson.learningObjectives.map((obj, i) => (
-                    <span
-                      key={i}
-                      className="px-2.5 py-1 rounded-md bg-muted text-xs text-muted-foreground font-medium border border-border"
-                    >
-                      🎯 {obj}
-                    </span>
-                  ))}
+                <div className="mt-1.5 space-y-1">
+                  {mod.lessons.map((l, lIdx) => {
+                    const isActive = l.id === activeLessonId;
+                    return (
+                      <button
+                        key={l.id}
+                        onClick={() => setActiveLessonId(l.id)}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2.5 transition-all cursor-pointer ${
+                          isActive
+                            ? "bg-primary/10 text-primary border border-primary/20 font-semibold shadow-xs"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
+                        }`}
+                      >
+                        {l.isCompleted ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                        ) : (
+                          <div
+                            className={`w-4 h-4 rounded-full border flex items-center justify-center text-[9px] flex-shrink-0 ${
+                              isActive
+                                ? "border-primary bg-primary/20 text-primary font-bold"
+                                : "border-border text-muted-foreground"
+                            }`}
+                          >
+                            {lIdx + 1}
+                          </div>
+                        )}
+                        <span className="truncate flex-1">{l.title}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        {/* Right Main Lesson Canvas */}
+        <main className="flex-1 p-6 lg:p-10 max-w-4xl mx-auto w-full pb-24">
+          {lessonLoading || !lesson ? (
+            <div className="py-24 flex items-center justify-center">
+              <Spinner className="w-8 h-8 text-primary animate-spin" />
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {/* XP Celebration Banner */}
+              {xpCelebration && (
+                <div className="p-4 rounded-xl bg-primary/10 border border-primary/30 flex items-center gap-3 animate-bounce shadow-xs">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                  <span className="text-sm font-bold text-primary">
+                    +{xpCelebration} XP Earned for Verified Progress!
+                  </span>
                 </div>
               )}
-            </div>
 
-            {/* Reading Content Markdown / Text (NO VIDEO) */}
-            <div className="py-8 prose prose-zinc dark:prose-invert max-w-none text-foreground text-sm leading-relaxed space-y-4">
-              <div className="whitespace-pre-wrap font-sans">
-                {lesson.content}
-              </div>
-            </div>
+              {/* Lesson Header */}
+              <div className="pb-6 border-b border-border">
+                <div className="flex items-center gap-2 mb-2.5">
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20 uppercase tracking-wide">
+                    {lesson.type} Lesson
+                  </span>
+                  {lesson.isCompleted && (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Completed</span>
+                    </span>
+                  )}
+                </div>
 
-            {/* ── Interactive Practice & Exercises Section ──────────────────── */}
-            {lesson.exercises && lesson.exercises.length > 0 && (
-              <div className="mt-8 pt-8 border-t border-border">
-                <h2 className="text-lg font-bold text-foreground mb-6 flex items-center gap-2">
-                  <Code2 className="w-5 h-5 text-primary" />
-                  <span>Practice Exercise</span>
-                </h2>
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+                  {lesson.title}
+                </h1>
 
-                {lesson.exercises.map((ex) => (
-                  <div
-                    key={ex.id}
-                    className="bg-card border border-border rounded-xl p-6 mb-6 shadow-sm"
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-base font-bold text-foreground">{ex.title}</h3>
-                      <span className="text-xs font-semibold text-primary">
-                        {ex.marks} XP
+                {lesson.learningObjectives && lesson.learningObjectives.length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {lesson.learningObjectives.map((obj, i) => (
+                      <span
+                        key={i}
+                        className="px-2.5 py-1 rounded-md bg-muted text-xs text-muted-foreground font-medium border border-border"
+                      >
+                        🎯 {obj}
                       </span>
-                    </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-                    {/* Quiz Type Exercise */}
-                    {ex.type === "quiz" && ex.quizConfig?.questions && (
-                      <div className="space-y-6">
-                        {ex.quizConfig.questions.map((q, qIdx) => (
-                          <div key={q.id} className="space-y-3">
-                            <p className="text-sm font-semibold text-zinc-200">
-                              {qIdx + 1}. {q.question}
-                            </p>
-                            <div className="space-y-2">
-                              {q.options.map((opt, optIdx) => {
-                                const isSelected = selectedAnswers[q.id] === optIdx;
-                                const qResult = quizResults?.results?.find(
-                                  (r: any) => r.questionId === q.id,
-                                );
-                                let optionClasses =
-                                  "bg-zinc-950/40 border-zinc-800 text-zinc-300 hover:border-zinc-700";
+              {/* Rich Lesson Body */}
+              <div className="py-2">
+                <RichContentRenderer content={lesson.content} />
+              </div>
 
-                                if (qResult) {
-                                  if (optIdx === qResult.correctAnswer) {
-                                    optionClasses =
-                                      "bg-emerald-500/20 border-emerald-500 text-emerald-200 font-semibold";
-                                  } else if (isSelected && !qResult.isCorrect) {
-                                    optionClasses =
-                                      "bg-rose-500/20 border-rose-500 text-rose-200 font-semibold";
-                                  }
-                                } else if (isSelected) {
-                                  optionClasses =
-                                    "bg-indigo-600/20 border-indigo-500 text-indigo-200";
-                                }
+              {/* Practice Exercises / Quizzes */}
+              {lesson.exercises && lesson.exercises.length > 0 && (
+                <div className="pt-8 border-t border-border space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                      <Code2 className="w-5 h-5 text-primary" />
+                      <span>Hands-on Knowledge Check</span>
+                    </h2>
+                    <span className="text-xs text-muted-foreground font-medium">
+                      Immediate concept verification
+                    </span>
+                  </div>
 
-                                return (
-                                  <button
-                                    key={optIdx}
-                                    onClick={() =>
-                                      setSelectedAnswers({
-                                        ...selectedAnswers,
-                                        [q.id]: optIdx,
-                                      })
+                  {lesson.exercises.map((ex) => (
+                    <div
+                      key={ex.id}
+                      className="bg-card border border-border rounded-xl p-6 shadow-sm space-y-6"
+                    >
+                      <div className="flex items-center justify-between pb-4 border-b border-border">
+                        <h3 className="text-base font-bold text-foreground">{ex.title}</h3>
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+                          +{ex.marks} XP
+                        </span>
+                      </div>
+
+                      {/* Quiz Runner */}
+                      {ex.type === "quiz" && ex.quizConfig?.questions && (
+                        <div className="space-y-6">
+                          {ex.quizConfig.questions.map((q, qIdx) => (
+                            <div key={q.id} className="space-y-3">
+                              <p className="text-sm font-semibold text-foreground">
+                                {qIdx + 1}. {q.question}
+                              </p>
+                              <div className="space-y-2">
+                                {q.options.map((opt, optIdx) => {
+                                  const isSelected = selectedAnswers[q.id] === optIdx;
+                                  const qResult = quizResults?.results?.find(
+                                    (r: any) => r.questionId === q.id,
+                                  );
+
+                                  let optionClasses =
+                                    "bg-card border-border text-foreground hover:bg-muted/70";
+
+                                  if (qResult) {
+                                    if (optIdx === qResult.correctAnswer) {
+                                      optionClasses =
+                                        "bg-emerald-500/10 border-emerald-500 text-emerald-700 dark:text-emerald-300 font-semibold";
+                                    } else if (isSelected && !qResult.isCorrect) {
+                                      optionClasses =
+                                        "bg-destructive/10 border-destructive text-destructive font-semibold";
                                     }
-                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-medium border transition-all cursor-pointer ${optionClasses}`}
-                                  >
-                                    <span className="mr-2 font-mono text-zinc-500">
-                                      {String.fromCharCode(65 + optIdx)}.
-                                    </span>
-                                    <span>{opt}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-
-                            {/* Detailed Explanation Box */}
-                            {quizResults?.results?.find((r: any) => r.questionId === q.id) && (
-                              <div
-                                className={`mt-3 p-3.5 rounded-xl border text-xs leading-relaxed ${
-                                  quizResults.results.find((r: any) => r.questionId === q.id)
-                                    ?.isCorrect
-                                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-                                    : "bg-amber-500/10 border-amber-500/30 text-amber-200"
-                                }`}
-                              >
-                                <div className="flex items-center gap-1.5 font-bold mb-1">
-                                  <Lightbulb className="w-3.5 h-3.5" />
-                                  <span>
-                                    {quizResults.results.find(
-                                      (r: any) => r.questionId === q.id,
-                                    )?.isCorrect
-                                      ? "Correct Concept Verified"
-                                      : "Explanation & In-Depth Review"}
-                                  </span>
-                                </div>
-                                <p className="text-zinc-300 text-xs">
-                                  {
-                                    quizResults.results.find(
-                                      (r: any) => r.questionId === q.id,
-                                    )?.explanation
+                                  } else if (isSelected) {
+                                    optionClasses =
+                                      "bg-primary/10 border-primary text-primary font-semibold ring-1 ring-primary";
                                   }
-                                </p>
+
+                                  return (
+                                    <button
+                                      key={optIdx}
+                                      onClick={() =>
+                                        setSelectedAnswers({
+                                          ...selectedAnswers,
+                                          [q.id]: optIdx,
+                                        })
+                                      }
+                                      className={`w-full text-left px-4 py-3 rounded-lg text-xs font-medium border transition-all cursor-pointer shadow-xs ${optionClasses}`}
+                                    >
+                                      <span className="mr-2 font-mono text-muted-foreground">
+                                        {String.fromCharCode(65 + optIdx)}.
+                                      </span>
+                                      <span>{opt}</span>
+                                    </button>
+                                  );
+                                })}
                               </div>
+
+                              {/* Question Explanation Box */}
+                              {quizResults?.results?.find((r: any) => r.questionId === q.id) && (
+                                <div
+                                  className={`mt-3 p-4 rounded-xl border text-xs leading-relaxed ${
+                                    quizResults.results.find((r: any) => r.questionId === q.id)
+                                      ?.isCorrect
+                                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300"
+                                      : "bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-1.5 font-bold mb-1">
+                                    <Lightbulb className="w-4 h-4 text-amber-500" />
+                                    <span>
+                                      {quizResults.results.find(
+                                        (r: any) => r.questionId === q.id,
+                                      )?.isCorrect
+                                        ? "Correct Concept Verified"
+                                        : "Explanation & In-Depth Review"}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 text-muted-foreground text-xs leading-relaxed">
+                                    {
+                                      quizResults.results.find(
+                                        (r: any) => r.questionId === q.id,
+                                      )?.explanation
+                                    }
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+
+                          {/* Quiz Outcome Banner */}
+                          {quizResults && (
+                            <div
+                              className={`p-4 rounded-xl border text-xs ${
+                                quizResults.passed
+                                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300"
+                                  : "bg-destructive/10 border-destructive/30 text-destructive"
+                              }`}
+                            >
+                              <div className="font-bold mb-1">
+                                {quizResults.passed
+                                  ? "✓ Quiz Passed Successfully!"
+                                  : "✗ Review Incorrect Answers Above"}
+                              </div>
+                              <div>
+                                Score: {quizResults.score}% (Required:{" "}
+                                {quizResults.passThreshold}%)
+                              </div>
+                            </div>
+                          )}
+
+                          <Button
+                            onClick={() => handleQuizSubmit(ex.id)}
+                            disabled={submittingExercise}
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-xs"
+                          >
+                            {submittingExercise ? "Evaluating..." : "Check Answers"}
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Coding Exercise Runner */}
+                      {(ex.type === "coding" || ex.type === "debugging") && (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <select
+                              value={language}
+                              onChange={(e) => setLanguage(e.target.value)}
+                              className="h-9 bg-card text-foreground text-xs font-medium rounded-md px-3 border border-border shadow-xs focus:outline-none"
+                            >
+                              <option value="javascript">JavaScript (Node.js)</option>
+                              <option value="python">Python 3</option>
+                              <option value="cpp">C++ 20</option>
+                              <option value="java">Java 21</option>
+                            </select>
+
+                            {ex.hints && ex.hints.length > 0 && (
+                              <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium">
+                                <Lightbulb className="w-3.5 h-3.5" />
+                                <span>Hint: {ex.hints[0]}</span>
+                              </span>
                             )}
                           </div>
-                        ))}
 
-                        {/* Quiz Feedback */}
-                        {quizResults && (
-                          <div
-                            className={`p-4 rounded-xl border text-xs ${
-                              quizResults.passed
-                                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-                                : "bg-rose-500/10 border-rose-500/30 text-rose-300"
-                            }`}
-                          >
-                            <div className="font-bold mb-1">
-                              {quizResults.passed
-                                ? "✓ Quiz Passed!"
-                                : "✗ Needs Review"}
-                            </div>
-                            <div>
-                              Score: {quizResults.score}% (Required:{" "}
-                              {quizResults.passThreshold}%)
-                            </div>
+                          {/* Monaco Editor Container adapting to theme */}
+                          <div className="border border-border rounded-xl overflow-hidden h-72 shadow-inner">
+                            <Editor
+                              height="100%"
+                              language={language === "cpp" ? "cpp" : language}
+                              theme={isDark ? "vs-dark" : "light"}
+                              value={code}
+                              onChange={(val) => setCode(val || "")}
+                              options={{
+                                minimap: { enabled: false },
+                                fontSize: 13,
+                                scrollBeyondLastLine: false,
+                                automaticLayout: true,
+                              }}
+                            />
                           </div>
-                        )}
 
-                        <button
-                          onClick={() => handleQuizSubmit(ex.id)}
-                          disabled={submittingExercise}
-                          className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all cursor-pointer"
-                        >
-                          {submittingExercise ? "Evaluating..." : "Check Answers"}
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Coding / Debugging Type Exercise */}
-                    {(ex.type === "coding" || ex.type === "debugging") && (
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <select
-                            value={language}
-                            onChange={(e) => setLanguage(e.target.value)}
-                            className="bg-zinc-800 text-zinc-300 text-xs rounded-lg px-3 py-1.5 border border-zinc-700 focus:outline-none"
-                          >
-                            <option value="javascript">JavaScript</option>
-                            <option value="python">Python 3</option>
-                            <option value="cpp">C++</option>
-                            <option value="java">Java</option>
-                          </select>
-
-                          {ex.hints && ex.hints.length > 0 && (
-                            <span className="text-xs text-amber-400 flex items-center gap-1">
-                              <Lightbulb className="w-3.5 h-3.5" />
-                              <span>Hint: {ex.hints[0]}</span>
-                            </span>
+                          {/* Test Feedback */}
+                          {executionFeedback && (
+                            <div
+                              className={`p-4 rounded-xl border text-xs font-mono ${
+                                executionFeedback.passed
+                                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+                                  : "bg-destructive/10 border-destructive/30 text-destructive"
+                              }`}
+                            >
+                              <div className="font-bold mb-1">
+                                {executionFeedback.passed
+                                  ? "✓ All Test Cases Passed!"
+                                  : "✗ Test Case Failures Detected"}
+                              </div>
+                              <div>
+                                Passed {executionFeedback.passedCount} of{" "}
+                                {executionFeedback.totalCount} test suites
+                              </div>
+                            </div>
                           )}
-                        </div>
 
-                        {/* Monaco Editor Container */}
-                        <div className="border border-zinc-800 rounded-xl overflow-hidden h-72">
-                          <Editor
-                            height="100%"
-                            language={language === "cpp" ? "cpp" : language}
-                            theme="vs-dark"
-                            value={code}
-                            onChange={(val) => setCode(val || "")}
-                            options={{
-                              minimap: { enabled: false },
-                              fontSize: 13,
-                              scrollBeyondLastLine: false,
-                              automaticLayout: true,
-                            }}
-                          />
-                        </div>
-
-                        {/* Feedback / Test Results */}
-                        {executionFeedback && (
-                          <div
-                            className={`p-4 rounded-xl border text-xs font-mono ${
-                              executionFeedback.passed
-                                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-                                : "bg-rose-500/10 border-rose-500/30 text-rose-300"
-                            }`}
-                          >
-                            <div className="font-bold mb-1">
-                              {executionFeedback.passed
-                                ? "✓ All Test Cases Passed"
-                                : "✗ Some Test Cases Failed"}
-                            </div>
-                            <div>
-                              Passed {executionFeedback.passedCount} of{" "}
-                              {executionFeedback.totalCount} tests
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="flex items-center gap-3">
-                          <button
+                          <Button
                             onClick={() => handleCodeSubmit(ex.id)}
                             disabled={submittingExercise}
-                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all cursor-pointer"
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-xs gap-1.5"
                           >
                             <Play className="w-3.5 h-3.5" />
                             <span>
                               {submittingExercise
-                                ? "Executing Sandbox..."
+                                ? "Executing in Sandbox..."
                                 : "Run & Submit Code"}
                             </span>
-                          </button>
+                          </Button>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Bottom Navigation */}
+              <div className="pt-8 border-t border-border flex items-center justify-between">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (currentLessonIndex > 0) {
+                      setActiveLessonId(allLessons[currentLessonIndex - 1].id);
+                    }
+                  }}
+                  disabled={currentLessonIndex <= 0}
+                  className="gap-1.5 border-border text-foreground hover:bg-muted font-medium text-xs h-9"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>Previous</span>
+                </Button>
+
+                <Button
+                  onClick={handleCompleteAndNext}
+                  disabled={completing}
+                  className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs h-9 shadow-xs"
+                >
+                  <span>{completing ? "Saving..." : lesson.nextLessonId ? "Complete & Next" : "Complete Path"}</span>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
               </div>
-            )}
-
-            {/* Bottom Complete & Next Button */}
-            <div className="mt-auto pt-10 pb-6 flex items-center justify-between border-t border-zinc-800">
-              <span className="text-xs text-zinc-500">
-                {lesson.nextLessonId ? "Next: Upcoming Lesson" : "Course Milestone"}
-              </span>
-
-              <button
-                onClick={handleCompleteAndNext}
-                disabled={completing}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition-all cursor-pointer"
-              >
-                <span>
-                  {completing
-                    ? "Saving..."
-                    : lesson.nextLessonId
-                    ? "Complete & Next Lesson"
-                    : "Finish Course"}
-                </span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
             </div>
-          </div>
-        )}
+          )}
+        </main>
       </div>
     </div>
   );
