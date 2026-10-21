@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Presentation,
   ArrowRight,
+  Compass,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -94,10 +95,10 @@ export function Navbar() {
   const isTeacher = Boolean(user && (user.isTeacher || ["teacher", "faculty", "instructor"].includes(String(user.role || "").toLowerCase())));
 
   const navLinks = [
+    { name: "Learning", href: "/learning", icon: Compass },
     { name: "Problems", href: "/problems", icon: Code2 },
     { name: "Assessments", href: "/assessments", icon: ClipboardList },
     { name: "Contests", href: "/contests", icon: Trophy },
-    { name: "Contests Leaderboard", href: "/contests/leaderboard", icon: BarChart3 },
     { name: "Leaderboard", href: "/leaderboard", icon: BarChart3 },
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   ];

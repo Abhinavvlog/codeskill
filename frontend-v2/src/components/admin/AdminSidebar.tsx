@@ -19,12 +19,22 @@ import {
   BarChart3,
   CircleHelp,
   Bug,
+  Compass,
 } from "lucide-react";
 import gsap from "gsap";
 
 const adminNavItems = [
   { name: "Home", href: "/", icon: Home },
   { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+  {
+    name: "Learning Studio",
+    href: "/admin/learning",
+    icon: Compass,
+    subItems: [
+      { name: "Overview", href: "/admin/learning" },
+      { name: "Learning Paths", href: "/admin/learning/paths" },
+    ],
+  },
   {
     name: "Students",
     href: "/admin/students",

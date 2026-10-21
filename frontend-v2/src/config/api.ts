@@ -654,4 +654,41 @@ export const analyticsAPI = {
   getQuestionAnalytics: (assessmentId: string) => api.get(`/admin/analytics/assessment/${assessmentId}/questions`),
 };
 
+export const learningAPI = {
+  getPaths: (params?: { search?: string; difficulty?: string; tag?: string }) =>
+    api.get("/learning/paths", { params }),
+  getPathBySlug: (slug: string) => api.get(`/learning/paths/${slug}`),
+  enroll: (pathId: string) => api.post(`/learning/paths/${pathId}/enroll`),
+  getCourse: (courseId: string) => api.get(`/learning/courses/${courseId}`),
+  getLesson: (lessonId: string) => api.get(`/learning/lessons/${lessonId}`),
+  completeLesson: (lessonId: string) => api.post(`/learning/lessons/${lessonId}/complete`),
+  submitExercise: (exerciseId: string, data: { code?: string; language?: string; selectedOption?: number; answers?: Record<string, number> }) =>
+    api.post(`/learning/exercises/${exerciseId}/submit`, data),
+  getMyProgress: () => api.get("/learning/me/progress"),
+  getMyAchievements: () => api.get("/learning/me/achievements"),
+  getMyCertificates: () => api.get("/learning/me/certificates"),
+  issueCertificate: (pathId: string) => api.post(`/learning/paths/${pathId}/certify`),
+};
+
+export const adminLearningAPI = {
+  getOverview: () => api.get("/admin/learning/overview"),
+  getPaths: () => api.get("/admin/learning/paths"),
+  createPath: (data: any) => api.post("/admin/learning/paths", data),
+  updatePath: (id: string, data: any) => api.patch(`/admin/learning/paths/${id}`, data),
+  publishPath: (id: string) => api.post(`/admin/learning/paths/${id}/publish`),
+  getCourses: () => api.get("/admin/learning/courses"),
+  createCourse: (data: any) => api.post("/admin/learning/courses", data),
+  createModule: (courseId: string, data: any) => api.post(`/admin/learning/courses/${courseId}/modules`, data),
+  createLesson: (moduleId: string, data: any) => api.post(`/admin/learning/modules/${moduleId}/lessons`, data),
+  createExercise: (lessonId: string, data: any) => api.post(`/admin/learning/lessons/${lessonId}/exercises`, data),
+  getBadges: () => api.get("/admin/learning/badges"),
+  createBadge: (data: any) => api.post("/admin/learning/badges", data),
+  createTemplate: (data: any) => api.post("/admin/learning/certificate-templates", data),
+  revokeCertificate: (id: string, reason: string) => api.post(`/admin/learning/certificates/${id}/revoke`, { reason }),
+};
+
+export const certificateVerificationAPI = {
+  verify: (credentialId: string) => api.get(`/certificates/verify/${credentialId}`),
+};
+
 export default api;
