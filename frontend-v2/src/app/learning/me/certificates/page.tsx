@@ -4,31 +4,30 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Award,
-  ArrowLeft,
-  ExternalLink,
   ShieldCheck,
-  CheckCircle2,
+  ExternalLink,
   Copy,
   Check,
-  Download,
+  ArrowLeft,
   Calendar,
   Sparkles,
 } from "lucide-react";
 import { learningAPI } from "@/config/api";
 import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
 
 interface CertificateItem {
   id: string;
   credentialId: string;
-  pathTitle: string;
   recipientName: string;
-  status: "valid" | "revoked" | "expired";
-  issueDate: string;
+  pathTitle: string;
   verificationUrl: string;
-  metadata?: {
-    skills?: string[];
+  issuedAt: string;
+  status: string;
+  metadata: {
     totalHours?: number;
-    completionScore?: number;
+    courseCount?: number;
+    score?: number;
   };
 }
 
@@ -45,9 +44,15 @@ export default function MyCertificatesPage() {
     try {
       setLoading(true);
       const res = await learningAPI.getMyCertificates();
-      setCertificates(res.data || []);
+      const list = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.data)
+        ? res.data.data
+        : [];
+      setCertificates(list);
     } catch (err) {
       console.error("Failed to load certificates", err);
+      setCertificates([]);
     } finally {
       setLoading(false);
     }
@@ -62,55 +67,67 @@ export default function MyCertificatesPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#08080a] flex items-center justify-center">
-        <Spinner className="w-8 h-8 text-indigo-500" />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Spinner className="w-8 h-8 text-primary animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#08080a] text-zinc-100 pb-20">
-      {/* Header */}
-      <div className="border-b border-zinc-800/80 bg-gradient-to-b from-[#111116] to-[#08080a] pt-10 pb-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-background text-foreground pt-24 pb-20 px-6 font-sans">
+      <div className="max-w-[1400px] mx-auto space-y-8">
+        <div>
           <Link
             href="/learning"
-            className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition-colors mb-6"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Learning Catalog</span>
           </Link>
+        </div>
 
+        {/* Header */}
+        <div className="bg-card border border-border rounded-2xl p-6 sm:p-8 shadow-sm">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mb-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 mb-3">
                 <ShieldCheck className="w-3.5 h-3.5" />
                 <span>Verifiable Digital Credentials</span>
               </div>
-              <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
                 My Earned Certificates
               </h1>
-              <p className="mt-2 text-sm text-zinc-400">
-                Official certificates awarded upon 100% verified mastery of learning paths.
+              <p className="mt-2 text-sm sm:text-base text-muted-foreground max-w-xl">
+                Cryptographically verifiable certificates of completion issued by the CodeSkill technical training authority.
               </p>
+            </div>
+
+            <div className="flex items-center gap-3 bg-muted/40 border border-border px-5 py-3 rounded-xl shadow-inner">
+              <Award className="w-7 h-7 text-primary" />
+              <div>
+                <div className="text-xs text-muted-foreground font-medium">Total Credentials</div>
+                <div className="text-xl font-bold text-foreground">
+                  {certificates.length} Verified
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
+        {/* Certificates Showcase */}
         {certificates.length === 0 ? (
-          <div className="text-center py-20 bg-zinc-900/40 rounded-3xl border border-zinc-800 p-8">
-            <Award className="w-12 h-12 text-zinc-600 mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-white">No certificates yet</h3>
-            <p className="text-sm text-zinc-400 mt-2 max-w-md mx-auto">
-              Enroll in a learning path, complete all mandatory reading lessons, quizzes, and coding exercises to claim your official credential.
+          <div className="text-center py-20 bg-card rounded-xl border border-border p-8 shadow-sm">
+            <Award className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-foreground">No Certificates Earned Yet</h3>
+            <p className="text-muted-foreground text-sm mt-1 max-w-sm mx-auto">
+              Enroll in a learning path, pass all mandatory practice exercises with 70%+ score, and claim your verified digital credential.
             </p>
             <Link
               href="/learning"
-              className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all"
+              className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-md bg-primary text-primary-foreground text-sm font-semibold transition-all shadow-sm"
             >
-              <span>Explore Learning Paths</span>
+              <Sparkles className="w-4 h-4" />
+              <span>Browse Learning Paths</span>
             </Link>
           </div>
         ) : (
@@ -118,78 +135,71 @@ export default function MyCertificatesPage() {
             {certificates.map((cert) => (
               <div
                 key={cert.id}
-                className="bg-gradient-to-b from-[#14141a] to-[#0c0c10] border border-zinc-800 rounded-3xl p-7 shadow-xl flex flex-col justify-between"
+                className="bg-card border border-border rounded-xl p-6 hover:border-foreground/20 hover:shadow-md transition-all shadow-sm flex flex-col justify-between"
               >
                 <div>
-                  <div className="flex items-center justify-between gap-3 mb-4">
-                    <span className="font-mono text-xs font-bold text-indigo-400 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-muted text-foreground border border-border">
                       {cert.credentialId}
                     </span>
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
-                        cert.status === "valid"
-                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                          : "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                      } capitalize`}
-                    >
-                      {cert.status}
+                    <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Valid</span>
                     </span>
                   </div>
 
-                  <h3 className="text-xl font-extrabold text-white">
+                  <h3 className="text-lg font-bold text-foreground mb-1">
                     {cert.pathTitle}
                   </h3>
-                  <div className="text-xs text-zinc-400 mt-1">
-                    Awarded to <span className="text-zinc-200 font-semibold">{cert.recipientName}</span>
-                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Issued to <span className="font-semibold text-foreground">{cert.recipientName}</span>
+                  </p>
 
-                  <div className="flex items-center gap-2 mt-4 text-xs text-zinc-500">
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span>
-                      Issued on {new Date(cert.issueDate).toLocaleDateString()}
-                    </span>
-                  </div>
-
-                  {cert.metadata?.skills && cert.metadata.skills.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-5">
-                      {cert.metadata.skills.map((skill, sIdx) => (
-                        <span
-                          key={sIdx}
-                          className="px-2 py-0.5 rounded-md bg-zinc-800/80 text-[11px] font-medium text-zinc-300"
-                        >
-                          {skill}
-                        </span>
-                      ))}
+                  <div className="grid grid-cols-2 gap-3 p-3 bg-muted/40 rounded-lg border border-border text-xs mb-4">
+                    <div>
+                      <span className="text-muted-foreground text-[11px] block">Issued Date</span>
+                      <span className="font-semibold text-foreground">
+                        {new Date(cert.issuedAt).toLocaleDateString()}
+                      </span>
                     </div>
-                  )}
+                    <div>
+                      <span className="text-muted-foreground text-[11px] block">Curriculum</span>
+                      <span className="font-semibold text-foreground">
+                        {cert.metadata?.courseCount || 1} Courses Verified
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="mt-8 pt-5 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-3">
-                  <button
-                    onClick={() => handleCopyLink(cert.credentialId)}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-200 transition-colors cursor-pointer"
-                  >
-                    {copiedId === cert.credentialId ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                        <span className="text-emerald-400">Copied Link!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Share Verification</span>
-                      </>
-                    )}
-                  </button>
-
+                <div className="pt-4 border-t border-border flex items-center gap-2">
                   <Link
                     href={`/verify/${cert.credentialId}`}
                     target="_blank"
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-md bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold transition-colors shadow-sm"
                   >
-                    <span>View Public Credential</span>
+                    <span>View Public Certificate</span>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </Link>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCopyLink(cert.credentialId)}
+                    className="h-8 px-3 gap-1.5 border-border text-foreground hover:bg-muted text-xs"
+                    title="Copy verification link"
+                  >
+                    {copiedId === cert.credentialId ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span>Share</span>
+                      </>
+                    )}
+                  </Button>
                 </div>
               </div>
             ))}
