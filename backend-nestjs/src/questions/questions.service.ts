@@ -1878,7 +1878,11 @@ export class QuestionsService {
             existing.codeSnippet = doc.codeSnippet || existing.codeSnippet;
             existing.language = doc.language || existing.language;
             existing.tags = [...new Set([...(existing.tags || []), ...(doc.tags || [])])];
-            if (doc.questionType === 'coding') existing.status = doc.status;
+            if (doc.questionType === 'coding') {
+              existing.status = doc.status;
+              existing.timeLimit = doc.timeLimit;
+              existing.memoryLimit = doc.memoryLimit;
+            }
             existing.metadata = {
               ...(existing.metadata || {}),
               ...doc.metadata,

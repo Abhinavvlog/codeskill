@@ -21,6 +21,7 @@ import {
   Filter,
 } from "lucide-react";
 import { adminStudentsAPI } from "@/config/api";
+import { importErrorMessage } from "@/lib/import-error";
 import { Spinner } from "@/components/ui/spinner";
 import { SUPPORTED_SECTIONS } from "@/lib/sections";
 
@@ -98,6 +99,10 @@ export default function ImportStudentsPage() {
   };
 
   const handleFileSelected = async (selectedFile: File) => {
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      setErrorMessage("Student files must be 10 MiB or smaller.");
+      return;
+    }
     setFile(selectedFile);
     setErrorMessage(null);
     setPreviewData(null);
@@ -112,8 +117,7 @@ export default function ImportStudentsPage() {
       setSelectedSheet(res.data.selectedSheet || "");
     } catch (err: any) {
       setErrorMessage(
-        err.response?.data?.message ||
-          "Failed to parse and validate spreadsheet. Please verify file format.",
+        importErrorMessage(err, "Failed to parse and validate spreadsheet. Please verify file format."),
       );
     } finally {
       setIsValidating(false);
@@ -130,8 +134,7 @@ export default function ImportStudentsPage() {
       setPreviewData(res.data);
     } catch (err: any) {
       setErrorMessage(
-        err.response?.data?.message ||
-          "Failed to re-validate spreadsheet with updated defaults.",
+        importErrorMessage(err, "Failed to re-validate spreadsheet with updated defaults."),
       );
     } finally {
       setIsValidating(false);
@@ -158,12 +161,8 @@ export default function ImportStudentsPage() {
       }
       setImportResult(result);
     } catch (err: any) {
-      const blockedByFirewall = err.response?.status === 403 &&
-        typeof err.response?.data !== "object";
       setErrorMessage(
-        `${blockedByFirewall
-          ? "Import request was blocked (HTTP 403). Ask the site administrator to check the firewall body-size rule."
-          : err.response?.data?.message || "Failed to commit student import into database."} Some batches may have succeeded. Retry safely; existing students will be skipped.`,
+        `${importErrorMessage(err, "Failed to commit student import into database.")} Some batches may have succeeded. Retry safely; existing students will be skipped.`,
       );
     } finally {
       setIsCommitting(false);

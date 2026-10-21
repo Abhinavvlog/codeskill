@@ -73,7 +73,9 @@ resource "aws_wafv2_web_acl" "main" {
           not_statement {
             statement {
               regex_match_statement {
-                regex_string = "^/api/admin/(students|questions)/import/(preview|confirm|auto)$"
+                # Preview is POST /import (there is no /import/preview route).
+                # Anchor the exception so unrelated admin URLs stay protected.
+                regex_string = "^/api/admin/(students/import(/confirm)?|questions/import(/(confirm|auto))?)/?$"
                 field_to_match {
                   uri_path {}
                 }

@@ -183,7 +183,7 @@ function EditQuestionContent() {
             constraints: constraintsString,
           },
           solutionExplanation: {
-            content: data.explanation || "",
+            content: data.explanation || data.metadata?.solutionExplanation || "",
             timeComplexity: data.metadata?.timeComplexity || "",
             spaceComplexity: data.metadata?.spaceComplexity || "",
           },
