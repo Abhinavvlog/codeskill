@@ -17,6 +17,8 @@ import {
   Copy,
   Check,
   ArrowLeft,
+  X,
+  Info,
 } from "lucide-react";
 import { certificateVerificationAPI } from "@/config/api";
 import { Spinner } from "@/components/ui/spinner";
@@ -41,6 +43,9 @@ export default function PublicCertificateVerificationPage({
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showLinkedInModal, setShowLinkedInModal] = useState(false);
+  const [copiedPostText, setCopiedPostText] = useState(false);
 
   useEffect(() => {
     verify();
@@ -71,36 +76,41 @@ export default function PublicCertificateVerificationPage({
     setTimeout(() => setCopied(false), 2500);
   };
 
+  const handleCopyField = (fieldName: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
   const handlePrint = () => {
     window.print();
   };
 
-  const handleShareLinkedIn = () => {
-    const currentUrl = window.location.href;
+  const currentUrl = typeof window !== "undefined" ? window.location.href : "";
+  const certName = result?.learningPath || "Data Structures & Algorithms in Practice";
+  const orgName = "Chandigarh University";
+  const issueDate = result?.issuedAt ? new Date(result.issuedAt) : new Date();
+  const issueYear = issueDate.getFullYear();
+  const issueMonth = issueDate.getMonth() + 1;
+
+  const linkedInAddUrl = `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(
+    certName
+  )}&organizationName=${encodeURIComponent(
+    orgName
+  )}&issueYear=${issueYear}&issueMonth=${issueMonth}&certUrl=${encodeURIComponent(
+    currentUrl
+  )}&certId=${encodeURIComponent(result?.credentialId || credentialId)}`;
+
+  const linkedInPostText = `🎓 Proud to share that I have earned the Certificate of Excellence in ${certName} from Chandigarh University via CodeSkill! 🚀\n\nVerified Credential ID: ${credentialId}\nCheck authenticity record: ${currentUrl}\n\n#ChandigarhUniversity #CodeSkill #DSA #ContinuousLearning #EngineeringExcellence`;
+
+  const handleOpenLinkedInPost = () => {
+    navigator.clipboard.writeText(linkedInPostText);
+    setCopiedPostText(true);
+    setTimeout(() => setCopiedPostText(false), 3000);
     const shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(
       currentUrl
     )}`;
     window.open(shareUrl, "_blank", "noopener,noreferrer,width=650,height=600");
-  };
-
-  const handleAddToLinkedInProfile = () => {
-    if (!result) return;
-    const certName = result.learningPath || "Data Structures & Algorithms in Practice";
-    const orgName = "Chandigarh University";
-    const currentUrl = window.location.href;
-    const issueDate = result.issuedAt ? new Date(result.issuedAt) : new Date();
-    const issueYear = issueDate.getFullYear();
-    const issueMonth = issueDate.getMonth() + 1;
-
-    const linkedInUrl = `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(
-      certName
-    )}&organizationName=${encodeURIComponent(
-      orgName
-    )}&issueYear=${issueYear}&issueMonth=${issueMonth}&certUrl=${encodeURIComponent(
-      currentUrl
-    )}&certId=${encodeURIComponent(result.credentialId)}`;
-
-    window.open(linkedInUrl, "_blank", "noopener,noreferrer");
   };
 
   if (loading) {
@@ -115,7 +125,7 @@ export default function PublicCertificateVerificationPage({
     <div className="min-h-screen bg-background text-foreground flex flex-col font-sans transition-colors">
       {/* Top Banner / Verification Header (Hidden on Print) */}
       <header className="print:hidden border-b border-border bg-card/60 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 py-3 sm:px-6 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-4 py-2.5 sm:px-6 flex items-center justify-between">
           <Link
             href="/learning"
             className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
@@ -155,54 +165,43 @@ export default function PublicCertificateVerificationPage({
 
         {/* Action Toolbar (Hidden on Print) */}
         {result?.valid && (
-          <div className="print:hidden flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 py-2">
+          <div className="print:hidden flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 py-1">
             <Button
               onClick={handlePrint}
               variant="default"
               size="sm"
-              className="gap-1.5 bg-primary text-primary-foreground font-semibold shadow-sm"
+              className="gap-1.5 bg-primary text-primary-foreground font-semibold shadow-sm text-xs h-8"
             >
-              <Printer className="w-4 h-4" />
+              <Printer className="w-3.5 h-3.5" />
               <span>Print / Download PDF</span>
             </Button>
 
             <Button
-              onClick={handleShareLinkedIn}
+              onClick={() => setShowLinkedInModal(true)}
               variant="outline"
               size="sm"
-              className="gap-1.5 border-border bg-card text-foreground hover:bg-muted font-semibold shadow-sm"
+              className="gap-1.5 border-border bg-card text-foreground hover:bg-muted font-semibold shadow-sm text-xs h-8"
             >
-              {/* LinkedIn SVG Icon */}
-              <svg className="w-4 h-4 fill-[#0A66C2]" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 fill-[#0A66C2]" viewBox="0 0 24 24">
                 <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 8.76c-.97 0-1.75-.79-1.75-1.76s.78-1.75 1.75-1.75 1.75.78 1.75 1.75-.78 1.76-1.75 1.76m1.4 9.74v-8.37H5.06v8.37h2.8z" />
               </svg>
-              <span>Share on LinkedIn</span>
-            </Button>
-
-            <Button
-              onClick={handleAddToLinkedInProfile}
-              variant="outline"
-              size="sm"
-              className="gap-1.5 border-border bg-card text-foreground hover:bg-muted font-semibold shadow-sm"
-            >
-              <Award className="w-4 h-4 text-amber-500" />
-              <span>Add to LinkedIn Profile</span>
+              <span>Add / Post to LinkedIn</span>
             </Button>
 
             <Button
               onClick={handleCopyLink}
               variant="outline"
               size="sm"
-              className="gap-1.5 border-border bg-card text-foreground hover:bg-muted font-semibold shadow-sm"
+              className="gap-1.5 border-border bg-card text-foreground hover:bg-muted font-semibold shadow-sm text-xs h-8"
             >
               {copied ? (
                 <>
-                  <Check className="w-4 h-4 text-emerald-500" />
+                  <Check className="w-3.5 h-3.5 text-emerald-500" />
                   <span>Link Copied</span>
                 </>
               ) : (
                 <>
-                  <Copy className="w-4 h-4 text-muted-foreground" />
+                  <Copy className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>Copy Verification URL</span>
                 </>
               )}
@@ -212,7 +211,7 @@ export default function PublicCertificateVerificationPage({
 
         {/* Certificate Display Area */}
         {result?.valid ? (
-          <div className="py-2">
+          <div className="py-1">
             <ChandigarhUniversityCertificate data={result} />
           </div>
         ) : (
@@ -244,22 +243,22 @@ export default function PublicCertificateVerificationPage({
 
         {/* Metadata Card Below Certificate (Hidden on Print) */}
         {result?.valid && (
-          <div className="print:hidden max-w-5xl mx-auto bg-card border border-border rounded-xl p-6 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-border pb-3">
+          <div className="print:hidden max-w-[820px] mx-auto bg-card border border-border rounded-xl p-4 shadow-sm space-y-3">
+            <div className="flex items-center justify-between border-b border-border pb-2.5">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-emerald-500" />
-                <h3 className="text-sm font-bold text-foreground">
+                <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                <h3 className="text-xs font-bold text-foreground">
                   Official Verification & Issuance Audit
                 </h3>
               </div>
-              <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">
+              <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">
                 STATUS: VALID & ACTIVE
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px]">
               <div>
-                <span className="text-muted-foreground font-medium block">
+                <span className="text-muted-foreground font-medium block text-[10px]">
                   Issuing Institution
                 </span>
                 <span className="text-foreground font-semibold">
@@ -267,7 +266,7 @@ export default function PublicCertificateVerificationPage({
                 </span>
               </div>
               <div>
-                <span className="text-muted-foreground font-medium block">
+                <span className="text-muted-foreground font-medium block text-[10px]">
                   Accreditation
                 </span>
                 <span className="text-foreground font-semibold">
@@ -275,7 +274,7 @@ export default function PublicCertificateVerificationPage({
                 </span>
               </div>
               <div>
-                <span className="text-muted-foreground font-medium block">
+                <span className="text-muted-foreground font-medium block text-[10px]">
                   Issuance Date
                 </span>
                 <span className="text-foreground font-semibold">
@@ -285,7 +284,7 @@ export default function PublicCertificateVerificationPage({
                 </span>
               </div>
               <div>
-                <span className="text-muted-foreground font-medium block">
+                <span className="text-muted-foreground font-medium block text-[10px]">
                   Record Ledger
                 </span>
                 <span className="text-foreground font-semibold">
@@ -298,11 +297,171 @@ export default function PublicCertificateVerificationPage({
       </main>
 
       {/* Footer (Hidden on Print) */}
-      <footer className="print:hidden border-t border-border py-6 text-center text-xs text-muted-foreground">
+      <footer className="print:hidden border-t border-border py-4 text-center text-xs text-muted-foreground">
         <p>
           © {new Date().getFullYear()} Chandigarh University · Department of Computer Science & Engineering. All rights reserved.
         </p>
       </footer>
+
+      {/* LinkedIn Integration & Sharing Assistant Modal */}
+      {showLinkedInModal && result?.valid && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-card border border-border rounded-2xl max-w-lg w-full p-6 shadow-2xl relative space-y-5">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-[#0A66C2]/10 border border-[#0A66C2]/30 flex items-center justify-center text-[#0A66C2]">
+                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                    <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 8.76c-.97 0-1.75-.79-1.75-1.76s.78-1.75 1.75-1.75 1.75.78 1.75 1.75-.78 1.76-1.75 1.76m1.4 9.74v-8.37H5.06v8.37h2.8z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">
+                    LinkedIn Certificate Integration
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    Add to profile licenses or share announcement post
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowLinkedInModal(false)}
+                className="w-7 h-7 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Action 1: Add to LinkedIn Profile Licenses & Certifications */}
+            <div className="space-y-3 bg-muted/30 border border-border rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <Award className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Option 1: Add to Licenses & Certifications</span>
+                  </span>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Features this credential permanently on your LinkedIn profile.
+                  </p>
+                </div>
+
+                <a
+                  href={linkedInAddUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#0A66C2] hover:bg-[#0A66C2]/90 text-white text-xs font-semibold shadow-sm transition-colors"
+                >
+                  <span>Add to Profile</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+
+              {/* Pre-filled fields with 1-click copy helpers */}
+              <div className="space-y-1.5 pt-2 border-t border-border/60 text-[11px]">
+                <div className="flex items-center justify-between py-0.5">
+                  <span className="text-muted-foreground">Certification:</span>
+                  <div className="flex items-center gap-1.5 font-medium text-foreground">
+                    <span className="truncate max-w-[200px]">{certName}</span>
+                    <button
+                      onClick={() => handleCopyField("name", certName)}
+                      className="text-primary hover:underline text-[10px]"
+                    >
+                      {copiedField === "name" ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between py-0.5">
+                  <span className="text-muted-foreground">Issuing Org:</span>
+                  <div className="flex items-center gap-1.5 font-medium text-foreground">
+                    <span>{orgName}</span>
+                    <button
+                      onClick={() => handleCopyField("org", orgName)}
+                      className="text-primary hover:underline text-[10px]"
+                    >
+                      {copiedField === "org" ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between py-0.5">
+                  <span className="text-muted-foreground">Credential ID:</span>
+                  <div className="flex items-center gap-1.5 font-mono font-medium text-foreground">
+                    <span>{credentialId}</span>
+                    <button
+                      onClick={() => handleCopyField("id", credentialId)}
+                      className="text-primary hover:underline text-[10px]"
+                    >
+                      {copiedField === "id" ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action 2: Share Post on LinkedIn Feed */}
+            <div className="space-y-3 bg-muted/30 border border-border rounded-xl p-4">
+              <div>
+                <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <Share2 className="w-3.5 h-3.5 text-primary" />
+                  <span>Option 2: Share Announcement on LinkedIn Feed</span>
+                </span>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Copy pre-crafted announcement text and open the post composer.
+                </p>
+              </div>
+
+              {/* Pre-crafted post preview box */}
+              <div className="p-2.5 rounded-lg bg-background border border-border text-[11px] text-muted-foreground font-sans whitespace-pre-line leading-relaxed max-h-24 overflow-y-auto">
+                {linkedInPostText}
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <Button
+                  onClick={handleOpenLinkedInPost}
+                  size="sm"
+                  className="flex-1 gap-1.5 bg-[#0A66C2] hover:bg-[#0A66C2]/90 text-white text-xs font-semibold h-8"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Copy Text & Open LinkedIn</span>
+                </Button>
+
+                <Button
+                  onClick={() => {
+                    navigator.clipboard.writeText(linkedInPostText);
+                    setCopiedPostText(true);
+                    setTimeout(() => setCopiedPostText(false), 2500);
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 border-border text-foreground hover:bg-muted text-xs h-8"
+                >
+                  {copiedPostText ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-500" />
+                      <span>Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span>Copy Text</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Localhost Preview Note */}
+              <div className="flex items-start gap-1.5 text-[10px] text-muted-foreground bg-muted/50 p-2 rounded-lg border border-border">
+                <Info className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Note on localhost preview:</strong> LinkedIn servers cannot fetch preview images from <code>localhost:3000</code>. Simply paste the copied announcement text into your post. On production domains, LinkedIn automatically shows rich preview cards.
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

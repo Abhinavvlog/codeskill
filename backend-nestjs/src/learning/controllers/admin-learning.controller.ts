@@ -128,6 +128,18 @@ export class AdminLearningController {
     return this.adminService.createBadge(dto);
   }
 
+  @Get('certificates')
+  @ApiOperation({ summary: 'List all issued certificates for admin' })
+  async getCertificates() {
+    return this.adminService.getAllCertificates();
+  }
+
+  @Get('certificate-templates')
+  @ApiOperation({ summary: 'List all certificate templates' })
+  async getTemplates() {
+    return this.adminService.getCertificateTemplates();
+  }
+
   @Post('certificate-templates')
   @ApiOperation({ summary: 'Create certificate template' })
   async createTemplate(@Body() dto: CreateCertificateTemplateDto) {

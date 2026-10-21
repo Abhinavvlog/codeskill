@@ -326,4 +326,16 @@ export class AdminLearningService {
       recentCertificates,
     };
   }
+
+  async getAllCertificates() {
+    return this.certRepo.find({
+      order: { issueDate: 'DESC' },
+    });
+  }
+
+  async getCertificateTemplates() {
+    return this.templateRepo.find({
+      order: { createdAt: 'DESC' },
+    });
+  }
 }

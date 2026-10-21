@@ -683,6 +683,8 @@ export const adminLearningAPI = {
   createExercise: (lessonId: string, data: any) => api.post(`/admin/learning/lessons/${lessonId}/exercises`, data),
   getBadges: () => api.get("/admin/learning/badges"),
   createBadge: (data: any) => api.post("/admin/learning/badges", data),
+  getCertificates: () => api.get("/admin/learning/certificates"),
+  getTemplates: () => api.get("/admin/learning/certificate-templates"),
   createTemplate: (data: any) => api.post("/admin/learning/certificate-templates", data),
   revokeCertificate: (id: string, reason: string) => api.post(`/admin/learning/certificates/${id}/revoke`, { reason }),
 };
