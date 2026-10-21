@@ -19,6 +19,7 @@ import SubmissionDetails from "@/components/Result/SubmissionDetails";
 import SampleTestCasesPanel, { hasSampleContent } from "@/components/problems/SampleTestCasesPanel";
 import { ExecutionFeedbackResult, normalizeVerdict } from "@/lib/submission-feedback";
 import { editorLanguages, canonicalEditorLanguage, editorStarterCode } from '@/lib/editor-languages';
+import { hideEntryPoint, updateSourceFromVisibleEditor } from "@/lib/hidden-entry-point";
 import { ProgrammingLanguageIcon } from "@/components/ui/ProgrammingLanguageIcon";
 import { publicProblemRunCases } from "@/lib/problem-run-cases";
 import Link from "next/link";
@@ -100,6 +101,7 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [showEditorSettings, setShowEditorSettings] = useState(false);
   const [code, setCode] = useState<string>("");
+  const editorCode = hideEntryPoint(code, language)?.visibleCode ?? code;
   const [editorThemeName, setEditorThemeName] = useState("auto");
   const [editorFontSize, setEditorFontSize] = useState(14);
   const [editorFontFamily, setEditorFontFamily] = useState("Roboto Mono");
@@ -1448,8 +1450,8 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
                       height="100%"
                       language={language}
                       theme={editorTheme}
-                      value={code}
-                      onChange={(val) => setCode(val || "")}
+                      value={editorCode}
+                      onChange={(val) => setCode(updateSourceFromVisibleEditor(code, val || "", language))}
                       onMount={handleEditorMount}
                       options={{
                         minimap: { enabled: false },

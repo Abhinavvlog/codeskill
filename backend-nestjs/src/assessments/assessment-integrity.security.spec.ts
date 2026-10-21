@@ -447,6 +447,37 @@ describe('Assessment Integrity & Server-Side Scoring (AUD-002, NEW-001, NEW-002,
     expect(mockAttemptRepo.save).not.toHaveBeenCalled();
   });
 
+  it('returns persisted per-language starter code for student assessment questions', async () => {
+    mockAssessmentRepo.findOne.mockResolvedValue({
+      ...mockAssessment,
+      questions: ['q-coding-1'],
+      shuffleOptions: false,
+    });
+    mockAttemptRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 'attempt-1', assessmentId, studentId: studentUser.id,
+      status: 'in_progress', startedAt: new Date(), questionOrder: ['q-coding-1'],
+      responses: [],
+    });
+    mockAttemptRepo.find.mockResolvedValue([]);
+    mockQuestionRepo.find.mockResolvedValue([{
+      id: 'q-coding-1', question: 'Custom templates', questionType: 'coding',
+      topic: 'Arrays', difficulty: 'easy', supportedLanguages: ['cpp', 'java', 'python3'],
+      starterCode: [
+        { language: 'cpp', code: 'CUSTOM_CPP' },
+        { language: 'java', code: 'CUSTOM_JAVA' },
+        { language: 'python3', code: 'CUSTOM_PYTHON' },
+      ],
+    }]);
+
+    const started = await service.startStudentAttempt(assessmentId, studentUser);
+
+    expect(started.questions[0].starterCode).toEqual([
+      { language: 'cpp', code: 'CUSTOM_CPP' },
+      { language: 'java', code: 'CUSTOM_JAVA' },
+      { language: 'python3', code: 'CUSTOM_PYTHON' },
+    ]);
+  });
+
   it('allows three resumes of the same attempt and rejects the fourth', async () => {
     mockAssessmentRepo.findOne.mockResolvedValue({ ...mockAssessment, durationMinutes: 60 });
     const activeAttempt = {
