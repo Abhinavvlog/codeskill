@@ -171,35 +171,74 @@ export default function MyCertificatesPage() {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-border flex items-center gap-2">
-                  <Link
-                    href={`/verify/${cert.credentialId}`}
-                    target="_blank"
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-md bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold transition-colors shadow-sm"
-                  >
-                    <span>View Public Certificate</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </Link>
+                <div className="pt-4 border-t border-border space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/verify/${cert.credentialId}`}
+                      target="_blank"
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-md bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold transition-colors shadow-sm"
+                    >
+                      <span>View Official Certificate</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </Link>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleCopyLink(cert.credentialId)}
-                    className="h-8 px-3 gap-1.5 border-border text-foreground hover:bg-muted text-xs"
-                    title="Copy verification link"
-                  >
-                    {copiedId === cert.credentialId ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-500" />
-                        <span>Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span>Share</span>
-                      </>
-                    )}
-                  </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleCopyLink(cert.credentialId)}
+                      className="h-8 px-3 gap-1.5 border-border text-foreground hover:bg-muted text-xs"
+                      title="Copy verification link"
+                    >
+                      {copiedId === cert.credentialId ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span>Copy Link</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const url = `${window.location.origin}/verify/${cert.credentialId}`;
+                        const shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`;
+                        window.open(shareUrl, "_blank", "noopener,noreferrer,width=650,height=600");
+                      }}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-border bg-card hover:bg-muted text-[11px] font-semibold text-foreground transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5 fill-[#0A66C2]" viewBox="0 0 24 24">
+                        <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 8.76c-.97 0-1.75-.79-1.75-1.76s.78-1.75 1.75-1.75 1.75.78 1.75 1.75-.78 1.76-1.75 1.76m1.4 9.74v-8.37H5.06v8.37h2.8z" />
+                      </svg>
+                      <span>Share on LinkedIn</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const url = `${window.location.origin}/verify/${cert.credentialId}`;
+                        const issueDate = new Date(cert.issuedAt);
+                        const issueYear = issueDate.getFullYear();
+                        const issueMonth = issueDate.getMonth() + 1;
+                        const linkedInUrl = `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(
+                          cert.pathTitle
+                        )}&organizationName=${encodeURIComponent(
+                          "Chandigarh University"
+                        )}&issueYear=${issueYear}&issueMonth=${issueMonth}&certUrl=${encodeURIComponent(
+                          url
+                        )}&certId=${encodeURIComponent(cert.credentialId)}`;
+                        window.open(linkedInUrl, "_blank", "noopener,noreferrer");
+                      }}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-border bg-card hover:bg-muted text-[11px] font-semibold text-foreground transition-colors"
+                    >
+                      <Award className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Add to LinkedIn</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

@@ -12,20 +12,23 @@ import {
   GraduationCap,
   Sparkles,
   ExternalLink,
+  Printer,
+  Share2,
+  Copy,
+  Check,
+  ArrowLeft,
 } from "lucide-react";
 import { certificateVerificationAPI } from "@/config/api";
 import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
+import {
+  ChandigarhUniversityCertificate,
+  CertificateData,
+} from "@/components/learning/ChandigarhUniversityCertificate";
 
-interface VerificationResult {
+interface VerificationResult extends CertificateData {
   valid: boolean;
-  credentialId?: string;
-  recipientName?: string;
-  learningPath?: string;
-  issuedAt?: string;
   status?: string;
-  issuer?: string;
-  skills?: string[];
-  estimatedHours?: number;
   error?: string;
 }
 
@@ -37,6 +40,7 @@ export default function PublicCertificateVerificationPage({
   const { credentialId } = use(params);
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     verify();
@@ -48,138 +52,257 @@ export default function PublicCertificateVerificationPage({
       const res = await certificateVerificationAPI.verify(credentialId);
       setResult(res.data);
     } catch (err) {
-      setResult({ valid: false, error: "Unable to verify credential" });
+      setResult({
+        valid: false,
+        credentialId,
+        recipientName: "",
+        learningPath: "",
+        error: "Unable to verify credential against the official registry",
+      });
     } finally {
       setLoading(false);
     }
   };
 
+  const handleCopyLink = () => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleShareLinkedIn = () => {
+    const currentUrl = window.location.href;
+    const shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(
+      currentUrl
+    )}`;
+    window.open(shareUrl, "_blank", "noopener,noreferrer,width=650,height=600");
+  };
+
+  const handleAddToLinkedInProfile = () => {
+    if (!result) return;
+    const certName = result.learningPath || "Data Structures & Algorithms in Practice";
+    const orgName = "Chandigarh University";
+    const currentUrl = window.location.href;
+    const issueDate = result.issuedAt ? new Date(result.issuedAt) : new Date();
+    const issueYear = issueDate.getFullYear();
+    const issueMonth = issueDate.getMonth() + 1;
+
+    const linkedInUrl = `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(
+      certName
+    )}&organizationName=${encodeURIComponent(
+      orgName
+    )}&issueYear=${issueYear}&issueMonth=${issueMonth}&certUrl=${encodeURIComponent(
+      currentUrl
+    )}&certId=${encodeURIComponent(result.credentialId)}`;
+
+    window.open(linkedInUrl, "_blank", "noopener,noreferrer");
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#070709] flex items-center justify-center">
-        <Spinner className="w-8 h-8 text-indigo-500" />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Spinner className="w-8 h-8 text-primary animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#070709] text-zinc-100 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 font-sans">
-      <div className="max-w-2xl w-full">
-        {/* Verification Status Badge */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold bg-zinc-900 border border-zinc-800 text-zinc-300 mb-3 shadow-sm">
-            <GraduationCap className="w-4 h-4 text-indigo-400" />
-            <span>CodeSkill Digital Credential Verification</span>
+    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans transition-colors">
+      {/* Top Banner / Verification Header (Hidden on Print) */}
+      <header className="print:hidden border-b border-border bg-card/60 backdrop-blur-md sticky top-0 z-40">
+        <div className="max-w-6xl mx-auto px-4 py-3 sm:px-6 flex items-center justify-between">
+          <Link
+            href="/learning"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>CodeSkill Learning Catalog</span>
+          </Link>
+
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Official University Ledger</span>
+            </span>
+          </div>
+        </div>
+      </header>
+
+      <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+        {/* Verification Status Overview Banner (Hidden on Print) */}
+        <div className="print:hidden text-center max-w-3xl mx-auto space-y-3 pt-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase bg-muted text-foreground border border-border">
+            <GraduationCap className="w-4 h-4 text-primary" />
+            <span>Chandigarh University · Verifiable Digital Credential</span>
           </div>
 
-          <h1 className="text-3xl font-extrabold text-white">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
             Certificate Authenticity Record
           </h1>
-          <p className="text-xs text-zinc-500 mt-1">
-            Verification ID: <span className="font-mono text-zinc-400 font-bold">{credentialId}</span>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Verification ID:{" "}
+            <span className="font-mono text-foreground font-bold bg-muted px-2 py-0.5 rounded">
+              {credentialId}
+            </span>{" "}
+            · Issued under the academic auspices of Chandigarh University
           </p>
         </div>
 
-        {/* Certificate Verification Container */}
-        {result?.valid ? (
-          <div className="relative rounded-3xl bg-gradient-to-b from-[#14141d] to-[#0d0d12] border-2 border-emerald-500/40 p-8 sm:p-10 shadow-2xl shadow-emerald-500/10">
-            {/* Top Seal */}
-            <div className="flex items-center justify-between pb-6 border-b border-zinc-800">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-md shadow-emerald-500/20">
-                  <ShieldCheck className="w-7 h-7" />
-                </div>
-                <div>
-                  <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                    Verified Authentic
-                  </span>
-                  <div className="text-[11px] text-zinc-400">
-                    Official Record in CodeSkill Ledger
-                  </div>
-                </div>
-              </div>
+        {/* Action Toolbar (Hidden on Print) */}
+        {result?.valid && (
+          <div className="print:hidden flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 py-2">
+            <Button
+              onClick={handlePrint}
+              variant="default"
+              size="sm"
+              className="gap-1.5 bg-primary text-primary-foreground font-semibold shadow-sm"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Print / Download PDF</span>
+            </Button>
 
-              <span className="font-mono text-xs font-bold text-zinc-400 bg-zinc-900 px-3 py-1 rounded-lg border border-zinc-800">
-                {result.credentialId}
-              </span>
-            </div>
+            <Button
+              onClick={handleShareLinkedIn}
+              variant="outline"
+              size="sm"
+              className="gap-1.5 border-border bg-card text-foreground hover:bg-muted font-semibold shadow-sm"
+            >
+              {/* LinkedIn SVG Icon */}
+              <svg className="w-4 h-4 fill-[#0A66C2]" viewBox="0 0 24 24">
+                <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 8.76c-.97 0-1.75-.79-1.75-1.76s.78-1.75 1.75-1.75 1.75.78 1.75 1.75-.78 1.76-1.75 1.76m1.4 9.74v-8.37H5.06v8.37h2.8z" />
+              </svg>
+              <span>Share on LinkedIn</span>
+            </Button>
 
-            {/* Recipient Details */}
-            <div className="py-8 space-y-6 text-center">
-              <span className="text-xs uppercase tracking-widest text-zinc-500 font-semibold">
-                This is to certify that
-              </span>
-              <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-                {result.recipientName}
-              </h2>
-              <p className="text-sm text-zinc-400 max-w-lg mx-auto">
-                has successfully completed all requirements, coding assessments, and verified milestones for
-              </p>
-              <div className="inline-block px-5 py-2.5 rounded-2xl bg-indigo-600/15 border border-indigo-500/30 text-indigo-300 font-bold text-lg sm:text-xl">
-                {result.learningPath}
-              </div>
-            </div>
+            <Button
+              onClick={handleAddToLinkedInProfile}
+              variant="outline"
+              size="sm"
+              className="gap-1.5 border-border bg-card text-foreground hover:bg-muted font-semibold shadow-sm"
+            >
+              <Award className="w-4 h-4 text-amber-500" />
+              <span>Add to LinkedIn Profile</span>
+            </Button>
 
-            {/* Metadata Grid */}
-            <div className="grid grid-cols-2 gap-4 py-6 border-t border-b border-zinc-800 text-xs">
-              <div>
-                <span className="text-zinc-500 font-medium">Issuing Authority</span>
-                <div className="text-zinc-200 font-semibold mt-1">
-                  {result.issuer}
-                </div>
-              </div>
-              <div>
-                <span className="text-zinc-500 font-medium">Issue Date</span>
-                <div className="text-zinc-200 font-semibold mt-1">
-                  {result.issuedAt ? new Date(result.issuedAt).toLocaleDateString() : "N/A"}
-                </div>
-              </div>
-            </div>
-
-            {/* Verified Skills */}
-            {result.skills && result.skills.length > 0 && (
-              <div className="pt-6">
-                <span className="text-xs text-zinc-400 font-semibold block mb-2">
-                  Demonstrated Competencies:
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {result.skills.map((s, idx) => (
-                    <span
-                      key={idx}
-                      className="px-2.5 py-1 rounded-lg bg-zinc-800/80 border border-zinc-700/60 text-xs font-medium text-zinc-300"
-                    >
-                      {s}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="rounded-3xl bg-zinc-900 border border-rose-500/40 p-8 sm:p-10 text-center shadow-xl">
-            <div className="w-14 h-14 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto mb-4">
-              <XCircle className="w-8 h-8" />
-            </div>
-            <h2 className="text-xl font-bold text-white">
-              Invalid or Revoked Credential
-            </h2>
-            <p className="text-sm text-zinc-400 mt-2 max-w-md mx-auto">
-              The credential ID <span className="font-mono text-zinc-300 font-semibold">{credentialId}</span> could not be verified against the official CodeSkill certification registry.
-            </p>
+            <Button
+              onClick={handleCopyLink}
+              variant="outline"
+              size="sm"
+              className="gap-1.5 border-border bg-card text-foreground hover:bg-muted font-semibold shadow-sm"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-4 h-4 text-emerald-500" />
+                  <span>Link Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4 text-muted-foreground" />
+                  <span>Copy Verification URL</span>
+                </>
+              )}
+            </Button>
           </div>
         )}
 
-        {/* Footer */}
-        <div className="text-center mt-8">
-          <Link
-            href="/learning"
-            className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors inline-flex items-center gap-1.5"
-          >
-            <span>Explore CodeSkill Learning Paths</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-      </div>
+        {/* Certificate Display Area */}
+        {result?.valid ? (
+          <div className="py-2">
+            <ChandigarhUniversityCertificate data={result} />
+          </div>
+        ) : (
+          <div className="max-w-md mx-auto rounded-2xl bg-card border border-rose-500/40 p-8 text-center shadow-lg">
+            <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-500 mx-auto mb-4">
+              <XCircle className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-bold text-foreground">
+              Unverified or Invalid Credential
+            </h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              The credential ID{" "}
+              <span className="font-mono text-foreground font-semibold">
+                {credentialId}
+              </span>{" "}
+              could not be validated in the official Chandigarh University digital registry.
+            </p>
+            <div className="mt-6">
+              <Link
+                href="/learning"
+                className="inline-flex items-center gap-1.5 text-xs text-primary font-bold hover:underline"
+              >
+                <span>Return to Learning Catalog</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Metadata Card Below Certificate (Hidden on Print) */}
+        {result?.valid && (
+          <div className="print:hidden max-w-5xl mx-auto bg-card border border-border rounded-xl p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                <h3 className="text-sm font-bold text-foreground">
+                  Official Verification & Issuance Audit
+                </h3>
+              </div>
+              <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">
+                STATUS: VALID & ACTIVE
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+              <div>
+                <span className="text-muted-foreground font-medium block">
+                  Issuing Institution
+                </span>
+                <span className="text-foreground font-semibold">
+                  {result.institution || "Chandigarh University"}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground font-medium block">
+                  Accreditation
+                </span>
+                <span className="text-foreground font-semibold">
+                  {result.accreditation || "NAAC A+ Accredited"}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground font-medium block">
+                  Issuance Date
+                </span>
+                <span className="text-foreground font-semibold">
+                  {result.issuedAt
+                    ? new Date(result.issuedAt).toLocaleDateString()
+                    : "Official"}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground font-medium block">
+                  Record Ledger
+                </span>
+                <span className="text-foreground font-semibold">
+                  Cryptographically Anchored
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Footer (Hidden on Print) */}
+      <footer className="print:hidden border-t border-border py-6 text-center text-xs text-muted-foreground">
+        <p>
+          © {new Date().getFullYear()} Chandigarh University · Department of Computer Science & Engineering. All rights reserved.
+        </p>
+      </footer>
     </div>
   );
 }

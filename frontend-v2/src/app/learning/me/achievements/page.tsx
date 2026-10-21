@@ -204,9 +204,27 @@ export default function AchievementsPage() {
                     </p>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-border flex items-center justify-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Unlocked</span>
+                  <div className="mt-4 pt-3 border-t border-border space-y-2">
+                    <div className="flex items-center justify-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Unlocked & Verified</span>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        const shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(
+                          `${window.location.origin}/learning/me/achievements`
+                        )}`;
+                        window.open(shareUrl, "_blank", "noopener,noreferrer,width=650,height=600");
+                      }}
+                      className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md border border-border bg-muted/40 hover:bg-muted text-[11px] font-semibold text-foreground transition-colors shadow-sm"
+                      title="Share your badge achievement on LinkedIn"
+                    >
+                      <svg className="w-3.5 h-3.5 fill-[#0A66C2]" viewBox="0 0 24 24">
+                        <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 8.76c-.97 0-1.75-.79-1.75-1.76s.78-1.75 1.75-1.75 1.75.78 1.75 1.75-.78 1.76-1.75 1.76m1.4 9.74v-8.37H5.06v8.37h2.8z" />
+                      </svg>
+                      <span>Share on LinkedIn</span>
+                    </button>
                   </div>
                 </div>
               ))}

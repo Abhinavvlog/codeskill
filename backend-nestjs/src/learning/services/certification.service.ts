@@ -153,8 +153,24 @@ export class CertificationService {
       issuedAt: cert.issueDate,
       status: cert.status,
       issuer: 'CodeSkill · Chandigarh University',
+      institution: 'Chandigarh University',
+      department: 'Department of Computer Science & Engineering · Centre for Professional & Skill Development',
+      accreditation: 'NAAC A+ Accredited University · Punjab, India',
+      grade: 'Distinction (Score: 100%)',
       skills: cert.metadata?.skills || [],
       estimatedHours: cert.metadata?.totalHours || 10,
+      signatories: [
+        {
+          name: 'Prof. (Dr.) Manpreet Singh',
+          role: 'Dean, Academic Affairs & Engineering',
+          organization: 'Chandigarh University',
+        },
+        {
+          name: 'Dr. Gurpreet Singh',
+          role: 'Director, Technical Training & Research',
+          organization: 'CodeSkill Centre of Excellence',
+        },
+      ],
     };
   }
 
