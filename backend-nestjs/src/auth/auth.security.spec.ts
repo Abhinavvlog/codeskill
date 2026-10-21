@@ -181,6 +181,7 @@ describe('Admin password authentication security', () => {
       expect.objectContaining({
         where: [
           { email: expect.objectContaining({ _value: 'admin\\%test\\_user\\\\' }) },
+          { name: expect.objectContaining({ _value: 'admin\\%test\\_user\\\\' }) },
           { uid: expect.objectContaining({ _value: 'admin\\%test\\_user\\\\' }) },
           { username: expect.objectContaining({ _value: 'admin\\%test\\_user\\\\' }) },
         ],
