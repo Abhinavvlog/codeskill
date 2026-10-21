@@ -302,12 +302,13 @@ export const usersAPI = {
 
 // ── Public Problems ──
 export const problemsAPI = {
-  getAll: (page = 1, limit = 20, search = "", category = "All Topics", signal?: AbortSignal) => {
-    const params: { page: number; limit: number; search?: string; category?: string } = { page, limit };
+  getAll: (page = 1, limit = 20, search = "", category = "All Topics", signal?: AbortSignal, difficulty?: string) => {
+    const params: { page: number; limit: number; search?: string; category?: string; difficulty?: string } = { page, limit };
     const query = normalizeProblemQuery(search);
     const topic = normalizeProblemQuery(category, true);
     if (query) params.search = query;
     if (topic) params.category = topic;
+    if (difficulty && difficulty !== "All") params.difficulty = difficulty;
     return api.get("/problems", { params, signal });
   },
   getBySlug: (slug: string) => api.get(`/problems/${slug}`),
