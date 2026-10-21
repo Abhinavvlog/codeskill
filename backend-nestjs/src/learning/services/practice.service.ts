@@ -73,8 +73,19 @@ export class PracticeService {
       let correctCount = 0;
       const questionResults: any[] = [];
 
-      // Check answers
-      const submittedAnswers = dto.answers || {};
+      // Check answers (accept both dictionary map or array format)
+      let submittedAnswers: Record<string, number> = {};
+      if (Array.isArray(dto.answers)) {
+        for (const item of dto.answers) {
+          if (item && item.questionId) {
+            submittedAnswers[item.questionId] =
+              item.selectedOption ?? item.answer ?? item.selected;
+          }
+        }
+      } else if (typeof dto.answers === 'object' && dto.answers !== null) {
+        submittedAnswers = dto.answers;
+      }
+
       for (let i = 0; i < totalQuestions; i++) {
         const q = quizConfig.questions[i];
         const selected =

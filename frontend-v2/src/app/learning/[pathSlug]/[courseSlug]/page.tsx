@@ -21,6 +21,7 @@ import {
   FileText,
   Copy,
   ChevronLeft,
+  X,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { learningAPI } from "@/config/api";
@@ -73,7 +74,7 @@ interface CourseSidebarData {
   }>;
 }
 
-// Professional Markdown Content Renderer (No external library dependency, works in both Light and Dark modes)
+// Professional Markdown Content Renderer with high-contrast Light & Dark typography
 function RichContentRenderer({ content }: { content: string }) {
   const renderedSections = useMemo(() => {
     if (!content) return [];
@@ -94,19 +95,19 @@ function RichContentRenderer({ content }: { content: string }) {
       );
       if (rows.length >= 2) {
         const headers = rows[0];
-        const dataRows = rows.slice(2); // skip separator row like |---|---|
+        const dataRows = rows.slice(2);
         sections.push(
           <div
             key={key}
-            className="my-5 overflow-x-auto border border-border rounded-xl bg-card shadow-sm"
+            className="my-5 overflow-x-auto border border-border rounded-xl bg-card shadow-xs"
           >
             <table className="w-full text-left text-xs sm:text-sm border-collapse">
-              <thead className="bg-muted/60 border-b border-border">
+              <thead className="bg-muted/70 border-b border-border">
                 <tr>
                   {headers.map((h, hIdx) => (
                     <th
                       key={hIdx}
-                      className="px-4 py-2.5 font-semibold text-foreground"
+                      className="px-4 py-3 font-bold text-foreground"
                     >
                       {h}
                     </th>
@@ -115,11 +116,11 @@ function RichContentRenderer({ content }: { content: string }) {
               </thead>
               <tbody className="divide-y divide-border">
                 {dataRows.map((row, rIdx) => (
-                  <tr key={rIdx} className="hover:bg-muted/30 transition-colors">
+                  <tr key={rIdx} className="hover:bg-muted/40 transition-colors">
                     {row.map((cell, cIdx) => (
                       <td
                         key={cIdx}
-                        className="px-4 py-2.5 text-muted-foreground font-mono text-xs"
+                        className="px-4 py-3 text-foreground font-mono text-xs"
                       >
                         {cell}
                       </td>
@@ -138,19 +139,18 @@ function RichContentRenderer({ content }: { content: string }) {
       // Code block start / end
       if (line.trim().startsWith("```")) {
         if (inCodeBlock) {
-          // close code block
           const codeSnippet = codeLines.join("\n");
           sections.push(
             <div
               key={`code-${idx}`}
-              className="my-5 rounded-xl border border-border bg-muted/60 p-4 font-mono text-xs overflow-x-auto text-foreground shadow-sm relative group"
+              className="my-5 rounded-xl border border-border bg-muted/60 p-4 font-mono text-xs overflow-x-auto text-foreground shadow-xs relative group"
             >
               {codeLanguage && (
-                <span className="absolute top-2 right-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                <span className="absolute top-2.5 right-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-background/80 px-2 py-0.5 rounded border border-border">
                   {codeLanguage}
                 </span>
               )}
-              <pre>
+              <pre className="text-foreground">
                 <code>{codeSnippet}</code>
               </pre>
             </div>
@@ -184,7 +184,7 @@ function RichContentRenderer({ content }: { content: string }) {
         sections.push(
           <h3
             key={`h3-${idx}`}
-            className="text-lg sm:text-xl font-bold tracking-tight text-foreground mt-6 mb-2.5"
+            className="text-lg sm:text-xl font-bold tracking-tight text-foreground mt-7 mb-3"
           >
             {line.replace(/^### /, "")}
           </h3>
@@ -193,30 +193,30 @@ function RichContentRenderer({ content }: { content: string }) {
         sections.push(
           <h4
             key={`h4-${idx}`}
-            className="text-base font-semibold text-foreground mt-4 mb-2"
+            className="text-base font-semibold text-foreground mt-5 mb-2"
           >
             {line.replace(/^#### /, "")}
           </h4>
         );
       } else if (line.startsWith("> ")) {
-        // Blockquote / Important callout
+        // Blockquote callout
         sections.push(
           <div
             key={`quote-${idx}`}
-            className="my-4 border-l-4 border-primary bg-primary/5 p-4 rounded-r-xl text-xs sm:text-sm text-foreground flex items-start gap-2.5"
+            className="my-4 border-l-4 border-primary bg-primary/5 p-4 rounded-r-xl text-xs sm:text-sm text-foreground flex items-start gap-3 shadow-xs"
           >
             <Lightbulb className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-            <div className="leading-relaxed">
+            <div className="leading-relaxed font-medium">
               {line.replace(/^> /, "").replace(/\*\*(.*?)\*\*/g, "$1")}
             </div>
           </div>
         );
       } else if (line.trim().startsWith("- ")) {
-        // Bullet point
+        // Bullet list item
         sections.push(
           <div
             key={`li-${idx}`}
-            className="flex items-start gap-2 my-1.5 text-xs sm:text-sm text-muted-foreground"
+            className="flex items-start gap-2.5 my-1.5 text-xs sm:text-sm text-foreground"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
             <span className="leading-relaxed">
@@ -228,7 +228,7 @@ function RichContentRenderer({ content }: { content: string }) {
         sections.push(
           <p
             key={`p-${idx}`}
-            className="my-2.5 text-xs sm:text-sm text-muted-foreground leading-relaxed"
+            className="my-2.5 text-xs sm:text-sm text-foreground leading-relaxed font-normal"
           >
             {line}
           </p>
@@ -260,6 +260,14 @@ export default function CourseWorkspacePage({
   const [loading, setLoading] = useState(true);
   const [lessonLoading, setLessonLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
+
+  // Modal Dialog popup state (Replaces ancient window.alert())
+  const [popupModal, setPopupModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type?: "warning" | "success" | "info";
+  } | null>(null);
 
   // Exercise & Quiz states
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
@@ -349,8 +357,16 @@ export default function CourseWorkspacePage({
         loadLesson(activeLessonId!);
         loadCourse();
       }
-    } catch (err) {
-      console.error("Quiz submission error", err);
+    } catch (err: any) {
+      const errorMsg =
+        err.response?.data?.message ||
+        "Quiz evaluation failed. Please make sure you selected an option.";
+      setPopupModal({
+        isOpen: true,
+        title: "Submission Notice",
+        message: Array.isArray(errorMsg) ? errorMsg.join(", ") : errorMsg,
+        type: "warning",
+      });
     } finally {
       setSubmittingExercise(false);
     }
@@ -372,8 +388,16 @@ export default function CourseWorkspacePage({
         loadLesson(activeLessonId!);
         loadCourse();
       }
-    } catch (err) {
-      console.error("Code submission error", err);
+    } catch (err: any) {
+      const errorMsg =
+        err.response?.data?.message ||
+        "Code execution failed. Please check your syntax and run again.";
+      setPopupModal({
+        isOpen: true,
+        title: "Execution Error",
+        message: Array.isArray(errorMsg) ? errorMsg.join(", ") : errorMsg,
+        type: "warning",
+      });
     } finally {
       setSubmittingExercise(false);
     }
@@ -390,7 +414,16 @@ export default function CourseWorkspacePage({
         router.push(`/learning/${pathSlug}`);
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || "Please complete practice exercises first");
+      // Instead of jarring browser alert(), open a polished modal dialog window!
+      const errorMsg =
+        err.response?.data?.message ||
+        "Please complete and pass all required practice exercises in this lesson before proceeding.";
+      setPopupModal({
+        isOpen: true,
+        title: "Practice Exercise Required",
+        message: errorMsg,
+        type: "warning",
+      });
     } finally {
       setCompleting(false);
     }
@@ -411,7 +444,7 @@ export default function CourseWorkspacePage({
         <h2 className="text-xl font-bold">Course not found</h2>
         <Link
           href={`/learning/${pathSlug}`}
-          className="mt-4 text-primary hover:underline inline-flex items-center gap-1.5"
+          className="mt-4 text-primary hover:underline inline-flex items-center gap-1.5 text-sm font-semibold"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Path Overview</span>
@@ -420,22 +453,24 @@ export default function CourseWorkspacePage({
     );
   }
 
-  // All lessons flat array for progress calculation
   const allLessons = course.modules.flatMap((m) => m.lessons);
   const currentLessonIndex = allLessons.findIndex((l) => l.id === activeLessonId);
 
   return (
-    <div className="min-h-screen bg-background text-foreground pt-20 flex flex-col font-sans">
-      {/* ── Top Workspace Sub-Header ────────────────────────────────────────── */}
-      <div className="sticky top-16 z-20 border-b border-border bg-card/90 backdrop-blur-md px-6 py-3 shadow-xs">
-        <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-4">
+    <div className="min-h-screen bg-background text-foreground pt-24 pb-16 px-4 sm:px-6 lg:px-8 flex flex-col font-sans">
+      
+      {/* ── Standard Studio Card Layout ───────────────────────────────────────── */}
+      <div className="max-w-[1600px] mx-auto w-full flex-1 flex flex-col space-y-6">
+        
+        {/* Sub-Header Bar (Clear from floating Navbar) */}
+        <div className="bg-card border border-border rounded-xl px-5 py-3.5 shadow-xs flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 truncate">
             <Link
               href={`/learning/${pathSlug}`}
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Back to Path</span>
+              <span className="hidden sm:inline">Path Syllabus</span>
             </Link>
             <span className="text-border">|</span>
             <div className="truncate">
@@ -457,372 +492,431 @@ export default function CourseWorkspacePage({
               size="sm"
               onClick={handleCompleteAndNext}
               disabled={completing}
-              className="h-8 px-3.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs gap-1.5"
+              className="h-8 px-4 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs gap-1.5"
             >
               <span>{completing ? "Saving..." : lesson?.nextLessonId ? "Next Lesson" : "Finish Course"}</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </Button>
           </div>
         </div>
-      </div>
 
-      {/* ── Two-Pane Studio Workspace ───────────────────────────────────────── */}
-      <div className="flex-1 flex max-w-[1600px] mx-auto w-full">
-        {/* Left Navigation Sidebar */}
-        <aside className="w-80 flex-shrink-0 border-r border-border bg-card/40 hidden md:flex flex-col h-[calc(100vh-7.5rem)] sticky top-28 overflow-y-auto p-4">
-          <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4 px-2">
-            Curriculum Modules
-          </div>
-
-          <div className="space-y-4">
-            {course.modules.map((mod) => (
-              <div key={mod.id}>
-                <div className="px-2 py-1 text-xs font-bold text-foreground flex items-center justify-between">
-                  <span>{mod.title}</span>
-                  <span className="text-[10px] text-muted-foreground font-normal">
-                    {mod.lessons.length}
-                  </span>
-                </div>
-
-                <div className="mt-1.5 space-y-1">
-                  {mod.lessons.map((l, lIdx) => {
-                    const isActive = l.id === activeLessonId;
-                    return (
-                      <button
-                        key={l.id}
-                        onClick={() => setActiveLessonId(l.id)}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2.5 transition-all cursor-pointer ${
-                          isActive
-                            ? "bg-primary/10 text-primary border border-primary/20 font-semibold shadow-xs"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
-                        }`}
-                      >
-                        {l.isCompleted ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                        ) : (
-                          <div
-                            className={`w-4 h-4 rounded-full border flex items-center justify-center text-[9px] flex-shrink-0 ${
-                              isActive
-                                ? "border-primary bg-primary/20 text-primary font-bold"
-                                : "border-border text-muted-foreground"
-                            }`}
-                          >
-                            {lIdx + 1}
-                          </div>
-                        )}
-                        <span className="truncate flex-1">{l.title}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </aside>
-
-        {/* Right Main Lesson Canvas */}
-        <main className="flex-1 p-6 lg:p-10 max-w-4xl mx-auto w-full pb-24">
-          {lessonLoading || !lesson ? (
-            <div className="py-24 flex items-center justify-center">
-              <Spinner className="w-8 h-8 text-primary animate-spin" />
+        {/* Studio Workspace Content */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+          
+          {/* Left Navigation Sidebar */}
+          <aside className="md:col-span-4 lg:col-span-3 bg-card border border-border rounded-xl p-4 shadow-xs sticky top-28 space-y-4">
+            <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-2">
+              Course Modules
             </div>
-          ) : (
-            <div className="space-y-8">
-              {/* XP Celebration Banner */}
-              {xpCelebration && (
-                <div className="p-4 rounded-xl bg-primary/10 border border-primary/30 flex items-center gap-3 animate-bounce shadow-xs">
-                  <Sparkles className="w-5 h-5 text-primary" />
-                  <span className="text-sm font-bold text-primary">
-                    +{xpCelebration} XP Earned for Verified Progress!
-                  </span>
-                </div>
-              )}
 
-              {/* Lesson Header */}
-              <div className="pb-6 border-b border-border">
-                <div className="flex items-center gap-2 mb-2.5">
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20 uppercase tracking-wide">
-                    {lesson.type} Lesson
-                  </span>
-                  {lesson.isCompleted && (
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Completed</span>
+            <div className="space-y-4">
+              {course.modules.map((mod) => (
+                <div key={mod.id}>
+                  <div className="px-2 py-1 text-xs font-bold text-foreground flex items-center justify-between">
+                    <span className="truncate">{mod.title}</span>
+                    <span className="text-[10px] text-muted-foreground font-normal">
+                      {mod.lessons.length}
                     </span>
+                  </div>
+
+                  <div className="mt-1.5 space-y-1">
+                    {mod.lessons.map((l, lIdx) => {
+                      const isActive = l.id === activeLessonId;
+                      return (
+                        <button
+                          key={l.id}
+                          onClick={() => setActiveLessonId(l.id)}
+                          className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-medium flex items-center gap-2.5 transition-all cursor-pointer ${
+                            isActive
+                              ? "bg-primary/10 text-primary border border-primary/20 font-semibold shadow-xs"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
+                          }`}
+                        >
+                          {l.isCompleted ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                          ) : (
+                            <div
+                              className={`w-4 h-4 rounded-full border flex items-center justify-center text-[9px] flex-shrink-0 ${
+                                isActive
+                                  ? "border-primary bg-primary/20 text-primary font-bold"
+                                  : "border-border text-muted-foreground"
+                              }`}
+                            >
+                              {lIdx + 1}
+                            </div>
+                          )}
+                          <span className="truncate flex-1">{l.title}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+
+          {/* Right Main Lesson Canvas */}
+          <main className="md:col-span-8 lg:col-span-9 bg-card border border-border rounded-xl p-6 sm:p-10 shadow-xs space-y-8">
+            {lessonLoading || !lesson ? (
+              <div className="py-24 flex items-center justify-center">
+                <Spinner className="w-8 h-8 text-primary animate-spin" />
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {/* XP Celebration Banner */}
+                {xpCelebration && (
+                  <div className="p-4 rounded-xl bg-primary/10 border border-primary/30 flex items-center gap-3 animate-bounce shadow-xs">
+                    <Sparkles className="w-5 h-5 text-primary" />
+                    <span className="text-sm font-bold text-primary">
+                      +{xpCelebration} XP Earned for Verified Progress!
+                    </span>
+                  </div>
+                )}
+
+                {/* Lesson Header */}
+                <div className="pb-6 border-b border-border">
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20 uppercase tracking-wide">
+                      {lesson.type} Lesson
+                    </span>
+                    {lesson.isCompleted && (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Completed</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+                    {lesson.title}
+                  </h1>
+
+                  {lesson.learningObjectives && lesson.learningObjectives.length > 0 && (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {lesson.learningObjectives.map((obj, i) => (
+                        <span
+                          key={i}
+                          className="px-2.5 py-1 rounded-md bg-muted text-xs text-foreground font-medium border border-border"
+                        >
+                          🎯 {obj}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
 
-                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-                  {lesson.title}
-                </h1>
+                {/* Rich Lesson Body */}
+                <div className="py-2">
+                  <RichContentRenderer content={lesson.content} />
+                </div>
 
-                {lesson.learningObjectives && lesson.learningObjectives.length > 0 && (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {lesson.learningObjectives.map((obj, i) => (
-                      <span
-                        key={i}
-                        className="px-2.5 py-1 rounded-md bg-muted text-xs text-muted-foreground font-medium border border-border"
-                      >
-                        🎯 {obj}
+                {/* Practice Exercises / Quizzes */}
+                {lesson.exercises && lesson.exercises.length > 0 && (
+                  <div className="pt-8 border-t border-border space-y-6">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                        <Code2 className="w-5 h-5 text-primary" />
+                        <span>Hands-on Knowledge Check</span>
+                      </h2>
+                      <span className="text-xs text-muted-foreground font-medium">
+                        Immediate concept verification
                       </span>
+                    </div>
+
+                    {lesson.exercises.map((ex) => (
+                      <div
+                        key={ex.id}
+                        className="bg-muted/20 border border-border rounded-xl p-6 shadow-xs space-y-6"
+                      >
+                        <div className="flex items-center justify-between pb-4 border-b border-border">
+                          <h3 className="text-base font-bold text-foreground">{ex.title}</h3>
+                          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+                            +{ex.marks} XP
+                          </span>
+                        </div>
+
+                        {/* Quiz Runner */}
+                        {ex.type === "quiz" && ex.quizConfig?.questions && (
+                          <div className="space-y-6">
+                            {ex.quizConfig.questions.map((q, qIdx) => (
+                              <div key={q.id} className="space-y-3">
+                                <p className="text-base font-bold text-foreground leading-snug">
+                                  {qIdx + 1}. {q.question}
+                                </p>
+                                
+                                <div className="space-y-2.5">
+                                  {q.options.map((opt, optIdx) => {
+                                    const isSelected = selectedAnswers[q.id] === optIdx;
+                                    const qResult = quizResults?.results?.find(
+                                      (r: any) => r.questionId === q.id,
+                                    );
+
+                                    let containerStyle =
+                                      "border-border bg-card text-foreground hover:bg-muted/70 hover:border-foreground/30";
+                                    let letterBadgeStyle =
+                                      "bg-muted text-foreground border border-border";
+
+                                    if (qResult) {
+                                      if (optIdx === qResult.correctAnswer) {
+                                        containerStyle =
+                                          "border-emerald-500 bg-emerald-500/10 text-emerald-950 dark:text-emerald-200 font-semibold ring-1 ring-emerald-500";
+                                        letterBadgeStyle = "bg-emerald-600 text-white";
+                                      } else if (isSelected && !qResult.isCorrect) {
+                                        containerStyle =
+                                          "border-destructive bg-destructive/10 text-destructive font-semibold ring-1 ring-destructive";
+                                        letterBadgeStyle =
+                                          "bg-destructive text-destructive-foreground";
+                                      }
+                                    } else if (isSelected) {
+                                      containerStyle =
+                                        "border-primary bg-primary/10 text-foreground font-semibold ring-2 ring-primary shadow-xs";
+                                      letterBadgeStyle =
+                                        "bg-primary text-primary-foreground";
+                                    }
+
+                                    return (
+                                      <button
+                                        key={optIdx}
+                                        type="button"
+                                        onClick={() =>
+                                          setSelectedAnswers({
+                                            ...selectedAnswers,
+                                            [q.id]: optIdx,
+                                          })
+                                        }
+                                        className={`w-full text-left px-4 py-3.5 rounded-xl text-sm font-medium border-2 transition-all cursor-pointer flex items-center justify-between ${containerStyle}`}
+                                      >
+                                        <div className="flex items-center gap-3">
+                                          <span
+                                            className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0 transition-colors ${letterBadgeStyle}`}
+                                          >
+                                            {qResult && optIdx === qResult.correctAnswer
+                                              ? "✓"
+                                              : qResult && isSelected && !qResult.isCorrect
+                                              ? "✗"
+                                              : String.fromCharCode(65 + optIdx)}
+                                          </span>
+                                          <span className="leading-snug">{opt}</span>
+                                        </div>
+                                        {isSelected && !qResult && (
+                                          <span className="w-2.5 h-2.5 rounded-full bg-primary flex-shrink-0" />
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Question Explanation Callout */}
+                                {quizResults?.results?.find((r: any) => r.questionId === q.id) && (
+                                  <div
+                                    className={`mt-3 p-4 rounded-xl border text-xs leading-relaxed ${
+                                      quizResults.results.find((r: any) => r.questionId === q.id)
+                                        ?.isCorrect
+                                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300"
+                                        : "bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1.5 font-bold mb-1">
+                                      <Lightbulb className="w-4 h-4 text-amber-500" />
+                                      <span>
+                                        {quizResults.results.find(
+                                          (r: any) => r.questionId === q.id,
+                                        )?.isCorrect
+                                          ? "Correct Concept Verified"
+                                          : "Explanation & In-Depth Review"}
+                                      </span>
+                                    </div>
+                                    <p className="mt-1 text-foreground text-xs leading-relaxed font-medium">
+                                      {
+                                        quizResults.results.find(
+                                          (r: any) => r.questionId === q.id,
+                                        )?.explanation
+                                      }
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+
+                            {/* Quiz Outcome Banner */}
+                            {quizResults && (
+                              <div
+                                className={`p-4 rounded-xl border text-xs ${
+                                  quizResults.passed
+                                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300"
+                                    : "bg-destructive/10 border-destructive/30 text-destructive"
+                                }`}
+                              >
+                                <div className="font-bold mb-1">
+                                  {quizResults.passed
+                                    ? "✓ Quiz Passed Successfully!"
+                                    : "✗ Review Incorrect Answers Above"}
+                                </div>
+                                <div>
+                                  Score: {quizResults.score}% (Required:{" "}
+                                  {quizResults.passThreshold}%)
+                                </div>
+                              </div>
+                            )}
+
+                            <Button
+                              onClick={() => handleQuizSubmit(ex.id)}
+                              disabled={submittingExercise}
+                              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs h-9 px-5 shadow-xs cursor-pointer"
+                            >
+                              {submittingExercise ? "Evaluating..." : "Check Answers"}
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Coding Exercise Runner */}
+                        {(ex.type === "coding" || ex.type === "debugging") && (
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <select
+                                value={language}
+                                onChange={(e) => setLanguage(e.target.value)}
+                                className="h-9 bg-card text-foreground text-xs font-medium rounded-md px-3 border border-border shadow-xs focus:outline-none"
+                              >
+                                <option value="javascript">JavaScript (Node.js)</option>
+                                <option value="python">Python 3</option>
+                                <option value="cpp">C++ 20</option>
+                                <option value="java">Java 21</option>
+                              </select>
+
+                              {ex.hints && ex.hints.length > 0 && (
+                                <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium">
+                                  <Lightbulb className="w-3.5 h-3.5" />
+                                  <span>Hint: {ex.hints[0]}</span>
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Monaco Editor Container adapting to theme */}
+                            <div className="border border-border rounded-xl overflow-hidden h-72 shadow-inner">
+                              <Editor
+                                height="100%"
+                                language={language === "cpp" ? "cpp" : language}
+                                theme={isDark ? "vs-dark" : "light"}
+                                value={code}
+                                onChange={(val) => setCode(val || "")}
+                                options={{
+                                  minimap: { enabled: false },
+                                  fontSize: 13,
+                                  scrollBeyondLastLine: false,
+                                  automaticLayout: true,
+                                }}
+                              />
+                            </div>
+
+                            {/* Test Feedback */}
+                            {executionFeedback && (
+                              <div
+                                className={`p-4 rounded-xl border text-xs font-mono ${
+                                  executionFeedback.passed
+                                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+                                    : "bg-destructive/10 border-destructive/30 text-destructive"
+                                }`}
+                              >
+                                <div className="font-bold mb-1">
+                                  {executionFeedback.passed
+                                    ? "✓ All Test Cases Passed!"
+                                    : "✗ Test Case Failures Detected"}
+                                </div>
+                                <div>
+                                  Passed {executionFeedback.passedCount} of{" "}
+                                  {executionFeedback.totalCount} test suites
+                                </div>
+                              </div>
+                            )}
+
+                            <Button
+                              onClick={() => handleCodeSubmit(ex.id)}
+                              disabled={submittingExercise}
+                              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-xs gap-1.5"
+                            >
+                              <Play className="w-3.5 h-3.5" />
+                              <span>
+                                {submittingExercise
+                                  ? "Executing in Sandbox..."
+                                  : "Run & Submit Code"}
+                              </span>
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 )}
-              </div>
 
-              {/* Rich Lesson Body */}
-              <div className="py-2">
-                <RichContentRenderer content={lesson.content} />
-              </div>
+                {/* Bottom Navigation */}
+                <div className="pt-8 border-t border-border flex items-center justify-between">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (currentLessonIndex > 0) {
+                        setActiveLessonId(allLessons[currentLessonIndex - 1].id);
+                      }
+                    }}
+                    disabled={currentLessonIndex <= 0}
+                    className="gap-1.5 border-border text-foreground hover:bg-muted font-medium text-xs h-9"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span>Previous</span>
+                  </Button>
 
-              {/* Practice Exercises / Quizzes */}
-              {lesson.exercises && lesson.exercises.length > 0 && (
-                <div className="pt-8 border-t border-border space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                      <Code2 className="w-5 h-5 text-primary" />
-                      <span>Hands-on Knowledge Check</span>
-                    </h2>
-                    <span className="text-xs text-muted-foreground font-medium">
-                      Immediate concept verification
-                    </span>
-                  </div>
-
-                  {lesson.exercises.map((ex) => (
-                    <div
-                      key={ex.id}
-                      className="bg-card border border-border rounded-xl p-6 shadow-sm space-y-6"
-                    >
-                      <div className="flex items-center justify-between pb-4 border-b border-border">
-                        <h3 className="text-base font-bold text-foreground">{ex.title}</h3>
-                        <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
-                          +{ex.marks} XP
-                        </span>
-                      </div>
-
-                      {/* Quiz Runner */}
-                      {ex.type === "quiz" && ex.quizConfig?.questions && (
-                        <div className="space-y-6">
-                          {ex.quizConfig.questions.map((q, qIdx) => (
-                            <div key={q.id} className="space-y-3">
-                              <p className="text-sm font-semibold text-foreground">
-                                {qIdx + 1}. {q.question}
-                              </p>
-                              <div className="space-y-2">
-                                {q.options.map((opt, optIdx) => {
-                                  const isSelected = selectedAnswers[q.id] === optIdx;
-                                  const qResult = quizResults?.results?.find(
-                                    (r: any) => r.questionId === q.id,
-                                  );
-
-                                  let optionClasses =
-                                    "bg-card border-border text-foreground hover:bg-muted/70";
-
-                                  if (qResult) {
-                                    if (optIdx === qResult.correctAnswer) {
-                                      optionClasses =
-                                        "bg-emerald-500/10 border-emerald-500 text-emerald-700 dark:text-emerald-300 font-semibold";
-                                    } else if (isSelected && !qResult.isCorrect) {
-                                      optionClasses =
-                                        "bg-destructive/10 border-destructive text-destructive font-semibold";
-                                    }
-                                  } else if (isSelected) {
-                                    optionClasses =
-                                      "bg-primary/10 border-primary text-primary font-semibold ring-1 ring-primary";
-                                  }
-
-                                  return (
-                                    <button
-                                      key={optIdx}
-                                      onClick={() =>
-                                        setSelectedAnswers({
-                                          ...selectedAnswers,
-                                          [q.id]: optIdx,
-                                        })
-                                      }
-                                      className={`w-full text-left px-4 py-3 rounded-lg text-xs font-medium border transition-all cursor-pointer shadow-xs ${optionClasses}`}
-                                    >
-                                      <span className="mr-2 font-mono text-muted-foreground">
-                                        {String.fromCharCode(65 + optIdx)}.
-                                      </span>
-                                      <span>{opt}</span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-
-                              {/* Question Explanation Box */}
-                              {quizResults?.results?.find((r: any) => r.questionId === q.id) && (
-                                <div
-                                  className={`mt-3 p-4 rounded-xl border text-xs leading-relaxed ${
-                                    quizResults.results.find((r: any) => r.questionId === q.id)
-                                      ?.isCorrect
-                                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300"
-                                      : "bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200"
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-1.5 font-bold mb-1">
-                                    <Lightbulb className="w-4 h-4 text-amber-500" />
-                                    <span>
-                                      {quizResults.results.find(
-                                        (r: any) => r.questionId === q.id,
-                                      )?.isCorrect
-                                        ? "Correct Concept Verified"
-                                        : "Explanation & In-Depth Review"}
-                                    </span>
-                                  </div>
-                                  <p className="mt-1 text-muted-foreground text-xs leading-relaxed">
-                                    {
-                                      quizResults.results.find(
-                                        (r: any) => r.questionId === q.id,
-                                      )?.explanation
-                                    }
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-
-                          {/* Quiz Outcome Banner */}
-                          {quizResults && (
-                            <div
-                              className={`p-4 rounded-xl border text-xs ${
-                                quizResults.passed
-                                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300"
-                                  : "bg-destructive/10 border-destructive/30 text-destructive"
-                              }`}
-                            >
-                              <div className="font-bold mb-1">
-                                {quizResults.passed
-                                  ? "✓ Quiz Passed Successfully!"
-                                  : "✗ Review Incorrect Answers Above"}
-                              </div>
-                              <div>
-                                Score: {quizResults.score}% (Required:{" "}
-                                {quizResults.passThreshold}%)
-                              </div>
-                            </div>
-                          )}
-
-                          <Button
-                            onClick={() => handleQuizSubmit(ex.id)}
-                            disabled={submittingExercise}
-                            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-xs"
-                          >
-                            {submittingExercise ? "Evaluating..." : "Check Answers"}
-                          </Button>
-                        </div>
-                      )}
-
-                      {/* Coding Exercise Runner */}
-                      {(ex.type === "coding" || ex.type === "debugging") && (
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between gap-3">
-                            <select
-                              value={language}
-                              onChange={(e) => setLanguage(e.target.value)}
-                              className="h-9 bg-card text-foreground text-xs font-medium rounded-md px-3 border border-border shadow-xs focus:outline-none"
-                            >
-                              <option value="javascript">JavaScript (Node.js)</option>
-                              <option value="python">Python 3</option>
-                              <option value="cpp">C++ 20</option>
-                              <option value="java">Java 21</option>
-                            </select>
-
-                            {ex.hints && ex.hints.length > 0 && (
-                              <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium">
-                                <Lightbulb className="w-3.5 h-3.5" />
-                                <span>Hint: {ex.hints[0]}</span>
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Monaco Editor Container adapting to theme */}
-                          <div className="border border-border rounded-xl overflow-hidden h-72 shadow-inner">
-                            <Editor
-                              height="100%"
-                              language={language === "cpp" ? "cpp" : language}
-                              theme={isDark ? "vs-dark" : "light"}
-                              value={code}
-                              onChange={(val) => setCode(val || "")}
-                              options={{
-                                minimap: { enabled: false },
-                                fontSize: 13,
-                                scrollBeyondLastLine: false,
-                                automaticLayout: true,
-                              }}
-                            />
-                          </div>
-
-                          {/* Test Feedback */}
-                          {executionFeedback && (
-                            <div
-                              className={`p-4 rounded-xl border text-xs font-mono ${
-                                executionFeedback.passed
-                                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
-                                  : "bg-destructive/10 border-destructive/30 text-destructive"
-                              }`}
-                            >
-                              <div className="font-bold mb-1">
-                                {executionFeedback.passed
-                                  ? "✓ All Test Cases Passed!"
-                                  : "✗ Test Case Failures Detected"}
-                              </div>
-                              <div>
-                                Passed {executionFeedback.passedCount} of{" "}
-                                {executionFeedback.totalCount} test suites
-                              </div>
-                            </div>
-                          )}
-
-                          <Button
-                            onClick={() => handleCodeSubmit(ex.id)}
-                            disabled={submittingExercise}
-                            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-xs gap-1.5"
-                          >
-                            <Play className="w-3.5 h-3.5" />
-                            <span>
-                              {submittingExercise
-                                ? "Executing in Sandbox..."
-                                : "Run & Submit Code"}
-                            </span>
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  <Button
+                    onClick={handleCompleteAndNext}
+                    disabled={completing}
+                    className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs h-9 shadow-xs"
+                  >
+                    <span>{completing ? "Saving..." : lesson.nextLessonId ? "Complete & Next" : "Complete Path"}</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
                 </div>
-              )}
-
-              {/* Bottom Navigation */}
-              <div className="pt-8 border-t border-border flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (currentLessonIndex > 0) {
-                      setActiveLessonId(allLessons[currentLessonIndex - 1].id);
-                    }
-                  }}
-                  disabled={currentLessonIndex <= 0}
-                  className="gap-1.5 border-border text-foreground hover:bg-muted font-medium text-xs h-9"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  <span>Previous</span>
-                </Button>
-
-                <Button
-                  onClick={handleCompleteAndNext}
-                  disabled={completing}
-                  className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs h-9 shadow-xs"
-                >
-                  <span>{completing ? "Saving..." : lesson.nextLessonId ? "Complete & Next" : "Complete Path"}</span>
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
               </div>
-            </div>
-          )}
-        </main>
+            )}
+          </main>
+        </div>
       </div>
+
+      {/* ── Interactive Modal Popup Window (Standard Replacement for window.alert) ── */}
+      {popupModal?.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-card border border-border rounded-2xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between gap-3">
+              <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <button
+                onClick={() => setPopupModal(null)}
+                className="p-1 rounded-md text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Close dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-bold text-foreground">
+                {popupModal.title}
+              </h3>
+              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                {popupModal.message}
+              </p>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <Button
+                onClick={() => setPopupModal(null)}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs px-5 h-9"
+              >
+                Got it, Continue Practice
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

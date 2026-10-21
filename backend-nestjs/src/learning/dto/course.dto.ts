@@ -134,7 +134,6 @@ export class SubmitExerciseDto {
   @IsOptional()
   selectedOption?: number;
 
-  @IsArray()
   @IsOptional()
-  answers?: Record<string, number>;
+  answers?: any;
 }
