@@ -41,11 +41,15 @@ interface LearningPathItem {
 
 const CATEGORIES = [
   { id: "all", label: "All Topics", icon: Compass },
-  { id: "ai", label: "Generative AI & LLMs", icon: Cpu, filterTag: "AI" },
-  { id: "agentic", label: "Agentic AI & LangChain", icon: Sparkles, filterTag: "Agentic" },
+  { id: "cs-core", label: "Core CS (1st-4th Year)", icon: BookOpen, filterTag: "CS Core" },
+  { id: "dbms", label: "DBMS", icon: Layers, filterTag: "DBMS" },
+  { id: "os", label: "Operating Systems", icon: Cpu, filterTag: "Operating Systems" },
+  { id: "java", label: "Java & OOP", icon: Code2, filterTag: "Java" },
+  { id: "fundamentals", label: "Fundamentals", icon: Terminal, filterTag: "Fundamentals" },
+  { id: "ai", label: "Generative AI & LLMs", icon: Sparkles, filterTag: "AI" },
+  { id: "dsa", label: "Algorithms & DSA", icon: Trophy, filterTag: "DSA" },
   { id: "python", label: "Python Mastery", icon: Terminal, filterTag: "Python" },
   { id: "javascript", label: "Modern JavaScript", icon: Code2, filterTag: "JavaScript" },
-  { id: "dsa", label: "Algorithms & DSA", icon: Trophy, filterTag: "DSA" },
 ];
 
 export default function LearningPathsCatalogPage() {

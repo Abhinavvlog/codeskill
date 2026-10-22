@@ -190,9 +190,12 @@ export default function AchievementsPage() {
 
                     <div className="w-16 h-16 mx-auto my-3 flex items-center justify-center">
                       <img
-                        src={b.iconUrl}
+                        src={b.iconUrl || "/images/badges/default-badge.svg"}
                         alt={b.name}
                         className="w-14 h-14 object-contain"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "/images/badges/default-badge.svg";
+                        }}
                       />
                     </div>
 

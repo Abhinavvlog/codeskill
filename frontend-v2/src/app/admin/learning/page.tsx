@@ -531,9 +531,12 @@ export default function AdminLearningDashboard() {
 
                   <div className="w-14 h-14 mx-auto my-2 flex items-center justify-center">
                     <img
-                      src={b.iconUrl}
+                      src={b.iconUrl || "/images/badges/default-badge.svg"}
                       alt={b.name}
                       className="w-12 h-12 object-contain"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/images/badges/default-badge.svg";
+                      }}
                     />
                   </div>
 

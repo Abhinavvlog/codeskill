@@ -29,6 +29,7 @@ import { PracticeService } from './services/practice.service';
 import { GamificationService } from './services/gamification.service';
 import { CertificationService } from './services/certification.service';
 import { AdminLearningService } from './services/admin-learning.service';
+import { LearningAutoSeedService } from './services/learning-auto-seed.service';
 
 import { LearningController } from './controllers/learning.controller';
 import { AdminLearningController } from './controllers/admin-learning.controller';
@@ -71,6 +72,7 @@ import { CertificateVerificationController } from './controllers/certificate-ver
     GamificationService,
     CertificationService,
     AdminLearningService,
+    LearningAutoSeedService,
   ],
   exports: [
     LearningService,
@@ -78,6 +80,7 @@ import { CertificateVerificationController } from './controllers/certificate-ver
     GamificationService,
     CertificationService,
     AdminLearningService,
+    LearningAutoSeedService,
   ],
 })
 export class LearningModule {}

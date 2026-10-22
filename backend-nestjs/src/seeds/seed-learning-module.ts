@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
 import { AdminLearningService } from '../learning/services/admin-learning.service';
+import { LearningAutoSeedService } from '../learning/services/learning-auto-seed.service';
 
 async function bootstrap() {
   console.log('🚀 Seeding CodeSkill Rich Learning Platform Curriculum & Dummy Data...');
@@ -1700,6 +1701,13 @@ function isPalindrome(str) {
     console.log('✓ DSA Mastery path seeded.');
   } catch (err: any) {
     console.log(`DSA Path setup note: ${err.message}`);
+  }
+
+  try {
+    const autoSeedService = app.get(LearningAutoSeedService);
+    await autoSeedService.seedCurriculumIfNotExist();
+  } catch (err: any) {
+    console.log(`Auto seed error: ${err.message}`);
   }
 
   await app.close();

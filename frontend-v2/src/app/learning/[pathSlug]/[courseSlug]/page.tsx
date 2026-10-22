@@ -330,8 +330,23 @@ export default function CourseWorkspacePage({
       );
       if (codingEx?.starterCode?.[language]) {
         setCode(codingEx.starterCode[language]);
+      } else if (codingEx?.starterCode?.java && !codingEx?.starterCode?.[language]) {
+        setLanguage("java");
+        setCode(codingEx.starterCode.java);
+      } else if (codingEx?.starterCode?.python && !codingEx?.starterCode?.[language]) {
+        setLanguage("python");
+        setCode(codingEx.starterCode.python);
       } else if (codingEx?.starterCode?.javascript) {
+        setLanguage("javascript");
         setCode(codingEx.starterCode.javascript);
+      } else if (codingEx?.starterCode) {
+        const availableLang = Object.keys(codingEx.starterCode)[0];
+        if (availableLang) {
+          setLanguage(availableLang);
+          setCode(codingEx.starterCode[availableLang]);
+        } else {
+          setCode("// Write your solution below\n");
+        }
       } else {
         setCode("// Write your solution below\n");
       }
@@ -483,19 +498,50 @@ export default function CourseWorkspacePage({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground hidden sm:inline">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground hidden sm:inline mr-1">
               Lesson {currentLessonIndex + 1} of {allLessons.length}
             </span>
 
             <Button
               size="sm"
+              variant="outline"
+              onClick={() => {
+                if (currentLessonIndex > 0) {
+                  setActiveLessonId(allLessons[currentLessonIndex - 1].id);
+                }
+              }}
+              disabled={currentLessonIndex <= 0}
+              className="h-8 px-2.5 text-xs font-medium border-border text-foreground hover:bg-muted gap-1 cursor-pointer"
+              title="Previous Lesson"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Prev</span>
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (currentLessonIndex < allLessons.length - 1) {
+                  setActiveLessonId(allLessons[currentLessonIndex + 1].id);
+                }
+              }}
+              disabled={currentLessonIndex >= allLessons.length - 1}
+              className="h-8 px-2.5 text-xs font-medium border-border text-foreground hover:bg-muted gap-1 cursor-pointer"
+              title="Next Lesson"
+            >
+              <span className="hidden sm:inline">Next</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Button>
+
+            <Button
+              size="sm"
               onClick={handleCompleteAndNext}
               disabled={completing}
-              className="h-8 px-4 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs gap-1.5"
+              className="h-8 px-3.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs gap-1.5 cursor-pointer"
             >
-              <span>{completing ? "Saving..." : lesson?.nextLessonId ? "Next Lesson" : "Finish Course"}</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+              <span>{completing ? "Saving..." : currentLessonIndex < allLessons.length - 1 ? "Complete & Next" : "Finish Course"}</span>
             </Button>
           </div>
         </div>
@@ -775,8 +821,14 @@ export default function CourseWorkspacePage({
                             <div className="flex items-center justify-between gap-3">
                               <select
                                 value={language}
-                                onChange={(e) => setLanguage(e.target.value)}
-                                className="h-9 bg-card text-foreground text-xs font-medium rounded-md px-3 border border-border shadow-xs focus:outline-none"
+                                onChange={(e) => {
+                                  const newLang = e.target.value;
+                                  setLanguage(newLang);
+                                  if (ex.starterCode?.[newLang]) {
+                                    setCode(ex.starterCode[newLang]);
+                                  }
+                                }}
+                                className="h-9 bg-card text-foreground text-xs font-semibold rounded-lg px-3 border border-border shadow-xs focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
                               >
                                 <option value="javascript">JavaScript (Node.js)</option>
                                 <option value="python">Python 3</option>
@@ -850,28 +902,50 @@ export default function CourseWorkspacePage({
                 )}
 
                 {/* Bottom Navigation */}
-                <div className="pt-8 border-t border-border flex items-center justify-between">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (currentLessonIndex > 0) {
-                        setActiveLessonId(allLessons[currentLessonIndex - 1].id);
-                      }
-                    }}
-                    disabled={currentLessonIndex <= 0}
-                    className="gap-1.5 border-border text-foreground hover:bg-muted font-medium text-xs h-9"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    <span>Previous</span>
-                  </Button>
+                <div className="pt-8 border-t border-border flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (currentLessonIndex > 0) {
+                          setActiveLessonId(allLessons[currentLessonIndex - 1].id);
+                        }
+                      }}
+                      disabled={currentLessonIndex <= 0}
+                      className="gap-1.5 border-border text-foreground hover:bg-muted font-medium text-xs h-9 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>Previous Lesson</span>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (currentLessonIndex < allLessons.length - 1) {
+                          setActiveLessonId(allLessons[currentLessonIndex + 1].id);
+                        }
+                      }}
+                      disabled={currentLessonIndex >= allLessons.length - 1}
+                      className="gap-1.5 border-border text-foreground hover:bg-muted font-medium text-xs h-9 cursor-pointer"
+                    >
+                      <span>Next Lesson</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
 
                   <Button
                     onClick={handleCompleteAndNext}
                     disabled={completing}
-                    className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs h-9 shadow-xs"
+                    className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs h-9 shadow-xs cursor-pointer"
                   >
-                    <span>{completing ? "Saving..." : lesson.nextLessonId ? "Complete & Next" : "Complete Path"}</span>
-                    <ChevronRight className="w-4 h-4" />
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>
+                      {completing
+                        ? "Saving..."
+                        : currentLessonIndex < allLessons.length - 1
+                        ? "Complete & Next"
+                        : "Finish Course"}
+                    </span>
                   </Button>
                 </div>
               </div>

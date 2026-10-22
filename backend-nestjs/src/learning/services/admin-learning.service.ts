@@ -326,7 +326,18 @@ export class AdminLearningService {
   // ── Badges & Templates ──────────────────────────────────────────────────────
 
   async createBadge(dto: CreateBadgeDto) {
-    const badge = this.badgeDefRepo.create({
+    let badge = await this.badgeDefRepo.findOne({ where: { code: dto.code } });
+    if (badge) {
+      badge.name = dto.name;
+      if (dto.description !== undefined) badge.description = dto.description;
+      if (dto.iconUrl !== undefined) badge.iconUrl = dto.iconUrl;
+      if (dto.rarity) badge.rarity = dto.rarity;
+      if (dto.category) badge.category = dto.category;
+      if (dto.criteria) badge.criteria = dto.criteria;
+      return this.badgeDefRepo.save(badge);
+    }
+
+    badge = this.badgeDefRepo.create({
       code: dto.code,
       name: dto.name,
       description: dto.description || '',
@@ -343,7 +354,10 @@ export class AdminLearningService {
   }
 
   async createCertificateTemplate(dto: CreateCertificateTemplateDto) {
-    const template = this.templateRepo.create({
+    let template = await this.templateRepo.findOne({ where: { name: dto.name } });
+    if (template) return template;
+
+    template = this.templateRepo.create({
       name: dto.name,
       title: dto.title || 'Certificate of Achievement',
       issuerTitle: dto.issuerTitle || 'Head of Technical Training',
