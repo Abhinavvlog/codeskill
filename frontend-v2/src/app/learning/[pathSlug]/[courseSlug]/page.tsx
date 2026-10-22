@@ -24,6 +24,11 @@ import {
   X,
   Clock,
   Timer,
+  Terminal,
+  Eye,
+  EyeOff,
+  Layers,
+  Send,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { learningAPI } from "@/config/api";
@@ -256,6 +261,319 @@ function RichContentRenderer({ content }: { content: string }) {
   return <div className="space-y-1">{renderedSections}</div>;
 }
 
+interface W3BlankItem {
+  id: string;
+  answer: string;
+  placeholder?: string;
+  caseSensitive?: boolean;
+}
+
+interface W3ExerciseItem {
+  id: string;
+  title: string;
+  instruction: string;
+  language: string;
+  codeTemplate: string;
+  blanks: W3BlankItem[];
+  hint?: string;
+  explanation: string;
+}
+
+const W3_EXERCISES_DATABASE: Record<string, W3ExerciseItem[]> = {
+  dbms: [
+    {
+      id: "w3-sql-1",
+      title: "SQL SELECT All Statement",
+      instruction: "Insert the missing keyword to select all columns from the 'Customers' table.",
+      language: "sql",
+      codeTemplate: "[b1] * FROM Customers;",
+      blanks: [{ id: "b1", answer: "SELECT", placeholder: "keyword", caseSensitive: false }],
+      hint: "The command starts with the standard query retrieval keyword.",
+      explanation: "The SELECT statement is used to query and extract records from a database table."
+    },
+    {
+      id: "w3-sql-2",
+      title: "SQL Filter with WHERE",
+      instruction: "Complete the SQL statement to select all records where the City column equals 'Berlin'.",
+      language: "sql",
+      codeTemplate: "SELECT * FROM Customers\n[b1] City = 'Berlin';",
+      blanks: [{ id: "b1", answer: "WHERE", placeholder: "clause", caseSensitive: false }],
+      hint: "Use the conditional filtering clause.",
+      explanation: "The WHERE clause filters records based on specified predicate conditions."
+    },
+    {
+      id: "w3-sql-3",
+      title: "SQL Sorting with ORDER BY",
+      instruction: "Complete the query to sort records alphabetically by City in descending order.",
+      language: "sql",
+      codeTemplate: "SELECT * FROM Customers\nORDER BY City [b1];",
+      blanks: [{ id: "b1", answer: "DESC", placeholder: "direction", caseSensitive: false }],
+      hint: "Opposite of ASC.",
+      explanation: "DESC specifies descending order (Z to A, or largest to smallest numbers)."
+    },
+    {
+      id: "w3-sql-4",
+      title: "SQL Relational INNER JOIN",
+      instruction: "Complete the join statement linking Orders and Customers on the CustomerID column.",
+      language: "sql",
+      codeTemplate: "SELECT Orders.OrderID, Customers.CustomerName\nFROM Orders\n[b1] JOIN Customers\nON Orders.CustomerID = Customers.[b2];",
+      blanks: [
+        { id: "b1", answer: "INNER", placeholder: "join type", caseSensitive: false },
+        { id: "b2", answer: "CustomerID", placeholder: "key column", caseSensitive: false }
+      ],
+      hint: "Default relational join type that matches foreign and primary keys.",
+      explanation: "INNER JOIN selects records that have matching keys in both participating tables."
+    },
+    {
+      id: "w3-sql-5",
+      title: "SQL PRIMARY KEY Constraint",
+      instruction: "Insert the constraint keyword to declare the 'ID' column as the unique primary key.",
+      language: "sql",
+      codeTemplate: "CREATE TABLE Students (\n  ID int NOT NULL,\n  FullName varchar(255) NOT NULL,\n  [b1] KEY (ID)\n);",
+      blanks: [{ id: "b1", answer: "PRIMARY", placeholder: "constraint", caseSensitive: false }],
+      hint: "The foundational entity integrity key.",
+      explanation: "PRIMARY KEY uniquely identifies each table row and prevents NULLs or duplicate values."
+    }
+  ],
+  java: [
+    {
+      id: "w3-java-1",
+      title: "Java Console Output",
+      instruction: "Insert the missing method to print 'Hello World' followed by a newline.",
+      language: "java",
+      codeTemplate: "public class Main {\n  public static void main(String[] args) {\n    System.out.[b1](\"Hello World\");\n  }\n}",
+      blanks: [{ id: "b1", answer: "println", placeholder: "method", caseSensitive: true }],
+      hint: "Standard output print line method.",
+      explanation: "System.out.println() prints the text argument to standard out followed by a newline."
+    },
+    {
+      id: "w3-java-2",
+      title: "Java Variables & Data Types",
+      instruction: "Declare an integer variable named 'score' and assign the value 95 to it.",
+      language: "java",
+      codeTemplate: "[b1] score = [b2];",
+      blanks: [
+        { id: "b1", answer: "int", placeholder: "type", caseSensitive: true },
+        { id: "b2", answer: "95", placeholder: "value", caseSensitive: true }
+      ],
+      hint: "32-bit primitive integer keyword.",
+      explanation: "In Java, 'int' is the standard primitive type used to store integer numbers."
+    },
+    {
+      id: "w3-java-3",
+      title: "Java OOP Inheritance",
+      instruction: "Use the correct keyword to make the 'Car' class inherit from the 'Vehicle' class.",
+      language: "java",
+      codeTemplate: "class Vehicle {\n  protected String brand = \"Ford\";\n}\n\nclass Car [b1] Vehicle {\n  private String model = \"Mustang\";\n}",
+      blanks: [{ id: "b1", answer: "extends", placeholder: "keyword", caseSensitive: true }],
+      hint: "Class inheritance keyword.",
+      explanation: "In Java, 'extends' allows a subclass to inherit attributes and methods from a superclass."
+    },
+    {
+      id: "w3-java-4",
+      title: "Java Interface Implementation",
+      instruction: "Complete the class definition to implement the 'Printable' interface.",
+      language: "java",
+      codeTemplate: "interface Printable {\n  void printDocument();\n}\n\nclass Document [b1] Printable {\n  public void printDocument() {\n    System.out.println(\"Printing...\");\n  }\n}",
+      blanks: [{ id: "b1", answer: "implements", placeholder: "keyword", caseSensitive: true }],
+      hint: "Keyword used to sign an interface contract.",
+      explanation: "Classes use 'implements' to satisfy and execute methods declared in an interface."
+    },
+    {
+      id: "w3-java-5",
+      title: "Java Generic Collections",
+      instruction: "Instantiate a generic ArrayList holding String elements.",
+      language: "java",
+      codeTemplate: "ArrayList<[b1]> list = new ArrayList<[b2]>();",
+      blanks: [
+        { id: "b1", answer: "String", placeholder: "type", caseSensitive: true },
+        { id: "b2", answer: "String", placeholder: "type", caseSensitive: true }
+      ],
+      hint: "The Java String class wrapper.",
+      explanation: "Generics enforce compile-time type-safety for Java collection hierarchies."
+    }
+  ],
+  os: [
+    {
+      id: "w3-os-1",
+      title: "Unix Process Creation",
+      instruction: "Insert the system call used to duplicate the current process and create a child.",
+      language: "c",
+      codeTemplate: "pid_t pid = [b1]();\nif (pid == 0) {\n  printf(\"Child process running\\n\");\n}",
+      blanks: [{ id: "b1", answer: "fork", placeholder: "syscall", caseSensitive: true }],
+      hint: "Standard POSIX process creation call.",
+      explanation: "fork() creates a new child process with an isolated copy of the parent address space."
+    },
+    {
+      id: "w3-os-2",
+      title: "Operating System Mode Switch",
+      instruction: "Fill in the CPU privilege modes: System calls switch execution from User Mode to Kernel Mode.",
+      language: "text",
+      codeTemplate: "CPU Hardware Mode Bit:\nNormal Application Execution: [b1] Mode\nOS Privileged System Call: [b2] Mode",
+      blanks: [
+        { id: "b1", answer: "User", placeholder: "mode", caseSensitive: false },
+        { id: "b2", answer: "Kernel", placeholder: "mode", caseSensitive: false }
+      ],
+      hint: "Unprivileged user space vs privileged ring 0.",
+      explanation: "User Mode protects physical hardware; Kernel Mode provides full system resource control to the OS."
+    },
+    {
+      id: "w3-os-3",
+      title: "Banker Algorithm Resource Need",
+      instruction: "Complete the formula for the Need matrix in Dijkstra's Banker Algorithm.",
+      language: "text",
+      codeTemplate: "Need[i][j] = Max[i][j] [b1] Allocation[i][j];",
+      blanks: [{ id: "b1", answer: "-", placeholder: "op", caseSensitive: true }],
+      hint: "Subtraction operator.",
+      explanation: "The Need matrix represents remaining resources: Need = Max - Allocation."
+    },
+    {
+      id: "w3-os-4",
+      title: "POSIX Semaphore Synchronization",
+      instruction: "Fill in the semaphore operation to wait/decrement before entering a critical section.",
+      language: "c",
+      codeTemplate: "sem_[b1](&mutex); // Decrement and lock\n// Critical Section\nsem_[b2](&mutex); // Increment and release",
+      blanks: [
+        { id: "b1", answer: "wait", placeholder: "op", caseSensitive: true },
+        { id: "b2", answer: "post", placeholder: "op", caseSensitive: true }
+      ],
+      hint: "wait and post operations.",
+      explanation: "sem_wait() decrements the semaphore (blocks if zero); sem_post() increments and wakes waiters."
+    }
+  ],
+  cf: [
+    {
+      id: "w3-cf-1",
+      title: "Two's Complement Arithmetic",
+      instruction: "Convert +1 (00000001) to -1: Invert all bits (11111110), then add what number?",
+      language: "text",
+      codeTemplate: "Step 1: +1 = 00000001\nStep 2: Invert bits = 11111110\nStep 3: Add [b1] = 11111111 (-1 in Two's Complement)",
+      blanks: [{ id: "b1", answer: "1", placeholder: "number", caseSensitive: true }],
+      hint: "Binary one.",
+      explanation: "Two's complement is formed by taking 1's complement (inverting bits) and adding 1."
+    },
+    {
+      id: "w3-cf-2",
+      title: "Universal Logic Gates",
+      instruction: "Identify the universal logic gate whose output is 0 ONLY when both inputs are 1.",
+      language: "text",
+      codeTemplate: "// Universal logic gate: (1, 1) -> 0, (0, 0) -> 1, (0, 1) -> 1\nconst gate = \"[b1]\";",
+      blanks: [{ id: "b1", answer: "NAND", placeholder: "gate", caseSensitive: false }],
+      hint: "NOT AND.",
+      explanation: "NAND is a universal gate capable of synthesizing any arbitrary boolean circuit."
+    },
+    {
+      id: "w3-cf-3",
+      title: "OSI Transport Protocol",
+      instruction: "Which Transport Layer protocol guarantees in-order delivery using a 3-Way Handshake?",
+      language: "text",
+      codeTemplate: "// Reliable Connection-Oriented Protocol:\nconst protocol = \"[b1]\";",
+      blanks: [{ id: "b1", answer: "TCP", placeholder: "protocol", caseSensitive: false }],
+      hint: "Transmission Control Protocol.",
+      explanation: "TCP provides connection-oriented, sequenced, error-checked packet streaming."
+    }
+  ],
+  ai: [
+    {
+      id: "w3-ai-1",
+      title: "Zero-Shot Chain of Thought",
+      instruction: "Insert the directive that prompts Large Language Models to reason step by step.",
+      language: "text",
+      codeTemplate: "\"\"\"\nQuestion: If 3 workers take 6 days to paint a house, how many days will 6 workers take?\nLet's think [b1] by [b2]:\n\"\"\"",
+      blanks: [
+        { id: "b1", answer: "step", placeholder: "word", caseSensitive: false },
+        { id: "b2", answer: "step", placeholder: "word", caseSensitive: false }
+      ],
+      hint: "think step by...",
+      explanation: "'Let's think step by step:' causes autoregressive transformers to compute intermediate reasoning tokens."
+    },
+    {
+      id: "w3-ai-2",
+      title: "Prompt Delimiters",
+      instruction: "Close the XML delimiter tag to isolate untrusted user data from system instructions.",
+      language: "python",
+      codeTemplate: "prompt = f\"\"\"\nSummarize the text found inside <user_input> tags.\n<user_input>\n{untrusted_data}\n[b1]\n\"\"\"",
+      blanks: [{ id: "b1", answer: "</user_input>", placeholder: "closing tag", caseSensitive: false }],
+      hint: "Standard XML closing tag.",
+      explanation: "XML tags clearly delineate untrusted input to defend against prompt injection attacks."
+    },
+    {
+      id: "w3-ai-3",
+      title: "LLM Determinism Temperature",
+      instruction: "Set the sampling temperature parameter to maximum determinism (zero randomness) for structured JSON output.",
+      language: "python",
+      codeTemplate: "response = client.chat.completions.create(\n  model=\"gpt-4o\",\n  messages=messages,\n  temperature=[b1]\n)",
+      blanks: [{ id: "b1", answer: "0", placeholder: "float", caseSensitive: true }],
+      hint: "Zero temperature.",
+      explanation: "temperature: 0.0 forces argmax greedy token sampling for deterministic and consistent formatting."
+    }
+  ]
+};
+
+function getW3ExercisesForCourse(courseSlug: string, pathSlug: string): W3ExerciseItem[] {
+  const slug = `${courseSlug || ""} ${pathSlug || ""}`.toLowerCase();
+  if (slug.includes("dbms") || slug.includes("database") || slug.includes("sql")) {
+    return W3_EXERCISES_DATABASE.dbms;
+  }
+  if (slug.includes("java")) {
+    return W3_EXERCISES_DATABASE.java;
+  }
+  if (slug.includes("os") || slug.includes("operating-systems")) {
+    return W3_EXERCISES_DATABASE.os;
+  }
+  if (slug.includes("cf") || slug.includes("computer-fundamentals") || slug.includes("architecture")) {
+    return W3_EXERCISES_DATABASE.cf;
+  }
+  if (slug.includes("ai") || slug.includes("prompt") || slug.includes("genai")) {
+    return W3_EXERCISES_DATABASE.ai;
+  }
+  return W3_EXERCISES_DATABASE.dbms;
+}
+
+const DEFAULT_STARTER_CODES: Record<string, string> = {
+  javascript: `// CodeSkill Real-Time JavaScript Sandbox
+console.log("Hello from CodeSkill Real-Time Sandbox!");
+
+function calculate(x, y) {
+  return x * y + 42;
+}
+
+console.log("Result:", calculate(10, 5));
+`,
+  python: `# CodeSkill Real-Time Python 3 Runner
+def calculate(a, b):
+    return a * b + 42
+
+print("Hello from CodeSkill Python 3!")
+print("Result:", calculate(10, 5))
+`,
+  java: `public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello from CodeSkill Java 21!");
+        int result = calculate(10, 5);
+        System.out.println("Result: " + result);
+    }
+
+    public static int calculate(int a, int b) {
+        return a * b + 42;
+    }
+}
+`,
+  cpp: `#include <iostream>
+using namespace std;
+
+int calculate(int a, int b) {
+    return a * b + 42;
+}
+
+int main() {
+    cout << "Hello from CodeSkill C++ 20!" << endl;
+    cout << "Result: " << calculate(10, 5) << endl;
+    return 0;
+}
+`,
+};
+
 export default function CourseWorkspacePage({
   params,
 }: {
@@ -290,6 +608,28 @@ export default function CourseWorkspacePage({
   const [executionFeedback, setExecutionFeedback] = useState<any>(null);
   const [submittingExercise, setSubmittingExercise] = useState(false);
   const [xpCelebration, setXpCelebration] = useState<number | null>(null);
+
+  // Real-Time Compiler Terminal state
+  const [terminalLogs, setTerminalLogs] = useState<
+    Array<{ type: "stdout" | "stderr" | "system" | "return"; text: string; time: string }>
+  >([
+    {
+      type: "system",
+      text: "> CodeSkill Live Compiler Ready. Select a language and click 'Run Code'.",
+      time: "--:--:--",
+    },
+  ]);
+  const [terminalTab, setTerminalTab] = useState<"output" | "tests">("output");
+  const [isExecutingRealtime, setIsExecutingRealtime] = useState(false);
+
+  // W3Schools Fill in the Blank state
+  const [w3Index, setW3Index] = useState<number>(0);
+  const [w3BlankValues, setW3BlankValues] = useState<Record<string, Record<string, string>>>({});
+  const [w3Feedback, setW3Feedback] = useState<
+    Record<string, { isCorrect: boolean; showAnswer: boolean; message?: string }>
+  >({});
+  const [w3ShowAnswer, setW3ShowAnswer] = useState<Record<string, boolean>>({});
+  const [activeTabMode, setActiveTabMode] = useState<"content" | "coding" | "w3" | "quiz">("coding");
 
   // Stopwatch & Minimum Time Spent Tracker
   const [timeSpent, setTimeSpent] = useState<number>(0);
@@ -399,10 +739,10 @@ export default function CourseWorkspacePage({
           setLanguage(availableLang);
           setCode(codingEx.starterCode[availableLang]);
         } else {
-          setCode("// Write your solution below\n");
+          setCode(DEFAULT_STARTER_CODES[language] || "// Write your solution below\n");
         }
       } else {
-        setCode("// Write your solution below\n");
+        setCode(DEFAULT_STARTER_CODES[language] || "// Write your solution below\n");
       }
     } catch (err) {
       console.error("Failed to load lesson content", err);
@@ -470,6 +810,248 @@ export default function CourseWorkspacePage({
     } finally {
       setSubmittingExercise(false);
     }
+  };
+
+  // Run Code in Real-Time (instant sandbox execution with output terminal)
+  const handleRunCodeRealtime = async () => {
+    setIsExecutingRealtime(true);
+    setTerminalTab("output");
+    const startTime = performance.now();
+    const timestamp = new Date().toLocaleTimeString();
+    const newLogs: Array<{
+      type: "stdout" | "stderr" | "system" | "return";
+      text: string;
+      time: string;
+    }> = [
+      {
+        type: "system",
+        text: `> Compiling & Executing ${language.toUpperCase()} in live sandbox...`,
+        time: timestamp,
+      },
+    ];
+
+    if (language === "javascript") {
+      try {
+        const capturedLogs: string[] = [];
+        const sandboxConsole = {
+          log: (...args: any[]) =>
+            capturedLogs.push(
+              args
+                .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
+                .join(" ")
+            ),
+          info: (...args: any[]) =>
+            capturedLogs.push(
+              "[INFO] " +
+                args
+                  .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
+                  .join(" ")
+            ),
+          warn: (...args: any[]) =>
+            capturedLogs.push(
+              "[WARN] " +
+                args
+                  .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
+                  .join(" ")
+            ),
+          error: (...args: any[]) =>
+            capturedLogs.push(
+              "[ERROR] " +
+                args
+                  .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
+                  .join(" ")
+            ),
+        };
+
+        const executor = new Function("console", code);
+        const returned = executor(sandboxConsole);
+        const elapsed = Math.round(performance.now() - startTime);
+
+        if (capturedLogs.length > 0) {
+          capturedLogs.forEach((msg) => {
+            newLogs.push({ type: "stdout", text: msg, time: new Date().toLocaleTimeString() });
+          });
+        } else if (returned === undefined) {
+          newLogs.push({
+            type: "stdout",
+            text: "(Program executed with no console output. Use console.log() to print values)",
+            time: new Date().toLocaleTimeString(),
+          });
+        }
+
+        if (returned !== undefined) {
+          newLogs.push({
+            type: "return",
+            text: `[Return Value]: ${
+              typeof returned === "object" ? JSON.stringify(returned, null, 2) : String(returned)
+            }`,
+            time: new Date().toLocaleTimeString(),
+          });
+        }
+
+        newLogs.push({
+          type: "system",
+          text: `✓ Execution finished successfully in ${elapsed}ms (Exit Code: 0)`,
+          time: new Date().toLocaleTimeString(),
+        });
+        setTerminalLogs(newLogs);
+      } catch (err: any) {
+        const elapsed = Math.round(performance.now() - startTime);
+        newLogs.push({
+          type: "stderr",
+          text: `${err?.name || "Runtime Error"}: ${err?.message || String(err)}`,
+          time: new Date().toLocaleTimeString(),
+        });
+        newLogs.push({
+          type: "system",
+          text: `✗ Execution failed with error in ${elapsed}ms`,
+          time: new Date().toLocaleTimeString(),
+        });
+        setTerminalLogs(newLogs);
+      } finally {
+        setIsExecutingRealtime(false);
+      }
+    } else {
+      // Server-side real-time execution runner for Python/Java/C++
+      try {
+        const res = await learningAPI.runPlayground({ code, language });
+        const resultData = (res.data as any)?.data || res.data;
+        const elapsed = resultData?.durationMs ?? Math.round(performance.now() - startTime);
+
+        if (resultData?.output) {
+          const lines = String(resultData.output).split("\n");
+          lines.forEach((l: string) => {
+            if (l.trim().length > 0) {
+              newLogs.push({
+                type: "stdout",
+                text: l,
+                time: new Date().toLocaleTimeString(),
+              });
+            }
+          });
+        }
+        if (resultData?.error) {
+          const lines = String(resultData.error).split("\n");
+          lines.forEach((l: string) => {
+            if (l.trim().length > 0) {
+              newLogs.push({
+                type: "stderr",
+                text: l,
+                time: new Date().toLocaleTimeString(),
+              });
+            }
+          });
+        }
+        if (!resultData?.output && !resultData?.error) {
+          newLogs.push({
+            type: "stdout",
+            text: "(Program executed successfully with no console output)",
+            time: new Date().toLocaleTimeString(),
+          });
+        }
+
+        newLogs.push({
+          type: "system",
+          text: `✓ Execution completed in ${elapsed}ms (Status: ${resultData?.status || "SUCCESS"})`,
+          time: new Date().toLocaleTimeString(),
+        });
+        setTerminalLogs(newLogs);
+      } catch (err: any) {
+        const elapsed = Math.round(performance.now() - startTime);
+        newLogs.push({
+          type: "stderr",
+          text: `Execution notice: ${
+            err?.response?.data?.message || err?.message || "Execution completed"
+          }`,
+          time: new Date().toLocaleTimeString(),
+        });
+        newLogs.push({
+          type: "system",
+          text: `✓ Finished with response in ${elapsed}ms`,
+          time: new Date().toLocaleTimeString(),
+        });
+        setTerminalLogs(newLogs);
+      } finally {
+        setIsExecutingRealtime(false);
+      }
+    }
+  };
+
+  // W3Schools Fill in the Blank answer evaluation
+  const handleCheckW3Blank = (exercise: W3ExerciseItem) => {
+    const userAnswers = w3BlankValues[exercise.id] || {};
+    let allCorrect = true;
+
+    for (const blank of exercise.blanks) {
+      const typed = (userAnswers[blank.id] || "").trim();
+      const expected = blank.answer.trim();
+      const match =
+        blank.caseSensitive !== true
+          ? typed.toLowerCase() === expected.toLowerCase()
+          : typed === expected;
+
+      if (!match) {
+        allCorrect = false;
+        break;
+      }
+    }
+
+    setW3Feedback({
+      ...w3Feedback,
+      [exercise.id]: {
+        isCorrect: allCorrect,
+        showAnswer: false,
+        message: allCorrect
+          ? "✓ Correct! Excellent work."
+          : "✗ Not quite correct. Review your syntax or check the hint!",
+      },
+    });
+
+    if (allCorrect) {
+      setXpCelebration(10);
+    }
+  };
+
+  const handleToggleW3Answer = (exercise: W3ExerciseItem) => {
+    const isCurrentlyShowing = w3ShowAnswer[exercise.id] || false;
+    const nextShowing = !isCurrentlyShowing;
+    setW3ShowAnswer({
+      ...w3ShowAnswer,
+      [exercise.id]: nextShowing,
+    });
+
+    if (nextShowing) {
+      const currentFilled = { ...(w3BlankValues[exercise.id] || {}) };
+      exercise.blanks.forEach((b) => {
+        currentFilled[b.id] = b.answer;
+      });
+      setW3BlankValues({
+        ...w3BlankValues,
+        [exercise.id]: currentFilled,
+      });
+      setW3Feedback({
+        ...w3Feedback,
+        [exercise.id]: {
+          isCorrect: true,
+          showAnswer: true,
+          message: "💡 Answer revealed! Study the correct syntax and try again.",
+        },
+      });
+    }
+  };
+
+  const handleResetW3 = (exerciseId: string) => {
+    const updatedValues = { ...w3BlankValues };
+    delete updatedValues[exerciseId];
+    setW3BlankValues(updatedValues);
+
+    const updatedFeedback = { ...w3Feedback };
+    delete updatedFeedback[exerciseId];
+    setW3Feedback(updatedFeedback);
+
+    const updatedShow = { ...w3ShowAnswer };
+    delete updatedShow[exerciseId];
+    setW3ShowAnswer(updatedShow);
   };
 
   const formatTime = (secs: number) => {
@@ -562,6 +1144,456 @@ export default function CourseWorkspacePage({
 
   const allLessons = course.modules.flatMap((m) => m.lessons);
   const currentLessonIndex = allLessons.findIndex((l) => l.id === activeLessonId);
+
+  const renderInteractivePracticeSuite = (ex?: any) => {
+    const w3List = getW3ExercisesForCourse(courseSlug, pathSlug);
+    const safeIdx = Math.min(Math.max(0, w3Index), w3List.length - 1);
+    const currentEx = w3List[safeIdx];
+    const feedback = currentEx ? w3Feedback[currentEx.id] : undefined;
+    const userAnswers = currentEx ? w3BlankValues[currentEx.id] || {} : {};
+    const parts = currentEx ? currentEx.codeTemplate.split(/(\[b\d+\])/g) : [];
+
+    return (
+      <div className="space-y-5">
+        {/* Mode Navigation Switcher */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2 border-b border-border">
+          <div className="flex items-center gap-1.5 p-1 bg-muted/60 rounded-xl border border-border shadow-xs">
+            <button
+              type="button"
+              onClick={() => setActiveTabMode("coding")}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTabMode === "coding" || activeTabMode === "content"
+                  ? "bg-card text-foreground shadow-xs border border-border"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Code2 className="w-3.5 h-3.5 text-primary" />
+              <span>Live Code Compiler</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTabMode("w3")}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTabMode === "w3"
+                  ? "bg-card text-foreground shadow-xs border border-border"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>W3Schools Fill in Blanks</span>
+              <span className="px-1.5 py-0.2 rounded text-[10px] bg-primary/10 text-primary font-bold">
+                {w3List.length}
+              </span>
+            </button>
+          </div>
+
+          <span className="text-[11px] text-muted-foreground font-medium hidden sm:inline">
+            Interactive Real-Time Feedback
+          </span>
+        </div>
+
+        {/* MODE A: Real-Time Coding Compiler & Live Terminal */}
+        {(activeTabMode === "coding" || activeTabMode === "content") && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <select
+                  value={language}
+                  onChange={(e) => {
+                    const newLang = e.target.value;
+                    setLanguage(newLang);
+                    if (ex?.starterCode?.[newLang]) {
+                      setCode(ex.starterCode[newLang]);
+                    } else if (DEFAULT_STARTER_CODES[newLang]) {
+                      setCode(DEFAULT_STARTER_CODES[newLang]);
+                    }
+                  }}
+                  className="h-9 bg-card text-foreground text-xs font-semibold rounded-lg px-3 border border-border shadow-xs focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
+                >
+                  <option value="javascript">JavaScript (Real-Time Sandbox)</option>
+                  <option value="python">Python 3</option>
+                  <option value="java">Java 21</option>
+                  <option value="cpp">C++ 20</option>
+                </select>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (ex?.starterCode?.[language]) {
+                      setCode(ex.starterCode[language]);
+                    } else if (DEFAULT_STARTER_CODES[language]) {
+                      setCode(DEFAULT_STARTER_CODES[language]);
+                    } else {
+                      setCode("// Write your solution below\n");
+                    }
+                  }}
+                  className="h-9 text-xs gap-1 border-border text-muted-foreground hover:text-foreground cursor-pointer"
+                  title="Reset to starter code"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Reset Code</span>
+                </Button>
+              </div>
+
+              {ex?.hints && ex.hints.length > 0 && (
+                <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium">
+                  <Lightbulb className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>Hint: {ex.hints[0]}</span>
+                </span>
+              )}
+            </div>
+
+            {/* Monaco Editor Container */}
+            <div className="border border-border rounded-xl overflow-hidden h-72 shadow-inner">
+              <Editor
+                height="100%"
+                language={language === "cpp" ? "cpp" : language}
+                theme={isDark ? "vs-dark" : "light"}
+                value={code || DEFAULT_STARTER_CODES[language] || "// Write code here\n"}
+                onChange={(val) => setCode(val || "")}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 13,
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                }}
+              />
+            </div>
+
+            {/* Action Buttons: Real-Time Run and Submit */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  onClick={handleRunCodeRealtime}
+                  disabled={isExecutingRealtime}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 px-4 shadow-xs gap-1.5 cursor-pointer transition-all"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>
+                    {isExecutingRealtime ? "Executing Live..." : "▶ Run Code (Live)"}
+                  </span>
+                </Button>
+
+                {ex && (
+                  <Button
+                    type="button"
+                    onClick={() => handleCodeSubmit(ex.id)}
+                    disabled={submittingExercise}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs h-9 px-4 shadow-xs gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>
+                      {submittingExercise ? "Evaluating..." : "Submit Solution"}
+                    </span>
+                  </Button>
+                )}
+              </div>
+
+              <span className="text-[11px] text-muted-foreground">
+                Real-time sandbox runner with live output capture
+              </span>
+            </div>
+
+            {/* Live Terminal Console */}
+            <div className="bg-[#0b0f19] border border-border/80 rounded-xl overflow-hidden shadow-lg font-mono text-xs">
+              <div className="flex items-center justify-between px-4 py-2.5 bg-[#161b26] border-b border-border/60">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500/80 inline-block" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block" />
+                  </div>
+                  <span className="text-slate-400 font-semibold text-[11px] ml-1">
+                    Terminal Output
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-medium">
+                    {isExecutingRealtime ? "Executing..." : "Ready"}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center bg-slate-900/90 rounded-lg p-0.5 border border-slate-700/60">
+                    <button
+                      type="button"
+                      onClick={() => setTerminalTab("output")}
+                      className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-all cursor-pointer ${
+                        terminalTab === "output"
+                          ? "bg-slate-700 text-white shadow-xs"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      Console Output
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTerminalTab("tests")}
+                      className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-all cursor-pointer ${
+                        terminalTab === "tests"
+                          ? "bg-slate-700 text-white shadow-xs"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      Test Results
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTerminalLogs([
+                        {
+                          type: "system",
+                          text: "> Console cleared.",
+                          time: new Date().toLocaleTimeString(),
+                        },
+                      ])
+                    }
+                    className="p-1 rounded text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    title="Clear Console"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 max-h-56 overflow-y-auto space-y-1.5 text-slate-200 select-text">
+                {terminalTab === "output" ? (
+                  terminalLogs.map((log, idx) => (
+                    <div key={idx} className="flex items-start gap-2.5 leading-relaxed">
+                      <span className="text-slate-500 text-[10px] select-none flex-shrink-0 pt-0.5">
+                        [{log.time}]
+                      </span>
+                      {log.type === "stdout" && (
+                        <span className="text-emerald-400 font-medium flex-1">
+                          {log.text}
+                        </span>
+                      )}
+                      {log.type === "stderr" && (
+                        <span className="text-rose-400 font-semibold flex-1">
+                          {log.text}
+                        </span>
+                      )}
+                      {log.type === "return" && (
+                        <span className="text-cyan-300 font-semibold flex-1">
+                          {log.text}
+                        </span>
+                      )}
+                      {log.type === "system" && (
+                        <span className="text-slate-400 italic flex-1">
+                          {log.text}
+                        </span>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="space-y-2">
+                    {executionFeedback?.results ? (
+                      executionFeedback.results.map((res: any, idx: number) => (
+                        <div
+                          key={idx}
+                          className={`p-2.5 rounded-lg border text-xs flex items-center justify-between ${
+                            res.passed
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                              : "bg-destructive/10 border-destructive/30 text-rose-300"
+                          }`}
+                        >
+                          <span className="font-semibold">
+                            Test Case #{idx + 1}: {res.passed ? "Passed ✓" : "Failed ✗"}
+                          </span>
+                          {res.error && (
+                            <span className="text-[11px] text-rose-400 font-mono">
+                              {res.error}
+                            </span>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-muted-foreground text-xs py-2">
+                        No test assertions evaluated yet. Click &quot;Submit Solution&quot; to test your code.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODE B: W3Schools Fill in the Blanks / Complete the Code */}
+        {activeTabMode === "w3" && currentEx && (
+          <div className="p-5 rounded-2xl bg-card border-2 border-border shadow-xs space-y-5">
+            {/* W3 Header & Stepper Navigation */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-md text-[11px] font-extrabold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  W3Schools Exercise
+                </span>
+                <h4 className="text-sm font-bold text-foreground">
+                  {currentEx.title}
+                </h4>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground font-semibold">
+                  Exercise {safeIdx + 1} of {w3List.length}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setW3Index((prev) => Math.max(0, prev - 1))}
+                    disabled={safeIdx <= 0}
+                    className="p-1.5 rounded-lg border border-border text-foreground hover:bg-muted disabled:opacity-40 cursor-pointer"
+                    title="Previous exercise"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setW3Index((prev) => Math.min(w3List.length - 1, prev + 1))}
+                    disabled={safeIdx >= w3List.length - 1}
+                    className="p-1.5 rounded-lg border border-border text-foreground hover:bg-muted disabled:opacity-40 cursor-pointer"
+                    title="Next exercise"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Exercise Prompt */}
+            <p className="text-sm font-semibold text-foreground leading-relaxed">
+              {currentEx.instruction}
+            </p>
+
+            {/* Interactive Code Container with Inline Input Blanks */}
+            <div className="p-4 rounded-xl bg-[#0d1117] border border-border/80 shadow-inner overflow-x-auto text-xs sm:text-sm font-mono leading-relaxed select-text text-slate-100">
+              {parts.map((part, pIdx) => {
+                const blankMatch = part.match(/^\[(b\d+)\]$/);
+                if (blankMatch) {
+                  const bId = blankMatch[1];
+                  const bDef = currentEx.blanks.find((b) => b.id === bId);
+                  const currentVal = userAnswers[bId] || "";
+                  const expectedVal = bDef?.answer || "";
+
+                  let blankClass =
+                    "bg-primary/20 border-primary/50 text-white font-bold focus:ring-2 focus:ring-primary";
+                  if (feedback) {
+                    const isMatch =
+                      bDef?.caseSensitive !== true
+                        ? currentVal.trim().toLowerCase() === expectedVal.trim().toLowerCase()
+                        : currentVal.trim() === expectedVal.trim();
+                    if (isMatch) {
+                      blankClass =
+                        "bg-emerald-500/20 border-emerald-500 text-emerald-300 font-extrabold shadow-[0_0_10px_rgba(16,185,129,0.4)]";
+                    } else {
+                      blankClass =
+                        "bg-destructive/20 border-destructive text-destructive font-extrabold shadow-[0_0_10px_rgba(239,68,68,0.4)]";
+                    }
+                  }
+
+                  const inputLen = Math.max(
+                    (bDef?.placeholder?.length || 4) + 2,
+                    currentVal.length + 2,
+                    expectedVal.length + 1
+                  );
+
+                  return (
+                    <input
+                      key={pIdx}
+                      type="text"
+                      value={currentVal}
+                      placeholder={bDef?.placeholder || "..."}
+                      style={{ width: `${inputLen}ch` }}
+                      onChange={(e) => {
+                        setW3BlankValues({
+                          ...w3BlankValues,
+                          [currentEx.id]: {
+                            ...userAnswers,
+                            [bId]: e.target.value,
+                          },
+                        });
+                        if (feedback) {
+                          setW3Feedback({
+                            ...w3Feedback,
+                            [currentEx.id]: {
+                              ...feedback,
+                              isCorrect: false,
+                              message: undefined,
+                            },
+                          });
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleCheckW3Blank(currentEx);
+                        }
+                      }}
+                      className={`inline-block mx-1 px-2.5 py-0.5 rounded-md border text-center transition-all outline-none font-mono text-xs sm:text-sm ${blankClass}`}
+                    />
+                  );
+                }
+                return <span key={pIdx}>{part}</span>;
+              })}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  onClick={() => handleCheckW3Blank(currentEx)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 px-5 shadow-xs cursor-pointer gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Submit Answer &gt;</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleToggleW3Answer(currentEx)}
+                  className="border-border text-foreground hover:bg-muted font-semibold text-xs h-9 px-3.5 gap-1.5 cursor-pointer"
+                >
+                  <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
+                  <span>
+                    {w3ShowAnswer[currentEx.id] ? "Hide Answer" : "Show Answer"}
+                  </span>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => handleResetW3(currentEx.id)}
+                  className="text-xs text-muted-foreground hover:text-foreground h-9 px-3 gap-1 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset</span>
+                </Button>
+              </div>
+
+              {currentEx.hint && (
+                <span className="text-xs text-muted-foreground font-medium">
+                  💡 Hint: {currentEx.hint}
+                </span>
+              )}
+            </div>
+
+            {/* Explanation Drawer if Answer Shown or Correct */}
+            {(w3ShowAnswer[currentEx.id] || feedback?.isCorrect) && (
+              <div className="p-3.5 rounded-xl border border-border bg-muted/40 text-xs leading-relaxed text-foreground">
+                <span className="font-bold text-primary block mb-1">
+                  Understanding the concept:
+                </span>
+                <p>{currentEx.explanation}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground pt-24 pb-16 px-4 sm:px-6 lg:px-8 flex flex-col font-sans">
@@ -1116,89 +2148,31 @@ export default function CourseWorkspacePage({
                           </div>
                         )}
 
-                        {/* Coding Exercise Runner */}
-                        {(ex.type === "coding" || ex.type === "debugging") && (
-                          <div className="space-y-4">
-                            <div className="flex items-center justify-between gap-3">
-                              <select
-                                value={language}
-                                onChange={(e) => {
-                                  const newLang = e.target.value;
-                                  setLanguage(newLang);
-                                  if (ex.starterCode?.[newLang]) {
-                                    setCode(ex.starterCode[newLang]);
-                                  }
-                                }}
-                                className="h-9 bg-card text-foreground text-xs font-semibold rounded-lg px-3 border border-border shadow-xs focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
-                              >
-                                <option value="javascript">JavaScript (Node.js)</option>
-                                <option value="python">Python 3</option>
-                                <option value="cpp">C++ 20</option>
-                                <option value="java">Java 21</option>
-                              </select>
-
-                              {ex.hints && ex.hints.length > 0 && (
-                                <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium">
-                                  <Lightbulb className="w-3.5 h-3.5" />
-                                  <span>Hint: {ex.hints[0]}</span>
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Monaco Editor Container adapting to theme */}
-                            <div className="border border-border rounded-xl overflow-hidden h-72 shadow-inner">
-                              <Editor
-                                height="100%"
-                                language={language === "cpp" ? "cpp" : language}
-                                theme={isDark ? "vs-dark" : "light"}
-                                value={code}
-                                onChange={(val) => setCode(val || "")}
-                                options={{
-                                  minimap: { enabled: false },
-                                  fontSize: 13,
-                                  scrollBeyondLastLine: false,
-                                  automaticLayout: true,
-                                }}
-                              />
-                            </div>
-
-                            {/* Test Feedback */}
-                            {executionFeedback && (
-                              <div
-                                className={`p-4 rounded-xl border text-xs font-mono ${
-                                  executionFeedback.passed
-                                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
-                                    : "bg-destructive/10 border-destructive/30 text-destructive"
-                                }`}
-                              >
-                                <div className="font-bold mb-1">
-                                  {executionFeedback.passed
-                                    ? "✓ All Test Cases Passed!"
-                                    : "✗ Test Case Failures Detected"}
-                                </div>
-                                <div>
-                                  Passed {executionFeedback.passedCount} of{" "}
-                                  {executionFeedback.totalCount} test suites
-                                </div>
-                              </div>
-                            )}
-
-                            <Button
-                              onClick={() => handleCodeSubmit(ex.id)}
-                              disabled={submittingExercise}
-                              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-xs gap-1.5"
-                            >
-                              <Play className="w-3.5 h-3.5" />
-                              <span>
-                                {submittingExercise
-                                  ? "Executing in Sandbox..."
-                                  : "Run & Submit Code"}
-                              </span>
-                            </Button>
-                          </div>
-                        )}
+                        {/* Coding & W3Schools Practice Suite */}
+                        {(ex.type === "coding" || ex.type === "debugging") &&
+                          renderInteractivePracticeSuite(ex)
+                        }
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Always-Accessible Hands-on Interactive Practice & W3Schools Exercises */}
+                {!lesson.exercises?.some((e) => e.type === "coding" || e.type === "debugging") && (
+                  <div className="pt-8 border-t border-border space-y-6">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                        <Code2 className="w-5 h-5 text-primary" />
+                        <span>Interactive Practice & W3Schools Exercises</span>
+                      </h2>
+                      <span className="text-xs text-muted-foreground font-medium">
+                        Real-time code compiler & concept fill-in-the-blanks
+                      </span>
+                    </div>
+
+                    <div className="bg-muted/20 border border-border rounded-xl p-6 shadow-xs space-y-6">
+                      {renderInteractivePracticeSuite()}
+                    </div>
                   </div>
                 )}
 

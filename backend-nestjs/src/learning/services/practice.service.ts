@@ -495,4 +495,42 @@ export class PracticeService {
       this.logger.error(`Error recalculating progress: ${err.message}`);
     }
   }
+
+  /**
+   * Real-time Playground / Exercise live compiler execution (synchronous)
+   */
+  async runPlaygroundCode(dto: { code: string; language: string; stdin?: string }) {
+    const testCases = [{ id: 1, input: dto.stdin || '', expected: '' }];
+    const startTime = Date.now();
+    try {
+      const results = await this.executionService.runCode(
+        dto.code,
+        dto.language,
+        testCases,
+        {
+          timeLimit: 5000,
+          memoryLimit: 256,
+          customInput: true,
+        },
+      );
+      const elapsed = Date.now() - startTime;
+      const r = results[0] || {};
+      return {
+        success: true,
+        output: r.output || '',
+        error: r.error || '',
+        status: r.status,
+        durationMs: elapsed,
+      };
+    } catch (err: any) {
+      this.logger.warn(`Playground execution notice: ${err?.message}`);
+      return {
+        success: false,
+        output: '',
+        error: err?.message || 'Execution unavailable',
+        durationMs: Date.now() - startTime,
+      };
+    }
+  }
 }
+

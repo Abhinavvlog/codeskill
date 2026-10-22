@@ -690,6 +690,14 @@ export const learningAPI = {
   getMyAchievements: () => api.get("/learning/me/achievements"),
   getMyCertificates: () => api.get("/learning/me/certificates"),
   issueCertificate: (pathId: string) => api.post(`/learning/paths/${pathId}/certify`),
+  runPlayground: (data: { code: string; language: string; stdin?: string }) =>
+    api.post<{
+      success: boolean;
+      output: string;
+      error: string;
+      status: string;
+      durationMs: number;
+    }>("/learning/playground/run", data),
 };
 
 export const adminLearningAPI = {

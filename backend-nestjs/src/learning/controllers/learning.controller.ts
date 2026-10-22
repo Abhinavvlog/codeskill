@@ -151,4 +151,13 @@ export class LearningController {
   ) {
     return this.certService.issueCertificate(pathId, studentId);
   }
+
+  @Post('playground/run')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Real-time live compiler runner for sandbox and practice' })
+  async runPlaygroundCode(
+    @Body() dto: { code: string; language: string; stdin?: string },
+  ) {
+    return this.practiceService.runPlaygroundCode(dto);
+  }
 }
