@@ -48,6 +48,33 @@ async function bootstrap() {
       criteria: { type: 'course_completed', slug: 'advanced-prompt-engineering' },
     },
     {
+      code: 'GENAI_ARCHITECT',
+      name: 'GenAI Architect',
+      description: 'Mastered Transformer mechanics, RoPE embeddings, KV-cache, and test-time reasoning models.',
+      iconUrl: '/images/badges/genai-architect.svg',
+      rarity: 'epic' as const,
+      category: 'skills' as const,
+      criteria: { type: 'course_completed', slug: 'genai-transformers-reasoning-models' },
+    },
+    {
+      code: 'RAG_SPECIALIST',
+      name: 'RAG Specialist',
+      description: 'Engineered production RAG pipelines with Hybrid Search (BM25 + Dense) and Ragas evaluation.',
+      iconUrl: '/images/badges/rag-specialist.svg',
+      rarity: 'epic' as const,
+      category: 'skills' as const,
+      criteria: { type: 'course_completed', slug: 'enterprise-rag-vector-databases' },
+    },
+    {
+      code: 'AGENTIC_ENGINEER',
+      name: 'Agentic Systems Engineer',
+      description: 'Mastered autonomous multi-agent orchestration, tool calling, and state graphs with LangGraph.',
+      iconUrl: '/images/badges/agentic-engineer.svg',
+      rarity: 'legendary' as const,
+      category: 'mastery' as const,
+      criteria: { type: 'course_completed', slug: 'agentic-ai-langchain-langgraph' },
+    },
+    {
       code: 'PYTHON_MASTER',
       name: 'Python Master',
       description: 'Mastered Python from fundamentals through OOP, decorators, and memory-efficient generators.',
@@ -115,7 +142,7 @@ async function bootstrap() {
   // 3. AI & PROMPT ENGINEERING PATH
   // ==========================================
   console.log('\n--- Seeding AI & Prompt Engineering Path ---');
-  let aiCourse1, aiCourse2;
+  let aiCourse1, aiCourse2, aiCourse3, aiCourse4, aiCourse5;
   try {
     aiCourse1 = await adminService.createCourse({
       title: 'Foundations of Large Language Models & Generative AI',
@@ -413,9 +440,587 @@ function findDuplicates(arr) {
     console.log(`AI Course 2 setup: ${err.message}`);
   }
 
-  // Create AI Path
+  // ==========================================
+  // Course 3: Generative AI Systems & Reasoning Models
+  // ==========================================
   try {
-    const aiPath = await adminService.createPath({
+    aiCourse3 = await adminService.createCourse({
+      title: 'Generative AI & LLM Systems: Transformers to Reasoning Models (2026 Edition)',
+      slug: 'genai-transformers-reasoning-models',
+      description: 'Deep dive into transformer attention mechanics, Rotary Positional Embeddings (RoPE), KV-cache memory dynamics, Mixture of Experts (MoE), and test-time compute scaling reasoning models (OpenAI o1/o3, DeepSeek-R1 GRPO).',
+      difficulty: 'intermediate',
+      estimatedMinutes: 90,
+      status: 'published',
+    });
+
+    const aiMod3_1 = await adminService.createModule(aiCourse3.id, {
+      title: 'Module 1: Attention Mechanisms, RoPE & KV-Caching',
+      description: 'Scaled dot-product attention, multi-head projections, RoPE context extrapolation, and KV-cache latency bottlenecks.',
+      order: 1,
+    });
+
+    const aiL3_1 = await adminService.createLesson(aiMod3_1.id, {
+      title: 'Self-Attention, Multi-Head Attention & Rotary Positional Embeddings (RoPE)',
+      slug: 'self-attention-multi-head-rope',
+      order: 1,
+      type: 'reading',
+      content: `### Deep Dive: Scaled Dot-Product Attention & RoPE
+
+At the heart of every modern Generative AI model—from Llama 3 to GPT-4o and DeepSeek-V3—is the **Attention Mechanism**.
+
+#### 1. Scaled Dot-Product Attention Formula
+
+$$\\text{Attention}(Q, K, V) = \\text{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right) V$$
+
+- **Queries ($Q$)**: What the current token is seeking in other tokens.
+- **Keys ($K$)**: What properties the target token advertises about itself.
+- **Values ($V$)**: The actual semantic information transferred if attention weight is high.
+- **Scaling Factor $\\sqrt{d_k}$**: As dimension $d_k$ grows large, the dot products grow in magnitude, pushing the softmax function into regions with near-zero gradients. Dividing by $\\sqrt{d_k}$ stabilizes backpropagation.
+
+#### 2. Why Absolute Positional Embeddings Failed
+Early transformers used sinusoidal or learned absolute position embeddings added directly to input vectors:
+$$\\vec{x}_i = \\text{Embedding}(w_i) + \\text{Position}(i)$$
+**The Problem**: Absolute positions do not encode the relative geometric distance between tokens. Token distance $(i - j)$ is what matters for grammar and reasoning, not absolute position index.
+
+#### 3. Rotary Position Embedding (RoPE)
+Introduced by Su et al. (RoFormer) and adopted universally by modern LLMs:
+- Instead of adding a vector, RoPE **rotates** the 2D feature pairs in the query and key vectors in complex vector space:
+$$R_{\\Theta, m}^d = \\text{diag}\\left(R_{\\theta_1, m}, R_{\\theta_2, m}, \\dots, R_{\\theta_{d/2}, m}\\right)$$
+- The inner product $\\langle R_m q, R_n k \\rangle$ depends **only on the relative distance $(m - n)$**.
+- Allows context window scaling techniques such as **YaRN** and **Dynamic NTK-aware scaling** to extrapolate 8k training windows to 128k+ tokens during inference!
+`,
+      learningObjectives: [
+        'Derive the Scaled Dot-Product Attention equation and justify the scaling factor',
+        'Analyze why absolute position embeddings degrade at long contexts',
+        'Explain how Rotary Position Embeddings (RoPE) preserve relative distances mathematically',
+      ],
+    });
+
+    await adminService.createExercise(aiL3_1.id, {
+      title: 'Knowledge Check: Attention Mechanics & RoPE',
+      type: 'quiz',
+      marks: 20,
+      isMandatory: true,
+      order: 1,
+      quizConfig: {
+        questions: [
+          {
+            id: 'rope-q1',
+            question: 'Why do modern LLMs divide the query-key dot product by sqrt(d_k) before applying the softmax function?',
+            options: [
+              'To reduce GPU memory allocation by half',
+              'To prevent extremely large dot products that push the softmax function into vanishing gradient regimes',
+              'To convert tokens from integer IDs into floating point values',
+              'To enable multi-threading on CPU runners',
+            ],
+            correctAnswer: 1,
+            explanation: 'For large vector dimensions d_k, variance of the dot product scales with d_k. Scaling by sqrt(d_k) keeps variance close to 1, preventing softmax saturation and vanishing gradients.',
+          },
+          {
+            id: 'rope-q2',
+            question: 'What is the key mathematical property of Rotary Position Embedding (RoPE)?',
+            options: [
+              'It permanently caches all token weights on disk',
+              'The inner product between query at position m and key at position n depends solely on relative offset (m - n)',
+              'It removes the need for Key and Value matrices completely',
+              'It forces every prompt to be exactly 4,096 tokens',
+            ],
+            correctAnswer: 1,
+            explanation: 'RoPE rotates representations such that their dot product is an invariant function of the relative distance (m - n), enabling natural relative attention and extrapolation.',
+          },
+        ],
+      },
+    });
+
+    const aiL3_2 = await adminService.createLesson(aiMod3_1.id, {
+      title: 'KV-Cache Memory Dynamics & Inference Throughput',
+      slug: 'kv-cache-memory-dynamics',
+      order: 2,
+      type: 'reading',
+      content: `### The KV-Cache: The Primary Bottleneck in LLM Serving
+
+When generating tokens autoregressively, the model generates one token at a time:
+$$x_{t} = \\text{Model}(x_1, x_2, \\dots, x_{t-1})$$
+
+#### 1. Why Recomputation is Prohibitive ($O(N^2)$)
+Without caching, predicting token $t=1000$ requires re-projecting Keys and Values for all 999 previous tokens through every transformer layer. Total operations would scale quadratically $O(N^2)$.
+
+#### 2. How the KV-Cache Works
+During generation, we save the computed Key ($K$) and Value ($V$) tensors for all previous tokens in GPU High-Bandwidth Memory (HBM). For the new token:
+1. Only project the single new query $q_t$, key $k_t$, and value $v_t$.
+2. Append $k_t$ and $v_t$ to the stored cache.
+3. Compute attention against the cached keys and values in $O(N)$ time per token.
+
+#### 3. KV Cache Memory Sizing Formula
+$$\\text{Memory (Bytes)} = 2 \\times \\text{layers} \\times \\text{heads}_{KV} \\times d_{head} \\times \\text{seq\\_len} \\times \\text{batch\\_size} \\times \\text{bytes\\_per\\_elem}$$
+
+> **Example**: Llama-3-70B (80 layers, 8 KV heads in Grouped-Query Attention, head dimension 128, FP16 precision = 2 bytes):
+> For a sequence length of 8,192 tokens per request, the KV cache alone consumes:
+> $$2 \\times 80 \\times 8 \\times 128 \\times 8192 \\times 1 \\times 2 \\approx 2.68\\text{ GB per concurrent user!}$$
+
+#### 4. Modern KV-Cache Optimizations
+- **Grouped-Query Attention (GQA)**: Shares a single Key-Value head across multiple Query heads (e.g., 8:1 ratio), cutting memory by 8x.
+- **PagedAttention (vLLM)**: Treats GPU memory like OS virtual memory paging, eliminating internal memory fragmentation.
+`,
+      learningObjectives: [
+        'Analyze why autoregressive token generation without caching requires O(N^2) compute',
+        'Calculate exact KV-cache GPU memory requirements using the multi-head parameter formula',
+        'Contrast Multi-Head Attention (MHA) with Grouped-Query Attention (GQA)',
+      ],
+    });
+
+    await adminService.createExercise(aiL3_2.id, {
+      title: 'Coding Exercise: KV-Cache Memory Calculator',
+      type: 'coding',
+      marks: 25,
+      isMandatory: true,
+      order: 1,
+      starterCode: `def calculate_kv_cache_gb(layers: int, kv_heads: int, head_dim: int, seq_len: int, batch_size: int, precision_bytes: int = 2) -> float:
+    """
+    Calculate the total KV-cache memory in Gigabytes (GB).
+    Formula: 2 * layers * kv_heads * head_dim * seq_len * batch_size * precision_bytes / (1024 ** 3)
+    """
+    # Write your implementation here
+    pass
+
+# Test case
+# Llama-3-70B: layers=80, kv_heads=8, head_dim=128, seq_len=8192, batch_size=1, precision=2 bytes
+print(round(calculate_kv_cache_gb(80, 8, 128, 8192, 1, 2), 2))
+`,
+      hints: [
+        'Remember there is a factor of 2 because we cache BOTH Keys and Values.',
+        'Divide total bytes by (1024 ** 3) to convert from bytes to Gigabytes (GiB).',
+      ],
+    });
+
+    const aiMod3_2 = await adminService.createModule(aiCourse3.id, {
+      title: 'Module 2: Reasoning Models & Test-Time Compute (o1, DeepSeek-R1)',
+      slug: 'reasoning-models-test-time-compute',
+      description: 'The shift from pre-training scaling laws to test-time compute search, Tree-of-Thought backtracking, and GRPO reinforcement learning.',
+      order: 2,
+    });
+
+    const aiL3_3 = await adminService.createLesson(aiMod3_2.id, {
+      title: 'Test-Time Compute Scaling & Reasoning Paradigms (OpenAI o1, DeepSeek-R1)',
+      slug: 'test-time-compute-reasoning-models',
+      order: 1,
+      type: 'reading',
+      content: `### The Paradigm Shift: From Pre-Training Scaling to Test-Time Compute
+
+For years, LLM improvements relied on **Pre-training Scaling Laws** (Kaplan et al., Chinchilla): training bigger models on more internet tokens.
+In 2024–2026, industry frontier progress unlocked **Test-Time Compute Scaling**.
+
+#### 1. What is Test-Time Compute?
+Instead of forcing the model to generate the final answer in a single deterministic pass, the model is given a budget of **hidden reasoning tokens** to explore:
+- Decomposing the problem into sub-problems.
+- Self-verifying intermediate results and actively looking for contradictions.
+- Backtracking when a logical path encounters an error.
+
+#### 2. DeepSeek-R1 & GRPO (Group Relative Policy Optimization)
+DeepSeek-R1 demonstrated that reasoning capabilities can emerge **directly from pure Reinforcement Learning (RL)** without human supervised warm-up:
+- **No Critic Network**: Traditional PPO (Proximal Policy Optimization) requires a separate value/critic network that doubles GPU memory.
+- **GRPO**: Generates a group of candidate outputs $\\{o_1, o_2, \\dots, o_G\\}$ for each question, scores them using deterministic rule-based verification (e.g. unit tests or math checks), and computes relative advantage:
+$$A_i = \\frac{R_i - \\text{mean}(R)}{\\text{std}(R)}$$
+- During training, models naturally exhibit the *"Aha Moment"*, learning to re-read problem statements and retry failed calculations autonomously!
+`,
+      learningObjectives: [
+        'Differentiate between pre-training compute and test-time compute scaling laws',
+        'Explain how Monte Carlo Tree Search (MCTS) and Chain-of-Thought search guide reasoning models',
+        'Compare Group Relative Policy Optimization (GRPO) with traditional PPO RLHF',
+      ],
+    });
+
+    await adminService.createExercise(aiL3_3.id, {
+      title: 'Knowledge Check: Reasoning Models & Test-Time Compute',
+      type: 'quiz',
+      marks: 20,
+      isMandatory: true,
+      order: 1,
+      quizConfig: {
+        questions: [
+          {
+            id: 'r1-q1',
+            question: 'How does Group Relative Policy Optimization (GRPO) reduce GPU training memory compared to standard PPO?',
+            options: [
+              'It eliminates the need for a separate Critic/Value network by scoring groups of candidate rollouts against each other',
+              'It quantizes the model to 1-bit weights',
+              'It disables the attention mechanism completely during backward pass',
+              'It runs only on CPU memory',
+            ],
+            correctAnswer: 0,
+            explanation: 'GRPO computes advantages by standardizing rewards across a group of sampled responses for the same prompt, removing the parameter-heavy Critic model entirely.',
+          },
+          {
+            id: 'r1-q2',
+            question: 'What happens during test-time compute scaling in reasoning models like OpenAI o1 or DeepSeek-R1?',
+            options: [
+              'The server downloads additional model weights from the cloud',
+              'The model spends additional inference tokens thinking, self-correcting, and searching reasoning branches before emitting the answer',
+              'The user must pay double electricity rates',
+              'The context window is reduced to zero',
+            ],
+            correctAnswer: 1,
+            explanation: 'Test-time compute allows the model to explore multiple reasoning paths and verify intermediate steps, dramatically boosting complex math and coding accuracy.',
+          },
+        ],
+      },
+    });
+
+    console.log(`✓ Course seeded: ${aiCourse3.title}`);
+  } catch (err: any) {
+    console.log(`AI Course 3 setup: ${err.message}`);
+  }
+
+  // ==========================================
+  // Course 4: Enterprise RAG & Vector Databases
+  // ==========================================
+  try {
+    aiCourse4 = await adminService.createCourse({
+      title: 'Enterprise RAG & Vector Databases: Production Retrieval Architectures',
+      slug: 'enterprise-rag-vector-databases',
+      description: 'Master production Retrieval-Augmented Generation: semantic chunking, HNSW vector indexing, pgvector, hybrid search with BM25 + Dense RRF fusion, cross-encoder reranking, and Ragas evaluation.',
+      difficulty: 'intermediate',
+      estimatedMinutes: 100,
+      status: 'published',
+    });
+
+    const aiMod4_1 = await adminService.createModule(aiCourse4.id, {
+      title: 'Module 1: Chunking Strategies & Vector Embeddings',
+      description: 'Semantic chunking, parent document retrieval, distance metrics, and HNSW graph indexing.',
+      order: 1,
+    });
+
+    const aiL4_1 = await adminService.createLesson(aiMod4_1.id, {
+      title: 'Semantic Chunking, Embeddings & Vector Similarity Metrics',
+      slug: 'chunking-strategies-semantic-retrieval',
+      order: 1,
+      type: 'reading',
+      content: `### Chunking & Vector Embeddings: The Foundation of RAG
+
+Retrieval-Augmented Generation (RAG) is only as good as the context retrieved. The primary cause of RAG failure is **poor chunking**.
+
+#### 1. The Chunking Spectrum
+- **Fixed-Size Chunking (Naive)**: Splits every 500 characters. Slices sentences and tables in half, destroying context.
+- **Recursive Character Chunking**: Recursively splits by paragraphs (\`\\n\\n\`), then sentences (\`\\n\`), then spaces (\` \`), keeping natural semantic blocks intact.
+- **Semantic Chunking**: Computes embeddings for consecutive sentences. When the cosine distance between sentence $i$ and $i+1$ exceeds a threshold, a new chunk boundary is formed.
+- **Parent Document / Small-to-Big Retrieval**: Index small sub-chunks (200 tokens) for precise vector matching, but return the larger parent section (1,500 tokens) to the LLM prompt.
+
+#### 2. Vector Similarity Metrics
+Given query embedding $\\vec{u}$ and document embedding $\\vec{v}$:
+
+| Metric | Formula | Best Used For |
+| :--- | :--- | :--- |
+| **Cosine Similarity** | $\\frac{\\vec{u} \\cdot \\vec{v}}{\\|\\vec{u}\\| \\|\\vec{v}\\|}$ | Normalized embeddings (text-embedding-3, Cohere, BGE) |
+| **Dot / Inner Product** | $\\vec{u} \\cdot \\vec{v}$ | Pre-normalized unit vectors (fastest compute) |
+| **Euclidean Distance (L2)** | $\\sqrt{\\sum (u_i - v_i)^2}$ | Geometric spatial distance |
+`,
+      learningObjectives: [
+        'Compare Fixed, Recursive, and Semantic Chunking trade-offs',
+        'Implement Small-to-Big / Parent Document retrieval architecture',
+        'Select the appropriate vector distance metric based on embedding normalization',
+      ],
+    });
+
+    await adminService.createExercise(aiL4_1.id, {
+      title: 'Knowledge Check: Chunking Strategies & Vector Metrics',
+      type: 'quiz',
+      marks: 15,
+      isMandatory: true,
+      order: 1,
+      quizConfig: {
+        questions: [
+          {
+            id: 'rag-q1',
+            question: 'Why is Parent Document (Small-to-Big) retrieval superior to naive fixed chunking in enterprise documentation?',
+            options: [
+              'It indexes small granular chunks for high search precision, but passes the broad parent context to the LLM for complete context awareness',
+              'It permanently eliminates the need for vector embeddings',
+              'It stores all documents in a plain CSV file',
+              'It reduces English text to binary code',
+            ],
+            correctAnswer: 0,
+            explanation: 'Small chunks yield sharp embedding similarity matches without noise, while returning the parent document provides the full background context needed to prevent hallucination.',
+          },
+        ],
+      },
+    });
+
+    const aiMod4_2 = await adminService.createModule(aiCourse4.id, {
+      title: 'Module 2: Advanced Hybrid Retrieval & RAG Evaluation',
+      description: 'Hybrid search with Reciprocal Rank Fusion (RRF), Cross-Encoder reranking, and Ragas evaluation.',
+      order: 2,
+    });
+
+    const aiL4_2 = await adminService.createLesson(aiMod4_2.id, {
+      title: 'Hybrid Search (BM25 + Dense Vectors) & Reciprocal Rank Fusion (RRF)',
+      slug: 'hybrid-search-bm25-reranking',
+      order: 1,
+      type: 'reading',
+      content: `### Why Pure Vector Search Fails in Production
+
+Dense vector embeddings excel at **conceptual matching** (e.g., matching *"headache remedies"* to *"aspirin dosage"*), but fail on:
+- Exact SKU / Serial Numbers (e.g., \`CS-99482-X\`).
+- Rare library function names (e.g., \`pthread_mutex_timedlock\`).
+- Acronyms and compliance codes.
+
+#### 1. Hybrid Search Architecture
+To achieve production reliability, modern architectures execute **Hybrid Search**:
+1. **Sparse Lexical Search**: BM25 / PostgreSQL Full-Text Search indexing exact keyword frequencies.
+2. **Dense Semantic Search**: HNSW vector index in pgvector capturing meaning and intent.
+
+#### 2. Reciprocal Rank Fusion (RRF)
+How do we merge rankings from two completely different scoring scales (BM25 scores range 0–50; Cosine similarity ranges 0–1)?
+**Reciprocal Rank Fusion (RRF)** uses rank positions instead of raw scores:
+$$RRF\\_Score(d) = \\sum_{m \\in M} \\frac{1}{k + r_m(d)}$$
+Where $r_m(d)$ is document $d$'s rank in retriever $m$, and $k$ is a smoothing constant (standard default $k=60$).
+
+#### 3. Two-Stage Retrieval with Cross-Encoder Rerankers
+- **Stage 1 (High Recall)**: Retrieve top 50 candidates using Hybrid Search (latency ~10ms).
+- **Stage 2 (High Precision)**: Pass the top 50 pairs into a **Cross-Encoder Reranker** (e.g., BGE-Reranker-Large or Cohere Rerank) that performs joint attention across $(Query, Document)$ to yield the top 5 ultra-relevant chunks.
+`,
+      learningObjectives: [
+        'Diagnose when dense vector search fails on exact keywords and identifiers',
+        'Implement Reciprocal Rank Fusion (RRF) to merge disparate search scores',
+        'Architect a two-stage retrieval pipeline using fast candidate generation + Cross-Encoder reranking',
+      ],
+    });
+
+    await adminService.createExercise(aiL4_2.id, {
+      title: 'Coding Exercise: Reciprocal Rank Fusion (RRF) Merger',
+      type: 'coding',
+      marks: 25,
+      isMandatory: true,
+      order: 1,
+      starterCode: `def reciprocal_rank_fusion(dense_ranks: list[str], sparse_ranks: list[str], k: int = 60) -> list[tuple[str, float]]:
+    """
+    Combine two ranked lists of document IDs using Reciprocal Rank Fusion.
+    dense_ranks: ordered list of doc IDs from vector search (index 0 is rank 1)
+    sparse_ranks: ordered list of doc IDs from BM25 search (index 0 is rank 1)
+    Returns sorted list of (doc_id, rrf_score) in descending order of score.
+    """
+    scores = {}
+    # Iterate through dense ranks
+    for rank, doc_id in enumerate(dense_ranks, start=1):
+        scores[doc_id] = scores.get(doc_id, 0.0) + (1.0 / (k + rank))
+        
+    # Iterate through sparse ranks
+    for rank, doc_id in enumerate(sparse_ranks, start=1):
+        scores[doc_id] = scores.get(doc_id, 0.0) + (1.0 / (k + rank))
+        
+    return sorted(scores.items(), key=lambda item: item[1], reverse=True)
+
+# Test execution
+dense = ["docA", "docB", "docC"]
+sparse = ["docB", "docD", "docA"]
+print(reciprocal_rank_fusion(dense, sparse))
+`,
+      hints: [
+        'Notice how docB appears near the top of both lists, so its combined RRF score will be highest.',
+        'Use 1-indexed ranks (rank = index + 1).',
+      ],
+    });
+
+    console.log(`✓ Course seeded: ${aiCourse4.title}`);
+  } catch (err: any) {
+    console.log(`AI Course 4 setup: ${err.message}`);
+  }
+
+  // ==========================================
+  // Course 5: Agentic AI & LangChain / LangGraph Multi-Agent Orchestration
+  // ==========================================
+  try {
+    aiCourse5 = await adminService.createCourse({
+      title: 'Agentic AI & LangChain / LangGraph Multi-Agent Orchestration',
+      slug: 'agentic-ai-langchain-langgraph',
+      description: 'Build production autonomous agentic systems: ReAct loops, tool calling schemas, LangChain LCEL runnables, stateful multi-agent workflows with LangGraph, cycles, checkpointing, and human-in-the-loop control.',
+      difficulty: 'advanced',
+      estimatedMinutes: 120,
+      status: 'published',
+    });
+
+    const aiMod5_1 = await adminService.createModule(aiCourse5.id, {
+      title: 'Module 1: Autonomous Agent Architectures & Tool Calling',
+      description: 'The ReAct pattern, function calling schemas, and LangChain Expression Language (LCEL).',
+      order: 1,
+    });
+
+    const aiL5_1 = await adminService.createLesson(aiMod5_1.id, {
+      title: 'The ReAct Pattern & Deterministic Tool Calling',
+      slug: 'react-pattern-tool-calling',
+      order: 1,
+      type: 'reading',
+      content: `### Moving from Passive LLMs to Autonomous Agents
+
+A standard LLM is a stateless text-in, text-out predictor. An **Agent** is an LLM empowered with:
+1. **Perception**: Ability to inspect environment state.
+2. **Action**: Ability to execute deterministic tools (SQL queries, APIs, code runners, web scrapers).
+3. **Feedback Loop**: Incorporating tool results into subsequent reasoning steps.
+
+#### 1. The ReAct (Reason + Act) Loop
+Yao et al. formalizes the continuous cycle:
+$$\\text{Thought} \\rightarrow \\text{Action (Tool Call)} \\rightarrow \\text{Observation (Tool Output)} \\rightarrow \\text{Next Thought}$$
+
+\`\`\`markdown
+Question: What is the current price of stock XYZ multiplied by the prime minister's age?
+
+Thought 1: I need to look up the current stock price of XYZ.
+Action 1: call_api(service="finance", symbol="XYZ")
+Observation 1: {"symbol": "XYZ", "price": 142.50}
+
+Thought 2: Now I need to check the prime minister's current age.
+Action 2: search_web(query="current prime minister age")
+Observation 2: "Prime Minister was born in 1950, current age is 76."
+
+Thought 3: Now I will multiply 142.50 by 76 using the calculator tool.
+Action 3: calculate(expression="142.50 * 76")
+Observation 3: 10830.0
+
+Thought 4: I have all required values to answer the question.
+Final Answer: The product is 10,830.
+\`\`\`
+
+#### 2. Native Function & Tool Calling Schemas
+Modern LLMs (GPT-4o, Claude 3.5 Sonnet, Gemini 1.5 Pro) are fine-tuned to emit structured JSON complying with JSON Schema specifications:
+\`\`\`json
+{
+  "name": "execute_database_query",
+  "description": "Executes read-only SQL queries on the student database",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": { "type": "string", "description": "The SQL SELECT statement" },
+      "timeout_seconds": { "type": "integer", "default": 5 }
+    },
+    "required": ["query"]
+  }
+}
+\`\`\`
+`,
+      learningObjectives: [
+        'Diagram the ReAct (Reason + Act + Observe) execution loop',
+        'Construct valid JSON Schema definitions for LLM tool binding',
+        'Handle tool execution errors gracefully with dynamic corrective prompts',
+      ],
+    });
+
+    await adminService.createExercise(aiL5_1.id, {
+      title: 'Knowledge Check: ReAct & Tool Calling Architecture',
+      type: 'quiz',
+      marks: 20,
+      isMandatory: true,
+      order: 1,
+      quizConfig: {
+        questions: [
+          {
+            id: 'react-q1',
+            question: 'What is the role of the "Observation" step in the ReAct pattern?',
+            options: [
+              'It provides the raw execution result of the chosen tool back into the LLM context so the agent can formulate its next thought',
+              'It re-trains the neural network weights on the user machine',
+              'It logs the user out of the platform',
+              'It disables the GPU cooling fan',
+            ],
+            correctAnswer: 0,
+            explanation: 'The observation feeds real-world environmental feedback into the model context window, allowing the agent to evaluate whether its action succeeded or if it must retry with a different approach.',
+          },
+        ],
+      },
+    });
+
+    const aiMod5_2 = await adminService.createModule(aiCourse5.id, {
+      title: 'Module 2: Stateful Multi-Agent Orchestration with LangGraph',
+      slug: 'langgraph-multi-agent-orchestration',
+      description: 'Cyclic graphs, state persistence, supervisor pattern, and human-in-the-loop approvals.',
+      order: 2,
+    });
+
+    const aiL5_2 = await adminService.createLesson(aiMod5_2.id, {
+      title: 'LangGraph: State Graphs, Cyclic Execution & Human-in-the-Loop',
+      slug: 'langgraph-state-graphs-cycles',
+      order: 1,
+      type: 'reading',
+      content: `### Why DAGs Fail: The Need for Cyclic Graphs
+
+Traditional orchestration engines (Airflow, basic LangChain chains) are **Directed Acyclic Graphs (DAGs)**: data flows strictly in one direction from node A to node B to node C.
+
+**Autonomous agents are fundamentally non-linear**:
+- A code generation agent writes code $\\rightarrow$ runs tests in sandbox $\\rightarrow$ tests fail $\\rightarrow$ **loops back** to re-write code until tests pass.
+- Requires loops, conditional routing, state persistence, and interruptibility.
+- **LangGraph** models the multi-agent system as a **Stateful Cyclic Graph**.
+
+#### 1. Core LangGraph Primitives
+1. **State**: A shared typed data structure (e.g. \`TypedDict\` or Pydantic model) that all nodes inspect and modify.
+2. **Nodes**: Python functions representing agents or tools that receive the current state and return state mutations.
+3. **Edges**: Direct links from one node to the next.
+4. **Conditional Edges**: Decision functions that inspect state and dynamically choose the next node (e.g., if review == "approved" $\\rightarrow$ deploy, else $\\rightarrow$ revise).
+5. **Checkpointer**: Persists state snapshots at every step (PostgresSaver / MemorySaver) enabling **Time-Travel Debugging** and long-running stateful sessions.
+6. **Interrupts**: Pauses graph execution before sensitive actions (e.g., database deletions or financial transactions) for **Human-in-the-Loop Approval**.
+
+#### 2. The Multi-Agent Supervisor Pattern
+\`\`\`
+                 ┌──────────────┐
+                 │  Supervisor  │◄────────────┐
+                 └──────┬───────┘             │
+                        │ (Delegates Task)    │
+         ┌──────────────┼──────────────┐      │
+         ▼              ▼              ▼      │
+   ┌───────────┐  ┌───────────┐  ┌──────────┐ │ (Returns Output)
+   │  Coder    │  │  Auditor  │  │  Tester  │─┘
+   └───────────┘  └───────────┘  └──────────┘
+\`\`\`
+`,
+      learningObjectives: [
+        'Analyze why cyclic graphs are essential for autonomous agent self-correction',
+        'Implement LangGraph StateGraph, Nodes, Edges, and Conditional Edges',
+        'Configure Checkpointers and Human-in-the-Loop interrupts for mission-critical actions',
+      ],
+    });
+
+    await adminService.createExercise(aiL5_2.id, {
+      title: 'Coding Exercise: Multi-Agent Conditional Router in Python',
+      type: 'coding',
+      marks: 25,
+      isMandatory: true,
+      order: 1,
+      starterCode: `from typing import Literal
+
+def supervisor_router(state: dict) -> Literal["coder", "security_auditor", "deployer", "__end__"]:
+    """
+    Evaluate the multi-agent state dictionary and route to the next appropriate node:
+    - If 'code' is empty -> 'coder'
+    - If 'is_security_verified' is False -> 'security_auditor'
+    - If 'test_status' != 'passed' -> 'coder' (retry coding)
+    - If code is written, security is verified, and tests passed -> 'deployer'
+    - If already deployed -> '__end__'
+    """
+    # Write your routing logic here
+    pass
+
+# Test cases
+sample_state = {
+    "code": "def solve(): return 42",
+    "is_security_verified": True,
+    "test_status": "passed",
+    "is_deployed": False
+}
+print(supervisor_router(sample_state))  # Expected: 'deployer'
+`,
+      hints: [
+        'Check conditions in priority order: code existence -> tests passing -> security verification -> deployment state.',
+      ],
+    });
+
+    console.log(`✓ Course seeded: ${aiCourse5.title}`);
+  } catch (err: any) {
+    console.log(`AI Course 5 setup: ${err.message}`);
+  }
+
+  // ==========================================
+  // Publish AI Learning Paths
+  // ==========================================
+  // Path 1: Beginner AI & Prompt Engineering
+  try {
+    const aiPath1 = await adminService.createPath({
       title: 'Artificial Intelligence & Prompt Engineering Masterclass',
       slug: 'ai-prompt-engineering',
       description: 'Master Generative AI, LLM tokenomics, zero/few-shot in-context learning, Chain-of-Thought reasoning, and hallucination guardrails.',
@@ -426,9 +1031,29 @@ function findDuplicates(arr) {
       status: 'published',
       courseIds: [aiCourse1?.id, aiCourse2?.id].filter((id): id is string => typeof id === 'string'),
     });
-    console.log(`✓ Learning Path published: ${aiPath?.title}`);
+    console.log(`✓ Learning Path published: ${aiPath1?.title}`);
   } catch (err: any) {
-    console.log(`AI Path setup note: ${err.message}`);
+    console.log(`AI Path 1 setup note: ${err.message}`);
+  }
+
+  // Path 2: Advanced Generative AI & Agentic Systems Architecture (2026 Masterclass)
+  try {
+    const aiPath2 = await adminService.createPath({
+      title: 'Generative AI & Agentic Systems Architecture (2026 Masterclass)',
+      slug: 'genai-agentic-architecture',
+      description: 'The definitive enterprise masterclass covering Transformer KV-cache dynamics, Reasoning models (o1/R1), Production RAG, Vector DBs, and LangGraph multi-agent orchestration.',
+      difficulty: 'advanced',
+      estimatedHours: 25,
+      tags: ['GenAI', 'LLM', 'Agentic AI', 'LangChain', 'LangGraph', 'RAG', 'Vector DB', 'Prompt Engineering'],
+      iconUrl: '/images/tech/ai-brain.svg',
+      status: 'published',
+      courseIds: [aiCourse1?.id, aiCourse2?.id, aiCourse3?.id, aiCourse4?.id, aiCourse5?.id].filter(
+        (id): id is string => typeof id === 'string',
+      ),
+    });
+    console.log(`✓ Flagship Learning Path published: ${aiPath2?.title}`);
+  } catch (err: any) {
+    console.log(`AI Path 2 setup note: ${err.message}`);
   }
 
   // ==========================================

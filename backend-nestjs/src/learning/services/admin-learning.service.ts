@@ -75,33 +75,41 @@ export class AdminLearningService {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)+/g, '');
 
-    const existing = await this.pathRepo.findOne({ where: { slug } });
-    if (existing) {
-      throw new BadRequestException(`Slug '${slug}' is already taken`);
+    let path = await this.pathRepo.findOne({ where: { slug } });
+    if (!path) {
+      path = this.pathRepo.create({
+        title: dto.title,
+        slug,
+        description: dto.description || '',
+        difficulty: dto.difficulty || 'beginner',
+        iconUrl: dto.iconUrl || '',
+        estimatedHours: dto.estimatedHours || 10,
+        tags: dto.tags || [],
+        status: dto.status || 'draft',
+        completionCriteria: {
+          minCourseCompletionRate: dto.completionCriteria?.minCourseCompletionRate ?? 100,
+          requireAllMandatory: dto.completionCriteria?.requireAllMandatory ?? true,
+          passQuizThreshold: dto.completionCriteria?.passQuizThreshold ?? 70,
+        },
+      });
+      path = await this.pathRepo.save(path);
+    } else {
+      if (dto.title) path.title = dto.title;
+      if (dto.description !== undefined) path.description = dto.description;
+      if (dto.difficulty) path.difficulty = dto.difficulty;
+      if (dto.iconUrl !== undefined) path.iconUrl = dto.iconUrl;
+      if (dto.estimatedHours) path.estimatedHours = dto.estimatedHours;
+      if (dto.tags) path.tags = dto.tags;
+      if (dto.status) path.status = dto.status;
+      path = await this.pathRepo.save(path);
     }
-
-    const path = this.pathRepo.create({
-      title: dto.title,
-      slug,
-      description: dto.description || '',
-      difficulty: dto.difficulty || 'beginner',
-      iconUrl: dto.iconUrl || '',
-      estimatedHours: dto.estimatedHours || 10,
-      tags: dto.tags || [],
-      status: dto.status || 'draft',
-      completionCriteria: {
-        minCourseCompletionRate: dto.completionCriteria?.minCourseCompletionRate ?? 100,
-        requireAllMandatory: dto.completionCriteria?.requireAllMandatory ?? true,
-        passQuizThreshold: dto.completionCriteria?.passQuizThreshold ?? 70,
-      },
-    });
-    const saved = await this.pathRepo.save(path);
 
     // Attach courses if specified
     if (dto.courseIds && dto.courseIds.length > 0) {
+      await this.lpcRepo.delete({ pathId: path.id });
       for (let i = 0; i < dto.courseIds.length; i++) {
         const lpc = this.lpcRepo.create({
-          pathId: saved.id,
+          pathId: path.id,
           courseId: dto.courseIds[i],
           order: i + 1,
           isMandatory: true,
@@ -111,7 +119,7 @@ export class AdminLearningService {
     }
 
     return this.pathRepo.findOne({
-      where: { id: saved.id },
+      where: { id: path.id },
       relations: { pathCourses: { course: true } },
     });
   }
@@ -193,7 +201,17 @@ export class AdminLearningService {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)+/g, '');
 
-    const course = this.courseRepo.create({
+    let course = await this.courseRepo.findOne({ where: { slug } });
+    if (course) {
+      if (dto.title) course.title = dto.title;
+      if (dto.description !== undefined) course.description = dto.description;
+      if (dto.difficulty) course.difficulty = dto.difficulty;
+      if (dto.estimatedMinutes) course.estimatedMinutes = dto.estimatedMinutes;
+      if (dto.status) course.status = dto.status;
+      return this.courseRepo.save(course);
+    }
+
+    course = this.courseRepo.create({
       title: dto.title,
       slug,
       description: dto.description || '',
@@ -207,6 +225,15 @@ export class AdminLearningService {
   async createModule(courseId: string, dto: CreateCourseModuleDto) {
     const course = await this.courseRepo.findOne({ where: { id: courseId } });
     if (!course) throw new NotFoundException(`Course not found: ${courseId}`);
+
+    const existing = await this.moduleRepo.findOne({
+      where: { courseId, title: dto.title },
+    });
+    if (existing) {
+      if (dto.description !== undefined) existing.description = dto.description;
+      if (dto.order) existing.order = dto.order;
+      return this.moduleRepo.save(existing);
+    }
 
     const existingModules = await this.moduleRepo.find({ where: { courseId } });
     const order = dto.order || existingModules.length + 1;
@@ -224,14 +251,27 @@ export class AdminLearningService {
     const mod = await this.moduleRepo.findOne({ where: { id: moduleId } });
     if (!mod) throw new NotFoundException(`Module not found: ${moduleId}`);
 
-    const existingLessons = await this.lessonRepo.find({ where: { moduleId } });
-    const order = dto.order || existingLessons.length + 1;
     const slug =
       dto.slug ||
       dto.title
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)+/g, '');
+
+    const existing = await this.lessonRepo.findOne({
+      where: { moduleId, slug },
+    });
+    if (existing) {
+      existing.title = dto.title;
+      existing.content = dto.content;
+      if (dto.learningObjectives) existing.learningObjectives = dto.learningObjectives;
+      if (dto.type) existing.type = dto.type;
+      if (dto.order) existing.order = dto.order;
+      return this.lessonRepo.save(existing);
+    }
+
+    const existingLessons = await this.lessonRepo.find({ where: { moduleId } });
+    const order = dto.order || existingLessons.length + 1;
 
     const lesson = this.lessonRepo.create({
       moduleId,
@@ -249,6 +289,21 @@ export class AdminLearningService {
   async createExercise(lessonId: string, dto: CreateCourseExerciseDto) {
     const lesson = await this.lessonRepo.findOne({ where: { id: lessonId } });
     if (!lesson) throw new NotFoundException(`Lesson not found: ${lessonId}`);
+
+    const existing = await this.exerciseRepo.findOne({
+      where: { lessonId, title: dto.title },
+    });
+    if (existing) {
+      existing.type = dto.type || existing.type;
+      if (dto.problemId) existing.problemId = dto.problemId;
+      if (dto.quizConfig) existing.quizConfig = dto.quizConfig;
+      if (dto.starterCode) existing.starterCode = dto.starterCode;
+      if (dto.hints) existing.hints = dto.hints;
+      if (dto.marks) existing.marks = dto.marks;
+      if (dto.isMandatory !== undefined) existing.isMandatory = dto.isMandatory;
+      if (dto.order) existing.order = dto.order;
+      return this.exerciseRepo.save(existing);
+    }
 
     const existingExercises = await this.exerciseRepo.find({ where: { lessonId } });
     const order = dto.order || existingExercises.length + 1;

@@ -41,7 +41,8 @@ interface LearningPathItem {
 
 const CATEGORIES = [
   { id: "all", label: "All Topics", icon: Compass },
-  { id: "ai", label: "AI & Prompt Engineering", icon: Cpu, filterTag: "AI" },
+  { id: "ai", label: "Generative AI & LLMs", icon: Cpu, filterTag: "AI" },
+  { id: "agentic", label: "Agentic AI & LangChain", icon: Sparkles, filterTag: "Agentic" },
   { id: "python", label: "Python Mastery", icon: Terminal, filterTag: "Python" },
   { id: "javascript", label: "Modern JavaScript", icon: Code2, filterTag: "JavaScript" },
   { id: "dsa", label: "Algorithms & DSA", icon: Trophy, filterTag: "DSA" },
