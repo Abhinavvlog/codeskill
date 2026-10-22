@@ -247,10 +247,25 @@ export default function AdminDashboardPage() {
       <div className="relative z-10 max-w-7xl mx-auto space-y-8">
         {/* Header Strip */}
         <div className="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-2 border-b border-border/40">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold font-heading text-foreground tracking-tight">
-              {isTeacher ? "Teacher" : "Admin"} <span className="text-transparent bg-clip-text bg-gradient-to-r from-foreground via-foreground/85 to-primary">Dashboard</span>
-            </h1>
+          <div className="flex items-center gap-3.5">
+            <div
+              className="flex items-center h-[42px] sm:h-[46px] px-3 py-1 rounded-xl bg-white border border-border shadow-xs shrink-0"
+              title="Chandigarh University"
+            >
+              <img
+                src="/cu-logo-tight.png"
+                alt="Chandigarh University"
+                className="h-full w-auto object-contain block max-h-[34px] sm:max-h-[38px]"
+              />
+            </div>
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold font-heading text-foreground tracking-tight">
+                {isTeacher ? "Teacher" : "Admin"}{" "}
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-foreground via-foreground/85 to-primary">
+                  Dashboard
+                </span>
+              </h1>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">

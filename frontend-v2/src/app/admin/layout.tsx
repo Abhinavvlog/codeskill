@@ -122,9 +122,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Standardized Admin Header with CodeSkill Branding & Theme Toggle */}
         <header className="bg-card/90 backdrop-blur-md border-b border-border h-[72px] flex items-center justify-between gap-3 px-2 sm:px-6 sticky top-0 z-10 shrink-0 shadow-xs">
-          <div className="hidden md:flex items-center gap-4 min-w-0">
-            <p className="min-w-0 truncate text-base font-semibold tracking-[0.01em] text-foreground md:text-[17px]">
-              Chandigarh University • Department of Skill Development
+          <div className="hidden md:flex items-center gap-3 min-w-0">
+            <div
+              className="flex items-center h-[38px] px-2.5 py-1 rounded-xl bg-white border border-border shadow-xs shrink-0"
+              title="Chandigarh University"
+            >
+              <img
+                src="/cu-logo-tight.png"
+                alt="Chandigarh University"
+                className="h-full w-auto object-contain block max-h-[30px]"
+              />
+            </div>
+            <span className="inline-block h-5 w-[1.5px] bg-border shrink-0" aria-hidden="true" />
+            <p className="min-w-0 truncate text-sm font-semibold tracking-wide text-foreground">
+              Department of Skill Development
             </p>
           </div>
           <div className="flex items-center gap-2 sm:gap-4 shrink-0 ml-auto">

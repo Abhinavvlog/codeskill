@@ -87,19 +87,28 @@ export function AdminSidebar({ portal = "admin" }: { portal?: "admin" | "teacher
   return (
     <aside className="admin-sidebar w-64 bg-sidebar text-sidebar-foreground flex flex-col h-full border-r border-sidebar-border relative z-20">
       <div className="h-[72px] flex items-center px-4 border-b border-border bg-card/60 shrink-0">
-        <Link href={isTeacher ? "/teacher/dashboard" : "/admin/dashboard"} className="flex items-center gap-3 group select-none">
-          <AdminLogo variant="icon" size="md" />
+        <Link href={isTeacher ? "/teacher/dashboard" : "/admin/dashboard"} className="flex items-center gap-2.5 group select-none">
+          <div
+            className="flex items-center h-[38px] px-2 py-0.5 rounded-lg bg-white border border-border shadow-xs shrink-0 transition-transform duration-200 group-hover:scale-105"
+            title="Chandigarh University"
+          >
+            <img
+              src="/cu-logo-tight.png"
+              alt="Chandigarh University"
+              className="h-full w-auto object-contain block max-h-[28px]"
+            />
+          </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-lg font-black tracking-tight text-foreground leading-none">
+              <span className="text-base font-black tracking-tight text-foreground leading-none">
                 Code<span className="text-emerald-700 dark:text-emerald-400">Skill</span>
               </span>
               <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded leading-none shadow-xs bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/25">
                 {isTeacher ? "Teacher" : "Admin"}
               </span>
             </div>
-            <p className="text-[11px] font-semibold text-muted-foreground tracking-wide mt-1.5 truncate">
-              Chandigarh University
+            <p className="text-[10px] font-semibold text-muted-foreground tracking-wide mt-1 truncate">
+              Department of Skill Development
             </p>
           </div>
         </Link>
