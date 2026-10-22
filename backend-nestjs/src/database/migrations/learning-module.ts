@@ -68,10 +68,14 @@ export async function applyLearningModuleMigration(
       "title" varchar(255) NOT NULL,
       "description" text NOT NULL DEFAULT '',
       "order" integer NOT NULL DEFAULT 1,
+      "requiredTimeMinutes" integer NOT NULL DEFAULT 2,
+      "requiredTimeSeconds" integer NOT NULL DEFAULT 120,
       "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
       "updatedAt" TIMESTAMP NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS "IDX_course_modules_courseId" ON "course_modules" ("courseId");
+    ALTER TABLE "course_modules" ADD COLUMN IF NOT EXISTS "requiredTimeMinutes" integer NOT NULL DEFAULT 2;
+    ALTER TABLE "course_modules" ADD COLUMN IF NOT EXISTS "requiredTimeSeconds" integer NOT NULL DEFAULT 120;
   `);
 
   // 5. lessons
@@ -138,6 +142,7 @@ export async function applyLearningModuleMigration(
       "lessonId" uuid NOT NULL REFERENCES "lessons"("id") ON DELETE CASCADE,
       "status" varchar(50) NOT NULL DEFAULT 'in_progress',
       "score" double precision NOT NULL DEFAULT 0,
+      "timeSpentSeconds" integer NOT NULL DEFAULT 0,
       "completedAt" TIMESTAMP,
       "lastInteractedAt" TIMESTAMP NOT NULL DEFAULT now(),
       "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
@@ -146,6 +151,7 @@ export async function applyLearningModuleMigration(
     );
     CREATE INDEX IF NOT EXISTS "IDX_lesson_progress_studentId" ON "lesson_progress" ("studentId");
     CREATE INDEX IF NOT EXISTS "IDX_lesson_progress_lessonId" ON "lesson_progress" ("lessonId");
+    ALTER TABLE "lesson_progress" ADD COLUMN IF NOT EXISTS "timeSpentSeconds" integer NOT NULL DEFAULT 0;
   `);
 
   // 9. course_progress

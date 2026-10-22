@@ -231,15 +231,58 @@ export class PracticeService {
   }
 
   /**
+   * Track live study/practice time spent on a lesson/module
+   */
+  async trackTimeSpent(lessonId: string, studentId: string, seconds: number) {
+    let progress = await this.lessonProgressRepo.findOne({
+      where: { studentId, lessonId },
+    });
+    const validSeconds = Math.max(0, Math.min(seconds || 0, 86400));
+    if (!progress) {
+      progress = this.lessonProgressRepo.create({
+        studentId,
+        lessonId,
+        status: 'in_progress',
+        timeSpentSeconds: validSeconds,
+        lastInteractedAt: new Date(),
+      });
+    } else {
+      progress.timeSpentSeconds = Math.max(progress.timeSpentSeconds || 0, validSeconds);
+      progress.lastInteractedAt = new Date();
+    }
+    await this.lessonProgressRepo.save(progress);
+    return {
+      lessonId,
+      timeSpentSeconds: progress.timeSpentSeconds,
+    };
+  }
+
+  /**
    * Complete reading lesson
    */
-  async completeLesson(lessonId: string, studentId: string) {
+  async completeLesson(lessonId: string, studentId: string, timeSpentSeconds?: number) {
     const lesson = await this.lessonRepo.findOne({
       where: { id: lessonId },
-      relations: { exercises: true },
+      relations: { exercises: true, module: true },
     });
     if (!lesson) {
       throw new NotFoundException(`Lesson not found: ${lessonId}`);
+    }
+
+    let progress = await this.lessonProgressRepo.findOne({
+      where: { studentId, lessonId },
+    });
+
+    const currentSpent = Math.max(progress?.timeSpentSeconds || 0, timeSpentSeconds || 0);
+
+    // Verify minimum time requirement if configured on module
+    const requiredSeconds = (lesson.module as any)?.requiredTimeSeconds || 0;
+    if (requiredSeconds > 0 && currentSpent < requiredSeconds) {
+      const remaining = requiredSeconds - currentSpent;
+      const minText = requiredSeconds >= 60 ? `${Math.ceil(requiredSeconds / 60)} minute(s)` : `${requiredSeconds} seconds`;
+      throw new BadRequestException(
+        `Please spend at least ${minText} engaging with this module's concepts before completing (remaining: ${remaining}s).`,
+      );
     }
 
     // If lesson has mandatory exercises, ensure all are passed before allowing complete
@@ -247,9 +290,6 @@ export class PracticeService {
     if (mandatoryExercises.length > 0) {
       // For lessons with mandatory exercises, exercises must be submitted and passed
       // We check if progress is already completed
-      const progress = await this.lessonProgressRepo.findOne({
-        where: { studentId, lessonId },
-      });
       if (!progress || progress.status !== 'completed') {
         throw new BadRequestException(
           'Please complete and pass all required practice exercises in this lesson before proceeding',
@@ -257,19 +297,18 @@ export class PracticeService {
       }
     }
 
-    let progress = await this.lessonProgressRepo.findOne({
-      where: { studentId, lessonId },
-    });
     if (!progress) {
       progress = this.lessonProgressRepo.create({
         studentId,
         lessonId,
         status: 'completed',
+        timeSpentSeconds: currentSpent,
         completedAt: new Date(),
         lastInteractedAt: new Date(),
       });
     } else {
       progress.status = 'completed';
+      progress.timeSpentSeconds = currentSpent;
       if (!progress.completedAt) progress.completedAt = new Date();
       progress.lastInteractedAt = new Date();
     }

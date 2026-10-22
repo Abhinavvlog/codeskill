@@ -324,6 +324,8 @@ export class LearningService {
         title: m.title,
         description: m.description,
         order: m.order,
+        requiredTimeMinutes: m.requiredTimeMinutes || 2,
+        requiredTimeSeconds: m.requiredTimeSeconds || 120,
         lessons: (m.lessons || [])
           .sort((a, b) => a.order - b.order)
           .map((l) => ({
@@ -419,6 +421,15 @@ export class LearningService {
       type: lesson.type,
       isCompleted: progress?.status === 'completed',
       completedAt: progress?.completedAt,
+      timeSpentSeconds: progress?.timeSpentSeconds || 0,
+      requiredTimeSeconds: lesson.module?.requiredTimeSeconds || 120,
+      moduleId: lesson.moduleId,
+      module: {
+        id: lesson.module?.id,
+        title: lesson.module?.title,
+        requiredTimeMinutes: lesson.module?.requiredTimeMinutes || 2,
+        requiredTimeSeconds: lesson.module?.requiredTimeSeconds || 120,
+      },
       exercises: sanitizedExercises,
       nextLessonId,
       course: {

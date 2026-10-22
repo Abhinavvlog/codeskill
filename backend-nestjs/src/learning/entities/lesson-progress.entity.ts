@@ -31,6 +31,9 @@ export class LessonProgress {
   @Column({ type: 'timestamp', nullable: true })
   completedAt?: Date;
 
+  @Column({ type: 'int', default: 0 })
+  timeSpentSeconds: number;
+
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   lastInteractedAt: Date;
 

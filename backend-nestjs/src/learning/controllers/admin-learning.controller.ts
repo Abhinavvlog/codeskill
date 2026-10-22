@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Body,
@@ -21,6 +22,7 @@ import {
 import {
   CreateCourseDto,
   CreateCourseModuleDto,
+  UpdateCourseModuleDto,
   CreateLessonDto,
   CreateCourseExerciseDto,
 } from '../dto/course.dto';
@@ -122,6 +124,30 @@ export class AdminLearningController {
     @Body() dto: CreateCourseModuleDto,
   ) {
     return this.adminService.createModule(courseId, dto);
+  }
+
+  @Patch('modules/:id')
+  @ApiOperation({ summary: 'Update course module details and study time' })
+  async updateModule(
+    @Param('id') moduleId: string,
+    @Body() dto: UpdateCourseModuleDto,
+  ) {
+    return this.adminService.updateModule(moduleId, dto);
+  }
+
+  @Put('modules/:id')
+  @ApiOperation({ summary: 'Update course module details and study time' })
+  async putModule(
+    @Param('id') moduleId: string,
+    @Body() dto: UpdateCourseModuleDto,
+  ) {
+    return this.adminService.updateModule(moduleId, dto);
+  }
+
+  @Delete('modules/:id')
+  @ApiOperation({ summary: 'Delete course module' })
+  async deleteModule(@Param('id') moduleId: string) {
+    return this.adminService.deleteModule(moduleId);
   }
 
   @Post('modules/:id/lessons')

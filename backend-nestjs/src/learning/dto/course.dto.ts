@@ -49,6 +49,47 @@ export class CreateCourseModuleDto {
   @IsInt()
   @IsOptional()
   order?: number;
+
+  @IsInt()
+  @IsOptional()
+  requiredTimeMinutes?: number;
+
+  @IsInt()
+  @IsOptional()
+  requiredTimeSeconds?: number;
+}
+
+export class UpdateCourseModuleDto {
+  @IsString()
+  @IsOptional()
+  title?: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsInt()
+  @IsOptional()
+  order?: number;
+
+  @IsInt()
+  @IsOptional()
+  requiredTimeMinutes?: number;
+
+  @IsInt()
+  @IsOptional()
+  requiredTimeSeconds?: number;
+}
+
+export class TrackTimeSpentDto {
+  @IsInt()
+  seconds: number;
+}
+
+export class CompleteLessonDto {
+  @IsInt()
+  @IsOptional()
+  timeSpentSeconds?: number;
 }
 
 export class CreateLessonDto {

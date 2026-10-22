@@ -34,6 +34,12 @@ export class CourseModule {
   @Column({ type: 'int', default: 1 })
   order: number;
 
+  @Column({ type: 'int', default: 2 })
+  requiredTimeMinutes: number;
+
+  @Column({ type: 'int', default: 120 })
+  requiredTimeSeconds: number;
+
   @OneToMany(() => Lesson, (l) => l.module, { cascade: true })
   lessons: Lesson[];
 

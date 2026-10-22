@@ -16,7 +16,11 @@ import { CertificationService } from '../services/certification.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { SubmitExerciseDto } from '../dto/course.dto';
+import {
+  SubmitExerciseDto,
+  TrackTimeSpentDto,
+  CompleteLessonDto,
+} from '../dto/course.dto';
 
 @ApiTags('Learning')
 @Controller('learning')
@@ -84,14 +88,26 @@ export class LearningController {
     return this.learningService.getLessonContent(lessonId, studentId);
   }
 
+  @Post('lessons/:id/time-spent')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Track student study time on a module lesson' })
+  async trackTimeSpent(
+    @Param('id') lessonId: string,
+    @CurrentUser('id') studentId: string,
+    @Body() dto: TrackTimeSpentDto,
+  ) {
+    return this.practiceService.trackTimeSpent(lessonId, studentId, dto.seconds);
+  }
+
   @Post('lessons/:id/complete')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Mark verified lesson complete' })
   async completeLesson(
     @Param('id') lessonId: string,
     @CurrentUser('id') studentId: string,
+    @Body() dto?: CompleteLessonDto,
   ) {
-    return this.practiceService.completeLesson(lessonId, studentId);
+    return this.practiceService.completeLesson(lessonId, studentId, dto?.timeSpentSeconds);
   }
 
   @Post('exercises/:id/submit')

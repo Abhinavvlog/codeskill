@@ -60,6 +60,8 @@ interface ModuleItem {
   id: string;
   title: string;
   description: string;
+  requiredTimeMinutes?: number;
+  requiredTimeSeconds?: number;
   lessons?: LessonItem[];
 }
 
@@ -111,6 +113,13 @@ export default function AdminPathEditPage({
 
   const [newModTitle, setNewModTitle] = useState("");
   const [newModDesc, setNewModDesc] = useState("");
+  const [newModMinutes, setNewModMinutes] = useState(2);
+
+  const [showEditModuleModal, setShowEditModuleModal] = useState(false);
+  const [editingModule, setEditingModule] = useState<ModuleItem | null>(null);
+  const [editModTitle, setEditModTitle] = useState("");
+  const [editModDesc, setEditModDesc] = useState("");
+  const [editModMinutes, setEditModMinutes] = useState(2);
 
   const [newLessonTitle, setNewLessonTitle] = useState("");
   const [newLessonContent, setNewLessonContent] = useState(
@@ -230,13 +239,37 @@ export default function AdminPathEditPage({
       await adminLearningAPI.createModule(showAddModuleModal, {
         title: newModTitle,
         description: newModDesc,
+        requiredTimeMinutes: Number(newModMinutes) || 2,
+        requiredTimeSeconds: (Number(newModMinutes) || 2) * 60,
       });
       setShowAddModuleModal(null);
       setNewModTitle("");
       setNewModDesc("");
+      setNewModMinutes(2);
       await loadPathTree();
     } catch (err: any) {
       alert(err.response?.data?.message || "Failed to create module");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateModule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingModule || !editModTitle) return;
+    try {
+      setSaving(true);
+      await adminLearningAPI.updateModule(editingModule.id, {
+        title: editModTitle,
+        description: editModDesc,
+        requiredTimeMinutes: Number(editModMinutes) || 2,
+        requiredTimeSeconds: (Number(editModMinutes) || 2) * 60,
+      });
+      setShowEditModuleModal(false);
+      setEditingModule(null);
+      await loadPathTree();
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to update module");
     } finally {
       setSaving(false);
     }
@@ -659,12 +692,32 @@ export default function AdminPathEditPage({
                                     <span className="text-xs font-bold text-foreground">
                                       Module {mIdx + 1}: {mod.title}
                                     </span>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20">
+                                      <Clock className="w-3 h-3 text-amber-500" />
+                                      <span>{mod.requiredTimeMinutes || 2}m study stopwatch</span>
+                                    </span>
                                   </div>
 
                                   <div className="flex items-center gap-2">
                                     <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingModule(mod);
+                                        setEditModTitle(mod.title);
+                                        setEditModDesc(mod.description || "");
+                                        setEditModMinutes(mod.requiredTimeMinutes || 2);
+                                        setShowEditModuleModal(true);
+                                      }}
+                                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+                                    >
+                                      <Edit3 className="w-3 h-3" />
+                                      <span>Edit Time</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
                                       onClick={() => setShowAddLessonModal(mod.id)}
-                                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline cursor-pointer"
                                     >
                                       <Plus className="w-3 h-3" />
                                       <span>Add Lesson</span>
@@ -885,6 +938,26 @@ export default function AdminPathEditPage({
                 />
               </div>
 
+              <div>
+                <label className="font-semibold block mb-1">
+                  Required Study / Stopwatch Time (Minutes)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    required
+                    value={newModMinutes}
+                    onChange={(e) => setNewModMinutes(parseInt(e.target.value) || 2)}
+                    className="w-24 px-3 py-2 rounded-lg bg-muted/40 border border-border text-foreground font-mono font-bold"
+                  />
+                  <span className="text-muted-foreground text-[11px]">
+                    Minimum time student must engage before unlocking next step.
+                  </span>
+                </div>
+              </div>
+
               <div className="pt-2 flex justify-end gap-2">
                 <Button
                   type="button"
@@ -901,6 +974,96 @@ export default function AdminPathEditPage({
                   className="bg-primary text-primary-foreground font-semibold"
                 >
                   {saving ? "Creating..." : "Create Module"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: EDIT MODULE TIME & SETTINGS ────────────────────────────────────── */}
+      {showEditModuleModal && editingModule && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-xl p-5 max-w-md w-full shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-amber-500" />
+                <h3 className="text-sm font-bold text-foreground">
+                  Update Module Study Time & Settings
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEditModuleModal(false);
+                  setEditingModule(null);
+                }}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateModule} className="space-y-3.5 text-xs">
+              <div>
+                <label className="font-semibold block mb-1">Module Title</label>
+                <input
+                  type="text"
+                  required
+                  value={editModTitle}
+                  onChange={(e) => setEditModTitle(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-muted/40 border border-border text-foreground"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold block mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  value={editModDesc}
+                  onChange={(e) => setEditModDesc(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-muted/40 border border-border text-foreground"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold block mb-1">
+                  Required Study / Stopwatch Time (Minutes)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    required
+                    value={editModMinutes}
+                    onChange={(e) => setEditModMinutes(parseInt(e.target.value) || 2)}
+                    className="w-24 px-3 py-2 rounded-lg bg-muted/40 border border-border text-foreground font-mono font-bold"
+                  />
+                  <span className="text-muted-foreground text-[11px]">
+                    Duration in minutes ({editModMinutes * 60} seconds) students must spend.
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowEditModuleModal(false);
+                    setEditingModule(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={saving}
+                  className="bg-primary text-primary-foreground font-semibold"
+                >
+                  {saving ? "Saving..." : "Update Module"}
                 </Button>
               </div>
             </form>

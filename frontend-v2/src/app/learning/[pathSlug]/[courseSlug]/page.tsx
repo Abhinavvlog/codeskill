@@ -22,6 +22,8 @@ import {
   Copy,
   ChevronLeft,
   X,
+  Clock,
+  Timer,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { learningAPI } from "@/config/api";
@@ -39,6 +41,15 @@ interface LessonData {
   type: "reading" | "quiz" | "coding" | "debugging";
   isCompleted: boolean;
   completedAt?: string;
+  timeSpentSeconds?: number;
+  requiredTimeSeconds?: number;
+  moduleId?: string;
+  module?: {
+    id: string;
+    title: string;
+    requiredTimeMinutes?: number;
+    requiredTimeSeconds?: number;
+  };
   nextLessonId?: string | null;
   exercises: Array<{
     id: string;
@@ -64,6 +75,8 @@ interface CourseSidebarData {
   modules: Array<{
     id: string;
     title: string;
+    requiredTimeMinutes?: number;
+    requiredTimeSeconds?: number;
     lessons: Array<{
       id: string;
       title: string;
@@ -278,6 +291,36 @@ export default function CourseWorkspacePage({
   const [submittingExercise, setSubmittingExercise] = useState(false);
   const [xpCelebration, setXpCelebration] = useState<number | null>(null);
 
+  // Stopwatch & Minimum Time Spent Tracker
+  const [timeSpent, setTimeSpent] = useState<number>(0);
+  const [requiredTime, setRequiredTime] = useState<number>(120);
+  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(true);
+  const [celebrationGlow, setCelebrationGlow] = useState<boolean>(false);
+
+  // Active stopwatch counting
+  useEffect(() => {
+    if (!isTimerRunning) return;
+    const interval = setInterval(() => {
+      setTimeSpent((prev) => {
+        const next = prev + 1;
+        if (next === requiredTime && requiredTime > 0) {
+          setCelebrationGlow(true);
+          setTimeout(() => setCelebrationGlow(false), 4000);
+        }
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isTimerRunning, requiredTime]);
+
+  // Periodic persistence of time spent (every 15 seconds)
+  useEffect(() => {
+    if (!activeLessonId || timeSpent <= 0) return;
+    if (timeSpent % 15 === 0) {
+      learningAPI.trackTimeSpent(activeLessonId, timeSpent).catch(() => {});
+    }
+  }, [timeSpent, activeLessonId]);
+
   useEffect(() => {
     loadCourse();
   }, [pathSlug, courseSlug]);
@@ -321,9 +364,20 @@ export default function CourseWorkspacePage({
       setQuizResults(null);
       setExecutionFeedback(null);
       setXpCelebration(null);
+      setSelectedAnswers({});
       const res = await learningAPI.getLesson(id);
       const lessonData = res.data?.data || res.data;
       setLesson(lessonData);
+
+      // Initialize live stopwatch tracking
+      const initialTime = lessonData?.timeSpentSeconds || 0;
+      const targetTime =
+        lessonData?.module?.requiredTimeSeconds ||
+        lessonData?.requiredTimeSeconds ||
+        120;
+      setTimeSpent(initialTime);
+      setRequiredTime(targetTime);
+      setIsTimerRunning(true);
 
       const codingEx = lessonData?.exercises?.find(
         (e: any) => e.type === "coding" || e.type === "debugging",
@@ -418,11 +472,49 @@ export default function CourseWorkspacePage({
     }
   };
 
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  const hasMetTimeRequirement = timeSpent >= requiredTime;
+  const remainingSeconds = Math.max(0, requiredTime - timeSpent);
+  const progressPercent = Math.min(
+    100,
+    Math.round((timeSpent / (requiredTime || 1)) * 100)
+  );
+
   const handleCompleteAndNext = async () => {
     if (!lesson) return;
+    if (!hasMetTimeRequirement && requiredTime > 0) {
+      setPopupModal({
+        isOpen: true,
+        title: "Module Study Time Requirement",
+        message: `Admin has set a required minimum study time of ${Math.ceil(
+          requiredTime / 60
+        )} minute(s) on this module to ensure you master the concepts before progressing. You have ${remainingSeconds} second(s) remaining.`,
+        type: "warning",
+      });
+      return;
+    }
     try {
       setCompleting(true);
-      await learningAPI.completeLesson(lesson.id);
+      await learningAPI.completeLesson(lesson.id, timeSpent);
+      if (course) {
+        setCourse({
+          ...course,
+          modules: course.modules.map((m) => ({
+            ...m,
+            lessons: m.lessons.map((l) =>
+              l.id === lesson.id ? { ...l, isCompleted: true } : l
+            ),
+          })),
+        });
+      }
+      setXpCelebration(25);
+      setTimeout(() => setXpCelebration(null), 3000);
+
       if (lesson.nextLessonId) {
         setActiveLessonId(lesson.nextLessonId);
       } else {
@@ -499,9 +591,29 @@ export default function CourseWorkspacePage({
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground hidden sm:inline mr-1">
-              Lesson {currentLessonIndex + 1} of {allLessons.length}
-            </span>
+            {/* Live Stopwatch Tracker Badge */}
+            <div
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono font-bold transition-all ${
+                hasMetTimeRequirement
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+                  : "bg-muted/60 border-border text-foreground"
+              }`}
+              title={
+                hasMetTimeRequirement
+                  ? "Required study time satisfied"
+                  : `Study time remaining: ${remainingSeconds}s`
+              }
+            >
+              <Timer
+                className={`w-3.5 h-3.5 ${
+                  hasMetTimeRequirement ? "text-emerald-500" : "text-amber-500 animate-pulse"
+                }`}
+              />
+              <span>{formatTime(timeSpent)}</span>
+              <span className="text-muted-foreground font-normal text-[10px]">
+                / {formatTime(requiredTime)}
+              </span>
+            </div>
 
             <Button
               size="sm"
@@ -539,9 +651,29 @@ export default function CourseWorkspacePage({
               size="sm"
               onClick={handleCompleteAndNext}
               disabled={completing}
-              className="h-8 px-3.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs gap-1.5 cursor-pointer"
+              className={`h-8 px-3.5 text-xs font-semibold shadow-xs gap-1.5 cursor-pointer transition-all ${
+                hasMetTimeRequirement
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                  : "bg-amber-600 hover:bg-amber-700 text-white"
+              }`}
             >
-              <span>{completing ? "Saving..." : currentLessonIndex < allLessons.length - 1 ? "Complete & Next" : "Finish Course"}</span>
+              {completing ? (
+                <span>Saving...</span>
+              ) : !hasMetTimeRequirement ? (
+                <>
+                  <Clock className="w-3.5 h-3.5 animate-pulse" />
+                  <span>{remainingSeconds}s left</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>
+                    {currentLessonIndex < allLessons.length - 1
+                      ? "Complete & Next"
+                      : "Finish Course"}
+                  </span>
+                </>
+              )}
             </Button>
           </div>
         </div>
@@ -549,50 +681,81 @@ export default function CourseWorkspacePage({
         {/* Studio Workspace Content */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
           
-          {/* Left Navigation Sidebar */}
-          <aside className="md:col-span-4 lg:col-span-3 bg-card border border-border rounded-xl p-4 shadow-xs sticky top-28 space-y-4">
-            <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-2">
-              Course Modules
+          {/* Left Navigation Sidebar with Connecting Step Lines */}
+          <aside className="md:col-span-4 lg:col-span-3 bg-card border border-border rounded-xl p-4 shadow-xs sticky top-28 space-y-5">
+            <div className="flex items-center justify-between px-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Course Curriculum
+              </span>
+              <span className="text-[10px] font-semibold text-primary px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
+                {allLessons.filter((l) => l.isCompleted).length} / {allLessons.length} Done
+              </span>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
               {course.modules.map((mod) => (
-                <div key={mod.id}>
-                  <div className="px-2 py-1 text-xs font-bold text-foreground flex items-center justify-between">
+                <div key={mod.id} className="space-y-2">
+                  <div className="px-2 py-1 text-xs font-bold text-foreground flex items-center justify-between border-b border-border/40 pb-1.5">
                     <span className="truncate">{mod.title}</span>
-                    <span className="text-[10px] text-muted-foreground font-normal">
-                      {mod.lessons.length}
+                    <span className="text-[10px] text-muted-foreground font-medium flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-amber-500" />
+                      <span>{mod.requiredTimeMinutes || 2}m</span>
                     </span>
                   </div>
 
-                  <div className="mt-1.5 space-y-1">
+                  {/* Connected Step Nodes with Connecting Vertical Lines */}
+                  <div className="relative pl-3 space-y-1">
                     {mod.lessons.map((l, lIdx) => {
                       const isActive = l.id === activeLessonId;
+                      const isLast = lIdx === mod.lessons.length - 1;
+
                       return (
-                        <button
-                          key={l.id}
-                          onClick={() => setActiveLessonId(l.id)}
-                          className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-medium flex items-center gap-2.5 transition-all cursor-pointer ${
-                            isActive
-                              ? "bg-primary/10 text-primary border border-primary/20 font-semibold shadow-xs"
-                              : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
-                          }`}
-                        >
-                          {l.isCompleted ? (
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                          ) : (
+                        <div key={l.id} className="relative flex items-start group">
+                          {/* Vertical Connecting Line */}
+                          {!isLast && (
                             <div
-                              className={`w-4 h-4 rounded-full border flex items-center justify-center text-[9px] flex-shrink-0 ${
-                                isActive
-                                  ? "border-primary bg-primary/20 text-primary font-bold"
-                                  : "border-border text-muted-foreground"
+                              className={`absolute left-[11px] top-6 bottom-[-8px] w-0.5 transition-all duration-300 ${
+                                l.isCompleted
+                                  ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]"
+                                  : "bg-border"
+                              }`}
+                            />
+                          )}
+
+                          <button
+                            onClick={() => setActiveLessonId(l.id)}
+                            className={`w-full text-left pl-7 pr-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-all duration-200 cursor-pointer ${
+                              isActive
+                                ? "bg-primary/10 text-primary font-bold shadow-xs translate-x-1"
+                                : l.isCompleted
+                                ? "text-foreground hover:bg-muted/60"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            }`}
+                          >
+                            {/* Step Indicator Node */}
+                            <div
+                              className={`absolute left-0 top-2 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all z-10 ${
+                                l.isCompleted
+                                  ? "bg-emerald-500 text-white shadow-xs scale-105"
+                                  : isActive
+                                  ? "bg-primary text-primary-foreground ring-4 ring-primary/25 shadow-xs scale-110 animate-pulse"
+                                  : "bg-card border border-border text-muted-foreground group-hover:border-foreground/40"
                               }`}
                             >
-                              {lIdx + 1}
+                              {l.isCompleted ? (
+                                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                              ) : (
+                                <span>{lIdx + 1}</span>
+                              )}
                             </div>
-                          )}
-                          <span className="truncate flex-1">{l.title}</span>
-                        </button>
+
+                            <span className="truncate flex-1 pr-2">{l.title}</span>
+
+                            <span className="text-[10px] uppercase font-semibold text-muted-foreground/60">
+                              {l.type === "quiz" ? "MCQ" : l.type === "coding" ? "Code" : "Read"}
+                            </span>
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -609,6 +772,86 @@ export default function CourseWorkspacePage({
               </div>
             ) : (
               <div className="space-y-8">
+                {/* Interactive Module Stopwatch & Requirement Bar */}
+                <div
+                  className={`relative overflow-hidden rounded-xl border p-4 transition-all duration-300 shadow-xs ${
+                    hasMetTimeRequirement
+                      ? "bg-gradient-to-r from-emerald-500/10 via-card to-emerald-500/5 border-emerald-500/30"
+                      : "bg-gradient-to-r from-muted/50 via-card to-muted/30 border-border"
+                  }`}
+                >
+                  {celebrationGlow && (
+                    <div className="absolute inset-0 bg-emerald-500/20 animate-pulse pointer-events-none" />
+                  )}
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all ${
+                          hasMetTimeRequirement
+                            ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/30 scale-105"
+                            : "bg-primary/10 text-primary border border-primary/20"
+                        }`}
+                      >
+                        <Timer
+                          className={`w-5 h-5 ${
+                            isTimerRunning && !hasMetTimeRequirement ? "animate-pulse" : ""
+                          }`}
+                        />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                            Module Study Stopwatch
+                          </h4>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                              hasMetTimeRequirement
+                                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30"
+                                : "bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 animate-pulse"
+                            }`}
+                          >
+                            {hasMetTimeRequirement
+                              ? "✓ Required Time Completed"
+                              : `⏱️ ${remainingSeconds}s Remaining`}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {hasMetTimeRequirement
+                            ? "Engagement criteria satisfied! You can now complete this step and continue."
+                            : `Admin requires minimum ${Math.ceil(
+                                requiredTime / 60
+                              )} min of active reading & practice.`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <div className="text-lg font-mono font-black text-foreground">
+                          {formatTime(timeSpent)}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                          Time Spent
+                        </span>
+                      </div>
+
+                      <div className="w-28 sm:w-36 flex flex-col gap-1">
+                        <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden border border-border">
+                          <div
+                            className={`h-full transition-all duration-500 rounded-full ${
+                              hasMetTimeRequirement ? "bg-emerald-500" : "bg-primary"
+                            }`}
+                            style={{ width: `${progressPercent}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground text-right font-medium">
+                          {progressPercent}% Met
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* XP Celebration Banner */}
                 {xpCelebration && (
                   <div className="p-4 rounded-xl bg-primary/10 border border-primary/30 flex items-center gap-3 animate-bounce shadow-xs">
@@ -684,10 +927,68 @@ export default function CourseWorkspacePage({
                         {/* Quiz Runner */}
                         {ex.type === "quiz" && ex.quizConfig?.questions && (
                           <div className="space-y-6">
+                            {/* Quiz Progress & Question Quick-Jump Stepper */}
+                            <div className="bg-muted/40 border border-border rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-foreground">
+                                  {ex.quizConfig.questions.length} Practice MCQs
+                                </span>
+                                <span className="text-[11px] text-muted-foreground">
+                                  · {Object.keys(selectedAnswers).length} of {ex.quizConfig.questions.length} answered
+                                </span>
+                              </div>
+
+                              {/* Question Quick Jump Pills */}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {ex.quizConfig.questions.map((q, qIdx) => {
+                                  const isAnswered = selectedAnswers[q.id] !== undefined;
+                                  const qResult = quizResults?.results?.find(
+                                    (r: any) => r.questionId === q.id,
+                                  );
+                                  return (
+                                    <button
+                                      key={q.id}
+                                      type="button"
+                                      onClick={() => {
+                                        const el = document.getElementById(`quiz-q-${q.id}`);
+                                        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                                      }}
+                                      className={`w-7 h-7 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
+                                        qResult
+                                          ? qResult.isCorrect
+                                            ? "bg-emerald-500 text-white shadow-xs"
+                                            : "bg-destructive text-destructive-foreground shadow-xs"
+                                          : isAnswered
+                                          ? "bg-primary text-primary-foreground shadow-xs"
+                                          : "bg-card border border-border text-muted-foreground hover:border-foreground/30"
+                                      }`}
+                                      title={`Jump to Question ${qIdx + 1}`}
+                                    >
+                                      {qIdx + 1}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
                             {ex.quizConfig.questions.map((q, qIdx) => (
-                              <div key={q.id} className="space-y-3">
+                              <div
+                                key={q.id}
+                                id={`quiz-q-${q.id}`}
+                                className="p-5 rounded-xl border border-border bg-card/60 space-y-3.5 shadow-xs"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[11px] font-bold uppercase tracking-wider text-primary px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
+                                    Question {qIdx + 1} of {ex.quizConfig?.questions?.length || 0}
+                                  </span>
+                                  {selectedAnswers[q.id] !== undefined && (
+                                    <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                      ✓ Option Selected
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-base font-bold text-foreground leading-snug">
-                                  {qIdx + 1}. {q.question}
+                                  {q.question}
                                 </p>
                                 
                                 <div className="space-y-2.5">
@@ -936,16 +1237,32 @@ export default function CourseWorkspacePage({
                   <Button
                     onClick={handleCompleteAndNext}
                     disabled={completing}
-                    className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs h-9 shadow-xs cursor-pointer"
+                    className={`gap-2 font-semibold text-xs h-9 px-5 shadow-xs cursor-pointer transition-all ${
+                      hasMetTimeRequirement
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20"
+                        : "bg-amber-600 hover:bg-amber-700 text-white"
+                    }`}
                   >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>
-                      {completing
-                        ? "Saving..."
-                        : currentLessonIndex < allLessons.length - 1
-                        ? "Complete & Next"
-                        : "Finish Course"}
-                    </span>
+                    {completing ? (
+                      <>
+                        <Spinner className="w-3.5 h-3.5 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : !hasMetTimeRequirement ? (
+                      <>
+                        <Clock className="w-4 h-4 animate-pulse" />
+                        <span>Spend {formatTime(remainingSeconds)} more</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-white" />
+                        <span>
+                          {currentLessonIndex < allLessons.length - 1
+                            ? "Complete & Next Lesson"
+                            : "Finish Course"}
+                        </span>
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>

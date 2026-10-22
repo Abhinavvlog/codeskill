@@ -680,7 +680,10 @@ export const learningAPI = {
   enroll: (pathId: string) => api.post(`/learning/paths/${pathId}/enroll`),
   getCourse: (courseId: string) => api.get(`/learning/courses/${courseId}`),
   getLesson: (lessonId: string) => api.get(`/learning/lessons/${lessonId}`),
-  completeLesson: (lessonId: string) => api.post(`/learning/lessons/${lessonId}/complete`),
+  trackTimeSpent: (lessonId: string, seconds: number) =>
+    api.post(`/learning/lessons/${lessonId}/time-spent`, { seconds }),
+  completeLesson: (lessonId: string, timeSpentSeconds?: number) =>
+    api.post(`/learning/lessons/${lessonId}/complete`, { timeSpentSeconds }),
   submitExercise: (exerciseId: string, data: { code?: string; language?: string; selectedOption?: number; answers?: Record<string, number> }) =>
     api.post(`/learning/exercises/${exerciseId}/submit`, data),
   getMyProgress: () => api.get("/learning/me/progress"),
@@ -702,6 +705,8 @@ export const adminLearningAPI = {
   updateCourse: (id: string, data: any) => api.patch(`/admin/learning/courses/${id}`, data),
   deleteCourse: (id: string) => api.delete(`/admin/learning/courses/${id}`),
   createModule: (courseId: string, data: any) => api.post(`/admin/learning/courses/${courseId}/modules`, data),
+  updateModule: (moduleId: string, data: any) => api.patch(`/admin/learning/modules/${moduleId}`, data),
+  deleteModule: (moduleId: string) => api.delete(`/admin/learning/modules/${moduleId}`),
   createLesson: (moduleId: string, data: any) => api.post(`/admin/learning/modules/${moduleId}/lessons`, data),
   updateLesson: (id: string, data: any) => api.patch(`/admin/learning/lessons/${id}`, data),
   deleteLesson: (id: string) => api.delete(`/admin/learning/lessons/${id}`),

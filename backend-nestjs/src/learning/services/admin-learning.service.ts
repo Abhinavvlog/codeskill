@@ -23,6 +23,7 @@ import {
 import {
   CreateCourseDto,
   CreateCourseModuleDto,
+  UpdateCourseModuleDto,
   CreateLessonDto,
   CreateCourseExerciseDto,
 } from '../dto/course.dto';
@@ -57,6 +58,18 @@ export class AdminLearningService {
     @InjectRepository(LearningEnrollment)
     private readonly enrollmentRepo: Repository<LearningEnrollment>,
   ) {}
+
+  async runMigrationColumnsIfNotExist() {
+    try {
+      await this.moduleRepo.query(`
+        ALTER TABLE "course_modules" ADD COLUMN IF NOT EXISTS "requiredTimeMinutes" integer NOT NULL DEFAULT 2;
+        ALTER TABLE "course_modules" ADD COLUMN IF NOT EXISTS "requiredTimeSeconds" integer NOT NULL DEFAULT 120;
+        ALTER TABLE "lesson_progress" ADD COLUMN IF NOT EXISTS "timeSpentSeconds" integer NOT NULL DEFAULT 0;
+      `);
+    } catch (err: any) {
+      this.logger.debug(`Migration check ignored: ${err?.message}`);
+    }
+  }
 
   // ── Learning Paths ──────────────────────────────────────────────────────────
 
@@ -232,19 +245,56 @@ export class AdminLearningService {
     if (existing) {
       if (dto.description !== undefined) existing.description = dto.description;
       if (dto.order) existing.order = dto.order;
+      if (dto.requiredTimeMinutes !== undefined) existing.requiredTimeMinutes = dto.requiredTimeMinutes;
+      if (dto.requiredTimeSeconds !== undefined) {
+        existing.requiredTimeSeconds = dto.requiredTimeSeconds;
+      } else if (dto.requiredTimeMinutes !== undefined) {
+        existing.requiredTimeSeconds = dto.requiredTimeMinutes * 60;
+      }
       return this.moduleRepo.save(existing);
     }
 
     const existingModules = await this.moduleRepo.find({ where: { courseId } });
     const order = dto.order || existingModules.length + 1;
+    const requiredTimeMinutes = dto.requiredTimeMinutes !== undefined ? dto.requiredTimeMinutes : 2;
+    const requiredTimeSeconds =
+      dto.requiredTimeSeconds !== undefined
+        ? dto.requiredTimeSeconds
+        : requiredTimeMinutes * 60;
 
     const mod = this.moduleRepo.create({
       courseId,
       title: dto.title,
       description: dto.description || '',
       order,
+      requiredTimeMinutes,
+      requiredTimeSeconds,
     });
     return this.moduleRepo.save(mod);
+  }
+
+  async updateModule(moduleId: string, dto: UpdateCourseModuleDto) {
+    const mod = await this.moduleRepo.findOne({ where: { id: moduleId } });
+    if (!mod) throw new NotFoundException(`Module not found: ${moduleId}`);
+
+    if (dto.title !== undefined) mod.title = dto.title;
+    if (dto.description !== undefined) mod.description = dto.description;
+    if (dto.order !== undefined) mod.order = dto.order;
+    if (dto.requiredTimeMinutes !== undefined) mod.requiredTimeMinutes = dto.requiredTimeMinutes;
+    if (dto.requiredTimeSeconds !== undefined) {
+      mod.requiredTimeSeconds = dto.requiredTimeSeconds;
+    } else if (dto.requiredTimeMinutes !== undefined) {
+      mod.requiredTimeSeconds = dto.requiredTimeMinutes * 60;
+    }
+
+    return this.moduleRepo.save(mod);
+  }
+
+  async deleteModule(moduleId: string) {
+    const mod = await this.moduleRepo.findOne({ where: { id: moduleId } });
+    if (!mod) throw new NotFoundException(`Module not found: ${moduleId}`);
+    await this.moduleRepo.remove(mod);
+    return { success: true };
   }
 
   async createLesson(moduleId: string, dto: CreateLessonDto) {
