@@ -21,10 +21,13 @@ import {
   Filter,
 } from "lucide-react";
 import { adminStudentsAPI } from "@/config/api";
+import { importErrorMessage } from "@/lib/import-error";
 import { Spinner } from "@/components/ui/spinner";
 import { SUPPORTED_SECTIONS } from "@/lib/sections";
 
 interface PreviewData {
+  sheetNames: string[];
+  selectedSheet: string | null;
   total: number;
   valid: number;
   invalid: number;
@@ -48,7 +51,9 @@ export default function ImportStudentsPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
+  const [committedRows, setCommittedRows] = useState(0);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+  const [selectedSheet, setSelectedSheet] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "valid" | "duplicates" | "errors">("all");
   const [defaultOptions, setDefaultOptions] = useState<DefaultBatchOptions>({
     defaultBatch: "",
@@ -94,36 +99,42 @@ export default function ImportStudentsPage() {
   };
 
   const handleFileSelected = async (selectedFile: File) => {
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      setErrorMessage("Student files must be 10 MiB or smaller.");
+      return;
+    }
     setFile(selectedFile);
     setErrorMessage(null);
     setPreviewData(null);
+    setSelectedSheet("");
     setImportResult(null);
+    setCommittedRows(0);
 
     setIsValidating(true);
     try {
       const res = await adminStudentsAPI.importPreview(selectedFile, defaultOptions);
       setPreviewData(res.data);
+      setSelectedSheet(res.data.selectedSheet || "");
     } catch (err: any) {
       setErrorMessage(
-        err.response?.data?.message ||
-          "Failed to parse and validate spreadsheet. Please verify file format.",
+        importErrorMessage(err, "Failed to parse and validate spreadsheet. Please verify file format."),
       );
     } finally {
       setIsValidating(false);
     }
   };
 
-  const reValidateWithDefaults = async () => {
+  const reValidateWithDefaults = async (sheetName = selectedSheet) => {
     if (!file) return;
     setIsValidating(true);
     setErrorMessage(null);
+    setPreviewData(null);
     try {
-      const res = await adminStudentsAPI.importPreview(file, defaultOptions);
+      const res = await adminStudentsAPI.importPreview(file, { ...defaultOptions, sheetName });
       setPreviewData(res.data);
     } catch (err: any) {
       setErrorMessage(
-        err.response?.data?.message ||
-          "Failed to re-validate spreadsheet with updated defaults.",
+        importErrorMessage(err, "Failed to re-validate spreadsheet with updated defaults."),
       );
     } finally {
       setIsValidating(false);
@@ -134,19 +145,24 @@ export default function ImportStudentsPage() {
     if (!previewData || previewData.validRows.length === 0) return;
 
     setIsCommitting(true);
+    setCommittedRows(0);
     setErrorMessage(null);
     try {
-      const res = await adminStudentsAPI.confirmImport(previewData.validRows, defaultOptions);
-      setImportResult({
-        importedCount: res.data.importedCount ?? 0,
-        skippedCount: res.data.skippedCount ?? 0,
-        skippedDuplicates: res.data.skippedDuplicates || [],
-        emailJobsCreated: res.data.emailJobsCreated ?? 0,
-      });
+      const result = { importedCount: 0, skippedCount: 0, skippedDuplicates: [] as any[], emailJobsCreated: 0 };
+      // Keep each request below the server's 500-row guard and typical proxy timeouts.
+      for (let start = 0; start < previewData.validRows.length; start += 200) {
+        const rows = previewData.validRows.slice(start, start + 200);
+        const res = await adminStudentsAPI.confirmImport(rows, defaultOptions);
+        result.importedCount += res.data.importedCount ?? 0;
+        result.skippedCount += res.data.skippedCount ?? 0;
+        result.skippedDuplicates.push(...(res.data.skippedDuplicates || []));
+        result.emailJobsCreated += res.data.emailJobsCreated ?? 0;
+        setCommittedRows(Math.min(start + rows.length, previewData.validRows.length));
+      }
+      setImportResult(result);
     } catch (err: any) {
       setErrorMessage(
-        err.response?.data?.message ||
-          "Failed to commit student import into database.",
+        `${importErrorMessage(err, "Failed to commit student import into database.")} Some batches may have succeeded. Retry safely; existing students will be skipped.`,
       );
     } finally {
       setIsCommitting(false);
@@ -370,7 +386,7 @@ CU202600103,Rohan Verma,rohan.verma@university.edu,+919876543212,Chandigarh Univ
                 {file && (
                   <button
                     type="button"
-                    onClick={reValidateWithDefaults}
+                    onClick={() => reValidateWithDefaults()}
                     className="px-2.5 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:bg-primary/90 shrink-0"
                     title="Apply defaults to current file"
                   >
@@ -487,7 +503,7 @@ CU202600103,Rohan Verma,rohan.verma@university.edu,+919876543212,Chandigarh Univ
                 {file ? file.name : "Click to upload or drag and drop student spreadsheet"}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Supports XLSX, XLS, and CSV files (up to 10MB, tested up to 3,200 rows with background job queue)
+                Supports XLSX, XLS, and CSV files (up to 10MB and 1,000 rows per worksheet; imports in batches)
               </p>
             </div>
 
@@ -500,8 +516,32 @@ CU202600103,Rohan Verma,rohan.verma@university.edu,+919876543212,Chandigarh Univ
             </div>
           </div>
 
+          {previewData && previewData.sheetNames.length > 1 && (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <label htmlFor="student-import-sheet" className="block text-sm font-semibold text-foreground">
+                Worksheet to import
+              </label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Choose the worksheet you want to validate. Only that sheet will be imported.
+              </p>
+              <select
+                id="student-import-sheet"
+                value={selectedSheet}
+                onChange={(event) => {
+                  const sheet = event.target.value;
+                  setSelectedSheet(sheet);
+                  if (sheet) void reValidateWithDefaults(sheet);
+                }}
+                className="mt-3 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground sm:max-w-sm"
+              >
+                <option value="">Select a worksheet</option>
+                {previewData.sheetNames.map((sheet) => <option key={sheet} value={sheet}>{sheet}</option>)}
+              </select>
+            </div>
+          )}
+
           {/* Validation Preview Section */}
-          {previewData && (
+          {previewData?.selectedSheet && (
             <div className="space-y-4 animate-in fade-in">
               {/* Summary Metrics */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -570,7 +610,7 @@ CU202600103,Rohan Verma,rohan.verma@university.edu,+919876543212,Chandigarh Univ
                   >
                     {isCommitting ? (
                       <>
-                        <Spinner className="w-3.5 h-3.5 animate-spin" /> Batch Importing...
+                        <Spinner className="w-3.5 h-3.5 animate-spin" /> Importing {committedRows}/{previewData.valid}...
                       </>
                     ) : (
                       <>

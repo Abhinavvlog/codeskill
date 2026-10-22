@@ -13,6 +13,13 @@ export async function applyContestSecurityReattemptMigration(
       ) THEN
         ALTER TABLE "contests" ADD COLUMN "resultsPublished" boolean NOT NULL DEFAULT false;
       END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'contests' AND column_name = 'contestFormat'
+      ) THEN
+        ALTER TABLE "contests" ADD COLUMN "contestFormat" varchar(20) NOT NULL DEFAULT 'coding';
+      END IF;
     END $$;
   `);
 

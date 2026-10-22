@@ -238,12 +238,6 @@ export function Navbar() {
               <div className="flex items-center gap-1.5 xl:gap-2.5 shrink-0">
                 <Link
                   href="/login"
-                  className="inline-flex items-center justify-center h-8.5 xl:h-9 px-2.5 xl:px-3.5 rounded-lg text-[13.5px] xl:text-[15px] font-medium text-muted-foreground hover:text-foreground dark:text-foreground/90 dark:hover:text-white transition-colors duration-150 whitespace-nowrap shrink-0"
-                >
-                  Log In
-                </Link>
-                <Link
-                  href="/login"
                   className="inline-flex items-center justify-center gap-1.5 h-8.5 xl:h-9 px-3 xl:px-4 rounded-xl text-[13.5px] xl:text-[15px] font-bold bg-foreground hover:bg-[#262626] text-background shadow-xs hover:shadow dark:bg-white dark:hover:bg-neutral-200 dark:text-black transition-all duration-150 whitespace-nowrap shrink-0"
                 >
                   <span className="whitespace-nowrap">Get Started</span>
@@ -383,13 +377,6 @@ export function Navbar() {
                     >
                       <span>Get Started</span>
                       <ArrowRight className="w-4 h-4" />
-                    </Link>
-                    <Link
-                      href="/login"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="flex items-center justify-center w-full h-9.5 rounded-xl bg-muted/80 text-foreground hover:bg-muted font-medium text-[14px] border border-border transition-colors"
-                    >
-                      Log In
                     </Link>
                   </div>
                 )}

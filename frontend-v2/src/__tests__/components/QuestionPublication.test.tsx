@@ -113,3 +113,20 @@ it("preserves explicit private visibility despite stale Publish Immediately flag
   fireEvent.click(screen.getByRole("button", { name: "Update Question" }));
   await waitFor(() => expect(update).toHaveBeenCalledWith("question-1", expect.objectContaining({ visibility: "Private", status: "draft", contestOnly: false })));
 });
+
+it("saves a hidden imported test as public without dropping its contents or editorial", async () => {
+  getById.mockResolvedValueOnce({ data: { ...existing,
+    metadata: { ...existing.metadata, visibility: "Published", solutionExplanation: "Greedy on bits." },
+    referenceSolutions: [{ language: "cpp", sourceCode: "int main() {}" }],
+  } } as Awaited<ReturnType<typeof adminQuestionsAPI.getById>>);
+  render(<EditQuestion />);
+  await screen.findByLabelText("Test case 1 input");
+  fireEvent.click(screen.getByRole("button", { name: "Hidden", exact: true }));
+  expect(screen.getByLabelText("Test case 1 expected output")).toHaveValue("2");
+  fireEvent.click(screen.getByRole("button", { name: "Update Question" }));
+  await waitFor(() => expect(update).toHaveBeenCalledWith("question-1", expect.objectContaining({
+    testCases: [expect.objectContaining({ input: "1", expectedOutput: "2", isHidden: false })],
+    referenceSolutions: [{ language: "cpp", sourceCode: "int main() {}" }],
+    explanation: "Greedy on bits.",
+  })));
+});

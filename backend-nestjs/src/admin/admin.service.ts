@@ -7,7 +7,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThanOrEqual } from 'typeorm';
+import { Repository, MoreThanOrEqual, In } from 'typeorm';
 
 import { User } from '../database/entities/user.entity';
 import { ProblemMetadata } from '../database/entities/problem-metadata.entity';
@@ -27,6 +27,33 @@ import { TokenService } from '../auth/token.service';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { CreateAdminUserDto } from './dto/create-admin-user.dto';
 import { validatePasswordPolicy } from '../auth/password.util';
+
+const mcqQuestionTypes = new Set([
+  'mcq',
+  'single_choice',
+  'multiple_choice',
+  'true_false',
+]);
+const codingQuestionTypes = new Set(['dsa', 'coding', 'algorithmic']);
+const contestFormats = ['mcq', 'coding', 'mixed'] as const;
+type ContestFormat = (typeof contestFormats)[number];
+
+function questionFormat(questionType: string): 'mcq' | 'coding' | undefined {
+  const type = questionType.toLowerCase();
+  if (mcqQuestionTypes.has(type)) return 'mcq';
+  if (codingQuestionTypes.has(type)) return 'coding';
+  return undefined;
+}
+
+function isContestEligibleQuestion(question: Question) {
+  const status = String(question.status || '').toLowerCase();
+  const visibility = String(question.metadata?.visibility || '').toLowerCase();
+  return (
+    ['approved', 'active', 'published'].includes(status) &&
+    ['published', 'public'].includes(visibility) &&
+    question.metadata?.contestOnly === true
+  );
+}
 
 @Injectable()
 export class AdminService {
@@ -61,7 +88,7 @@ export class AdminService {
     @Optional()
     @InjectRepository(ContestReattemptGrant)
     private readonly reattemptGrantModel?: Repository<ContestReattemptGrant>,
-  ) {}
+  ) { }
 
   async getDashboardStats() {
     const today = new Date();
@@ -478,7 +505,11 @@ export class AdminService {
       isPrivate: !!body?.isPrivate,
       password: body?.isPrivate ? String(body.password).trim() : undefined,
       isPublished: !!body?.isPublished,
+      contestFormat: body?.contestFormat ?? 'coding',
     };
+    if (!contestFormats.includes(payload.contestFormat)) {
+      throw new BadRequestException('Invalid contest format');
+    }
 
     if (body?.antiCheatConfig) {
       const rawAntiCheat = body.antiCheatConfig;
@@ -506,8 +537,38 @@ export class AdminService {
     return payload;
   }
 
+  private async validateContestQuestions(
+    data: { problems: string[]; contestFormat: ContestFormat },
+    existingProblemIds: string[] = [],
+  ) {
+    const questions = await this.questionModel.findBy({ id: In(data.problems) });
+    const questionsById = new Map(questions.map((question) => [question.id, question]));
+    const existingIds = new Set(existingProblemIds);
+    for (const id of data.problems) {
+      const question = questionsById.get(id);
+      if (!question && existingIds.has(id) && data.contestFormat === 'coding') {
+        continue;
+      }
+      if (!question || !isContestEligibleQuestion(question)) {
+        throw new BadRequestException(
+          'Contest problems must be published Contest Only questions',
+        );
+      }
+      const type = questionFormat(question.questionType);
+      if (!type) {
+        throw new BadRequestException('Unsupported question type for contests');
+      }
+      if (data.contestFormat !== 'mixed' && data.contestFormat !== type) {
+        throw new BadRequestException(
+          'Contest contains a question incompatible with its format',
+        );
+      }
+    }
+  }
+
   async createContest(body: any) {
     const data = this.validateContestPayload(body);
+    await this.validateContestQuestions(data);
     if (!data.antiCheatConfig) {
       data.antiCheatConfig = {
         enableTabSwitchDetection: true,
@@ -539,6 +600,8 @@ export class AdminService {
       where: this.contestLookup(id),
     });
     if (!contest) throw new NotFoundException('Contest not found');
+
+    await this.validateContestQuestions(data, contest.problems || []);
 
     const clash = await this.contestModel.findOne({
       where: { slug: data.slug },
@@ -647,10 +710,10 @@ export class AdminService {
     );
     const avgScore = completedAttempts.length
       ? Math.round(
-          (completedAttempts.reduce((sum, a) => sum + (Number(a.score) || 0), 0) /
-            completedAttempts.length) *
-            100,
-        ) / 100
+        (completedAttempts.reduce((sum, a) => sum + (Number(a.score) || 0), 0) /
+          completedAttempts.length) *
+        100,
+      ) / 100
       : 0;
     const maxScore = allMatching.reduce(
       (max, a) => Math.max(max, Number(a.score) || 0),
@@ -668,13 +731,13 @@ export class AdminService {
       const durationSeconds =
         attempt.submittedAt && attempt.startedAt
           ? Math.max(
-              0,
-              Math.round(
-                (new Date(attempt.submittedAt).getTime() -
-                  new Date(attempt.startedAt).getTime()) /
-                  1000,
-              ),
-            )
+            0,
+            Math.round(
+              (new Date(attempt.submittedAt).getTime() -
+                new Date(attempt.startedAt).getTime()) /
+              1000,
+            ),
+          )
           : null;
 
       return {
@@ -696,14 +759,14 @@ export class AdminService {
         violations: attempt.violations || [],
         reattemptGrant: activeGrant
           ? {
-              id: activeGrant.id,
-              allowedAttempts: activeGrant.allowedAttempts,
-              usedAttempts: activeGrant.usedAttempts,
-              expiresAt: activeGrant.expiresAt,
-              grantedBy: activeGrant.grantedByEmail || activeGrant.grantedBy,
-              reason: activeGrant.reason,
-              createdAt: activeGrant.createdAt,
-            }
+            id: activeGrant.id,
+            allowedAttempts: activeGrant.allowedAttempts,
+            usedAttempts: activeGrant.usedAttempts,
+            expiresAt: activeGrant.expiresAt,
+            grantedBy: activeGrant.grantedByEmail || activeGrant.grantedBy,
+            reason: activeGrant.reason,
+            createdAt: activeGrant.createdAt,
+          }
           : null,
         grantHistory: studentGrants,
       };
@@ -897,8 +960,51 @@ export class AdminService {
   }
 
   // --- Problems ---
-  async getProblems(page = 1, limit = 20, search = '') {
+  async getProblems(
+    page = 1,
+    limit = 20,
+    search = '',
+    contestEligible = false,
+  ) {
     const skip = (page - 1) * limit;
+    if (contestEligible) {
+      const qb = this.questionModel
+        .createQueryBuilder('q')
+        .where('lower(q.status) IN (:...statuses)', {
+          statuses: ['approved', 'active', 'published'],
+        })
+        .andWhere("lower(btrim(q.metadata->>'visibility')) IN (:...visibility)", {
+          visibility: ['published', 'public'],
+        })
+        .andWhere("q.metadata->'contestOnly' = 'true'::jsonb")
+        .andWhere('lower(q.questionType) IN (:...questionTypes)', {
+          questionTypes: [...mcqQuestionTypes, ...codingQuestionTypes],
+        });
+      if (search && search.trim()) {
+        qb.andWhere(
+          "(coalesce(q.title, q.question) ILIKE :s OR coalesce(q.slug, '') ILIKE :s)",
+          { s: `%${search.trim()}%` },
+        );
+      }
+      qb.orderBy('q.createdAt', 'DESC').skip(skip).take(limit);
+      const [questions, total] = await qb.getManyAndCount();
+      return {
+        problems: questions
+          .filter((question) => !!questionFormat(question.questionType))
+          .map((question) => ({
+            _id: question.id,
+            id: question.id,
+            title: question.title?.trim() || question.question,
+            slug: question.slug || `question-${question.id}`,
+            difficulty: question.difficulty,
+            questionType: question.questionType,
+          })),
+        total,
+        page,
+        pages: Math.ceil(total / limit),
+      };
+    }
+
     const qb = this.problemModel.createQueryBuilder('p');
 
     if (search && search.trim()) {

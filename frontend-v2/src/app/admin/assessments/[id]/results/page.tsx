@@ -649,7 +649,7 @@ export default function AssessmentResultsPage({
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
               >
-                <Code className="w-3.5 h-3.5" /> Code & Answers ({(selectedCandidate.responses || []).filter((r: any) => r.code || r.selectedAnswer !== -1).length})
+                <Code className="w-3.5 h-3.5" /> Code & Answers ({(selectedCandidate.responses || []).filter((r: any) => r.code || (Array.isArray(r.selectedAnswers) && r.selectedAnswers.length > 0) || r.selectedAnswer !== -1).length})
               </button>
               <button
                 type="button"
@@ -762,7 +762,11 @@ export default function AssessmentResultsPage({
                         <div className="text-[11px] text-muted-foreground">
                           Option Selected:{" "}
                           <strong className="text-foreground">
-                            {resp.selectedAnswer >= 0 ? `Option ${String.fromCharCode(65 + resp.selectedAnswer)}` : "None"}
+                            {Array.isArray(resp.selectedAnswers) && resp.selectedAnswers.length > 0
+                              ? `Options ${resp.selectedAnswers.map((idx: number) => String.fromCharCode(65 + idx)).join(", ")}`
+                              : resp.selectedAnswer >= 0
+                                ? `Option ${String.fromCharCode(65 + resp.selectedAnswer)}`
+                                : "None"}
                           </strong>
                         </div>
                       )}

@@ -32,6 +32,9 @@ export class Contest {
   @Column('text', { array: true, default: '{}' })
   problems: string[];
 
+  @Column({ type: 'varchar', length: 20, default: 'coding' })
+  contestFormat: string;
+
   @Column({ default: false })
   isPrivate: boolean;
 

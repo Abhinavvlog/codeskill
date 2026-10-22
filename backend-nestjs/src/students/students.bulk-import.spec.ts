@@ -159,6 +159,25 @@ describe('Students Bulk Import & Validation', () => {
     expect(result.validRows[0].semester).toBe(6);
   });
 
+  it('accepts ordinal semester values from university spreadsheets', async () => {
+    const buffer = createWorkbookBuffer([{
+      'Roll No': 2416438,
+      Name: 'Aadarshdeep Singh',
+      'Email Id': '2416438.cse.coe@cgc.edu.in',
+      Branch: 'CSE',
+      Sem: '5th',
+    }]);
+
+    const result = await service.parseAndValidateImport(buffer, {
+      defaultBatch: 'AY 2026-2027 ODD',
+      defaultYear: 2027,
+    });
+
+    expect(result.valid).toBe(1);
+    expect(result.validRows[0].semester).toBe(5);
+    expect(result.validRows[0].uid).toBe('2416438');
+  });
+
   it('re-uploading the same file performs idempotent processing and does not fail', async () => {
     // Simulate database returning existing records for confirm check
     userRepo.find.mockResolvedValue([
@@ -228,6 +247,45 @@ describe('Students Bulk Import & Validation', () => {
     expect(result.generatedPassword).toBeDefined();
     expect(result.generatedPassword).not.toBe('12345678');
     expect(result.generatedPassword.length).toBeGreaterThanOrEqual(12);
+  });
+
+  it('resets student password and returns temporaryPassword with bumped tokenVersion', async () => {
+    const existingStudent = {
+      id: 'student-uuid-1',
+      uid: 'UID_RESET_1',
+      email: 'reset@example.com',
+      name: 'Reset Student',
+      password: 'old-hashed-password',
+      tokenVersion: 1,
+    };
+    userRepo.findOne.mockResolvedValue(existingStudent);
+
+    const result = await service.resetPassword('student-uuid-1', admin);
+    expect(result.temporaryPassword).toBeDefined();
+    expect(result.temporaryPassword.length).toBeGreaterThanOrEqual(10);
+    expect(existingStudent.tokenVersion).toBe(2);
+    expect(existingStudent.forcePasswordChange).toBe(true);
+  });
+
+  it('preserves custom password and allows setting forcePasswordChange on create', async () => {
+    const result = await service.create(
+      {
+        name: 'Custom Pass Student',
+        email: 'custompass@example.com',
+        uid: 'UID_CUSTOM_100',
+        password: 'MyChosenPassword123!',
+        forcePasswordChange: false,
+      } as any,
+      admin,
+    );
+
+    expect(result.initialPassword).toBe('MyChosenPassword123!');
+    expect(result.generatedPassword).toBeNull();
+    expect(userRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        forcePasswordChange: false,
+      }),
+    );
   });
 
   it('rejects batch import exceeding 500 rows to prevent threadpool starvation (ISSUE-PRF-002)', async () => {

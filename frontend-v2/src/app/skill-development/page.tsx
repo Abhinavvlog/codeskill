@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import Image from 'next/image';
 import MentorGratitude from '@/components/skill-development/MentorGratitude';
+import TeamSection from '@/components/skill-development/TeamSection';
 import {
   ArrowDownRight,
   ArrowLeft,
@@ -9,7 +9,6 @@ import {
   Lightbulb,
   Rocket,
   Target,
-  UsersRound,
 } from 'lucide-react';
 
 export const metadata = {
@@ -46,21 +45,9 @@ const learningSteps = [
   ['04', 'Grow', 'Carry that learning into a more challenging task or project.'],
 ];
 
-const teamMembers = [
-  { name: 'Venkatesh', role: 'Technical Trainer', image: '/images/skill-development/team/member-01.jpg' },
-  { name: 'Mustakim', role: 'Technical Trainer', image: '/images/skill-development/team/member-02.jpg' },
-  { name: 'Vishal', role: 'Technical Trainer', image: '/images/skill-development/team/member-03.jpg' },
-  { name: 'Neeraj', role: 'Assistant Professor', image: '/images/skill-development/team/member-04.jpg' },
-  { name: 'Shadab', role: 'Technical Trainer', image: '/images/skill-development/team/member-05.jpg' },
-  { name: 'Tushar', role: 'Technical Trainer', image: '/images/skill-development/team/member-06.jpg' },
-  { name: 'Mazz', role: 'Technical Trainer', image: '/images/skill-development/team/member-07.jpg' },
-  { name: 'Anmol', role: 'Technical Trainer', image: '/images/skill-development/team/member-08.jpg' },
-  { name: 'Abhinav', role: 'Technical Trainer', image: '/images/skill-development/team/member-09.jpg' },
-];
-
 export default function SkillDevelopmentPage() {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
+    <main className="relative min-h-screen overflow-x-clip bg-background text-foreground">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 h-[34rem] bg-gradient-to-b from-primary/10 via-primary/5 to-transparent"
@@ -94,50 +81,7 @@ export default function SkillDevelopmentPage() {
 
         <MentorGratitude />
 
-        <section
-          className="mx-auto mt-14 max-w-screen-2xl rounded-[2rem] border border-emerald-900/10 bg-card/90 p-5 shadow-sm dark:border-emerald-100/10 sm:mt-16 sm:p-8 lg:p-10 2xl:p-12"
-          aria-labelledby="team-title"
-        >
-          <div className="mb-8 text-center sm:mb-10">
-            <span className="inline-flex items-center gap-3 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300 sm:text-sm">
-              <UsersRound className="h-5 w-5" aria-hidden="true" />
-              <span className="h-5 w-px bg-primary/50" aria-hidden="true" />
-              Our developers &amp; contributors
-            </span>
-            <h2 id="team-title" className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
-                Meet the Team Behind CodeSkill
-            </h2>
-            <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base lg:text-lg">
-              The team building practical, hands-on learning experiences.
-            </p>
-            <span className="mx-auto mt-5 block h-1 w-12 rounded-full bg-primary" aria-hidden="true" />
-          </div>
-
-          <div className="grid grid-cols-3 gap-x-2 gap-y-6 sm:grid-cols-3 sm:gap-x-4 md:grid-cols-5 xl:grid-cols-9 xl:gap-x-2 2xl:gap-x-4" aria-label="CodeSkill team members">
-            {teamMembers.map((member) => (
-              <article
-                key={member.image}
-                className="group flex min-w-0 flex-col items-center px-0.5 py-3 text-center transition duration-300 hover:-translate-y-1 sm:px-1"
-              >
-                <div className="relative aspect-[4/5] w-full max-w-[11rem] shrink-0 overflow-hidden rounded-2xl bg-muted shadow-md transition duration-300 group-hover:shadow-lg">
-                  <Image
-                    src={member.image}
-                    alt={`Portrait of ${member.name}`}
-                    fill
-                    sizes="(max-width: 639px) 28vw, (max-width: 767px) 20vw, (max-width: 1279px) 18vw, 11rem"
-                    quality={82}
-                    className={`object-cover transition duration-500 group-hover:scale-[1.035] ${member.name === 'Shadab' ? 'object-[44%_center]' : 'object-center'}`}
-                  />
-                </div>
-                <div className="mt-4 flex min-h-[4.5rem] w-full flex-col items-center gap-2">
-                  <h3 className="w-full text-sm font-extrabold leading-snug tracking-tight text-foreground sm:text-base lg:text-lg">{member.name}</h3>
-                  <span className="h-0.5 w-7 rounded-full bg-primary" aria-hidden="true" />
-                  <p className="text-xs font-semibold leading-snug text-primary sm:text-sm">{member.role}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
+        <TeamSection />
 
         <section className="mx-auto mt-16 grid max-w-5xl gap-5 md:grid-cols-2">
           <article className="rounded-3xl border border-border/70 bg-card/75 p-7 shadow-sm sm:p-9">

@@ -30,6 +30,7 @@ import {
   Search,
   FilterX,
   Trash2,
+  Loader2,
   Code,
   Sparkles,
   BookOpen,
@@ -101,7 +102,10 @@ interface VTable3Props {
   onClearSelection: () => void;
   onBulkDelete: () => void;
   deletingQuestions: boolean;
+  deletingQuestionId?: string | null;
   onBulkEdit?: () => void;
+  showBulkEdit?: boolean;
+  showFilterSubmit?: boolean;
 }
 
 export function VTable3({
@@ -134,7 +138,10 @@ export function VTable3({
   onClearSelection,
   onBulkDelete,
   deletingQuestions,
+  deletingQuestionId,
   onBulkEdit,
+  showBulkEdit = true,
+  showFilterSubmit = true,
 }: VTable3Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -223,7 +230,7 @@ export function VTable3({
             </button>
             {selectionMode && selectedQuestionIds.length > 0 && (
               <>
-                {onBulkEdit && (
+                {showBulkEdit && onBulkEdit && (
                   <button
                     type="button"
                     onClick={onBulkEdit}
@@ -236,7 +243,7 @@ export function VTable3({
                 <button
                   type="button"
                   onClick={onBulkDelete}
-                  disabled={deletingQuestions}
+                  disabled={deletingQuestions || Boolean(deletingQuestionId)}
                   className="inline-flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3.5 py-2 text-sm font-semibold text-rose-600 transition-colors hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -316,12 +323,12 @@ export function VTable3({
             <option value="rejected">Rejected</option>
           </select>
 
-          <button
+          {showFilterSubmit && <button
             type="submit"
             className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors"
           >
             Filter
-          </button>
+          </button>}
           
           {hasFilters && (
             <button
@@ -497,8 +504,19 @@ export function VTable3({
                     </TableCell>
                     
                     <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        aria-label={`Delete ${q.title || q.question || "question"}`}
+                        disabled={deletingQuestions || Boolean(deletingQuestionId) || !(q._id || q.id || q.mongoId)}
+                        onClick={() => onDelete(qId)}
+                        className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {deletingQuestionId === qId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        {deletingQuestionId === qId ? "Deleting…" : "Delete"}
+                      </button>
                       <DropdownMenu>
-                        <DropdownMenuTrigger className="p-2 hover:bg-muted rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/20">
+                        <DropdownMenuTrigger aria-label={`More actions for ${q.title || q.question || "question"}`} className="p-2 hover:bg-muted rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/20">
                           <MoreVertical className="w-4 h-4 text-muted-foreground" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48 bg-card border-border">
@@ -530,13 +548,10 @@ export function VTable3({
                               <Plus className="w-4 h-4 text-muted-foreground" />
                               Edit Question
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onDelete(qId)} className="cursor-pointer gap-2 text-sm text-rose-600 focus:bg-rose-500/10 focus:text-rose-600">
-                              <Trash2 className="w-4 h-4" />
-                              Delete Question
-                            </DropdownMenuItem>
                           </DropdownMenuGroup>
                         </DropdownMenuContent>
                       </DropdownMenu>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );

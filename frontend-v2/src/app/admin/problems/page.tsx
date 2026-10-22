@@ -1,14 +1,47 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Plus, Search, Loader2, ArrowRight, Code2, BookOpen } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Plus, Search, Loader2, ArrowRight, Code2, BookOpen, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { adminProblemsAPI, adminQuestionsAPI } from "@/config/api";
+import { useDeleteConfirmation } from "@/hooks/use-delete-confirmation";
 import { loadPracticeProblems, filterPracticeProblems, type PracticeRow } from "@/lib/practice-problems";
 
 export default function AdminProblemsPage() {
   const [result, setResult] = useState<{ problems: PracticeRow[]; errors: string[] } | null>(null);
   const [retry, setRetry] = useState(0);
   const [search, setSearch] = useState("");
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [deleteFeedback, setDeleteFeedback] = useState<{ error: boolean; message: string } | null>(null);
+  const deleteInFlight = useRef(false);
+  const { confirmDelete, deleteConfirmationDialog } = useDeleteConfirmation();
+
+  const handleDelete = async (problem: PracticeRow) => {
+    if (deleteInFlight.current) return;
+    const fromBank = problem.source === "question-bank";
+    const message = fromBank
+      ? `Delete "${problem.title}" from Question Bank? This archives the original question and removes it from the active Question Bank and practice catalog. Existing assessment records are kept.`
+      : `Permanently delete the practice problem "${problem.title}"? Any original Question Bank question is kept.`;
+    if (!await confirmDelete({ title: fromBank ? "Delete Question Bank question?" : "Delete practice problem?", description: message })) return;
+    deleteInFlight.current = true;
+    setDeletingKey(`${problem.source}:${problem.id}`);
+    setDeleteFeedback(null);
+    try {
+      if (fromBank) await adminQuestionsAPI.delete(problem.id);
+      else await adminProblemsAPI.delete(problem.id);
+      setResult(current => current ? {
+        ...current,
+        problems: current.problems.filter(row => row.id !== problem.id || row.source !== problem.source),
+      } : current);
+      setDeleteFeedback({ error: false, message: fromBank ? "Question archived and removed from the active catalog." : "Practice problem deleted." });
+      setRetry(value => value + 1);
+    } catch {
+      setDeleteFeedback({ error: true, message: "Could not delete this problem. Please try again." });
+    } finally {
+      deleteInFlight.current = false;
+      setDeletingKey(null);
+    }
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -25,6 +58,7 @@ export default function AdminProblemsPage() {
 
   return (
     <div className="p-6 md:p-8 max-w-[1400px] mx-auto space-y-8">
+      {deleteConfirmationDialog}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Practice Problems</h1>
@@ -45,6 +79,12 @@ export default function AdminProblemsPage() {
         </Link>
         </div>
       </div>
+
+      {deleteFeedback && (
+        <p role={deleteFeedback.error ? "alert" : "status"} className={`rounded-xl border px-4 py-3 text-sm ${deleteFeedback.error ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"}`}>
+          {deleteFeedback.message}
+        </p>
+      )}
 
       <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden flex flex-col">
         <div className="p-4 border-b border-border bg-muted/20 flex flex-col sm:flex-row gap-4 items-center justify-between">
@@ -156,6 +196,16 @@ export default function AdminProblemsPage() {
                         >
                           <ArrowRight className="w-4 h-4" />
                         </Link>
+                        <button
+                          type="button"
+                          aria-label={`Delete ${problem.title}`}
+                          disabled={Boolean(deletingKey)}
+                          onClick={() => handleDelete(problem)}
+                          className="ml-2 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {deletingKey === `${problem.source}:${probId}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                          {deletingKey === `${problem.source}:${probId}` ? "Deleting…" : "Delete"}
+                        </button>
                       </td>
                     </tr>
                   );
