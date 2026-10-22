@@ -327,6 +327,74 @@ export class AdminLearningService {
     };
   }
 
+  async getPathDetails(id: string) {
+    const path = await this.pathRepo.findOne({
+      where: { id },
+      relations: {
+        pathCourses: {
+          course: {
+            modules: {
+              lessons: {
+                exercises: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!path) throw new NotFoundException(`Learning path not found: ${id}`);
+    return path;
+  }
+
+  async deletePath(id: string) {
+    const path = await this.pathRepo.findOne({ where: { id } });
+    if (!path) throw new NotFoundException(`Learning path not found: ${id}`);
+    await this.lpcRepo.delete({ pathId: id });
+    await this.pathRepo.remove(path);
+    return { success: true };
+  }
+
+  async updateCourse(id: string, dto: Partial<CreateCourseDto>) {
+    const course = await this.courseRepo.findOne({ where: { id } });
+    if (!course) throw new NotFoundException(`Course not found: ${id}`);
+    if (dto.title) course.title = dto.title;
+    if (dto.description !== undefined) course.description = dto.description;
+    if (dto.difficulty) course.difficulty = dto.difficulty;
+    if (dto.estimatedMinutes) course.estimatedMinutes = dto.estimatedMinutes;
+    return this.courseRepo.save(course);
+  }
+
+  async deleteCourse(id: string) {
+    const course = await this.courseRepo.findOne({ where: { id } });
+    if (!course) throw new NotFoundException(`Course not found: ${id}`);
+    await this.courseRepo.remove(course);
+    return { success: true };
+  }
+
+  async updateLesson(id: string, dto: Partial<CreateLessonDto>) {
+    const lesson = await this.lessonRepo.findOne({ where: { id } });
+    if (!lesson) throw new NotFoundException(`Lesson not found: ${id}`);
+    if (dto.title) lesson.title = dto.title;
+    if (dto.content !== undefined) lesson.content = dto.content;
+    if (dto.type) lesson.type = dto.type;
+    if (dto.learningObjectives) lesson.learningObjectives = dto.learningObjectives;
+    return this.lessonRepo.save(lesson);
+  }
+
+  async deleteLesson(id: string) {
+    const lesson = await this.lessonRepo.findOne({ where: { id } });
+    if (!lesson) throw new NotFoundException(`Lesson not found: ${id}`);
+    await this.lessonRepo.remove(lesson);
+    return { success: true };
+  }
+
+  async deleteExercise(id: string) {
+    const ex = await this.exerciseRepo.findOne({ where: { id } });
+    if (!ex) throw new NotFoundException(`Exercise not found: ${id}`);
+    await this.exerciseRepo.remove(ex);
+    return { success: true };
+  }
+
   async getAllCertificates() {
     return this.certRepo.find({
       order: { issueDate: 'DESC' },

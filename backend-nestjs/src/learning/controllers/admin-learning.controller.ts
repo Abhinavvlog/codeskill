@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   UseGuards,
@@ -58,6 +59,12 @@ export class AdminLearningController {
     return this.adminService.createPath(dto);
   }
 
+  @Get('paths/:id')
+  @ApiOperation({ summary: 'Get learning path details with courses and modules' })
+  async getPathDetails(@Param('id') id: string) {
+    return this.adminService.getPathDetails(id);
+  }
+
   @Patch('paths/:id')
   @ApiOperation({ summary: 'Update a learning path' })
   async updatePath(
@@ -65,6 +72,12 @@ export class AdminLearningController {
     @Body() dto: UpdateLearningPathDto,
   ) {
     return this.adminService.updatePath(id, dto);
+  }
+
+  @Delete('paths/:id')
+  @ApiOperation({ summary: 'Delete a learning path' })
+  async deletePath(@Param('id') id: string) {
+    return this.adminService.deletePath(id);
   }
 
   @Post('paths/:id/publish')
@@ -87,6 +100,21 @@ export class AdminLearningController {
     return this.adminService.createCourse(dto);
   }
 
+  @Patch('courses/:id')
+  @ApiOperation({ summary: 'Update a course' })
+  async updateCourse(
+    @Param('id') id: string,
+    @Body() dto: Partial<CreateCourseDto>,
+  ) {
+    return this.adminService.updateCourse(id, dto);
+  }
+
+  @Delete('courses/:id')
+  @ApiOperation({ summary: 'Delete a course' })
+  async deleteCourse(@Param('id') id: string) {
+    return this.adminService.deleteCourse(id);
+  }
+
   @Post('courses/:id/modules')
   @ApiOperation({ summary: 'Add module to course' })
   async createModule(
@@ -105,6 +133,21 @@ export class AdminLearningController {
     return this.adminService.createLesson(moduleId, dto);
   }
 
+  @Patch('lessons/:id')
+  @ApiOperation({ summary: 'Update a lesson' })
+  async updateLesson(
+    @Param('id') id: string,
+    @Body() dto: Partial<CreateLessonDto>,
+  ) {
+    return this.adminService.updateLesson(id, dto);
+  }
+
+  @Delete('lessons/:id')
+  @ApiOperation({ summary: 'Delete a lesson' })
+  async deleteLesson(@Param('id') id: string) {
+    return this.adminService.deleteLesson(id);
+  }
+
   @Post('lessons/:id/exercises')
   @ApiOperation({ summary: 'Attach practice exercise to lesson' })
   async createExercise(
@@ -112,6 +155,12 @@ export class AdminLearningController {
     @Body() dto: CreateCourseExerciseDto,
   ) {
     return this.adminService.createExercise(lessonId, dto);
+  }
+
+  @Delete('exercises/:id')
+  @ApiOperation({ summary: 'Delete a practice exercise' })
+  async deleteExercise(@Param('id') id: string) {
+    return this.adminService.deleteExercise(id);
   }
 
   // ── Badges & Certificates ───────────────────────────────────────────────────

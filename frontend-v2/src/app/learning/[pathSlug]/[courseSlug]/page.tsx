@@ -652,26 +652,26 @@ export default function CourseWorkspacePage({
                                     );
 
                                     let containerStyle =
-                                      "border-border bg-card text-foreground hover:bg-muted/70 hover:border-foreground/30";
+                                      "border-slate-200 dark:border-border bg-white dark:bg-card text-slate-900 dark:text-foreground hover:bg-slate-50 dark:hover:bg-muted/60 hover:border-primary/50 shadow-xs";
                                     let letterBadgeStyle =
-                                      "bg-muted text-foreground border border-border";
+                                      "bg-slate-100 dark:bg-muted text-slate-800 dark:text-foreground border border-slate-300 dark:border-border";
 
                                     if (qResult) {
                                       if (optIdx === qResult.correctAnswer) {
                                         containerStyle =
-                                          "border-emerald-500 bg-emerald-500/10 text-emerald-950 dark:text-emerald-200 font-semibold ring-1 ring-emerald-500";
-                                        letterBadgeStyle = "bg-emerald-600 text-white";
+                                          "border-emerald-500 bg-emerald-500/15 text-emerald-950 dark:text-emerald-100 font-bold ring-2 ring-emerald-500/40 shadow-sm";
+                                        letterBadgeStyle = "bg-emerald-600 text-white font-bold";
                                       } else if (isSelected && !qResult.isCorrect) {
                                         containerStyle =
-                                          "border-destructive bg-destructive/10 text-destructive font-semibold ring-1 ring-destructive";
+                                          "border-rose-500 bg-rose-500/15 text-rose-950 dark:text-rose-100 font-bold ring-2 ring-rose-500/40 shadow-sm";
                                         letterBadgeStyle =
-                                          "bg-destructive text-destructive-foreground";
+                                          "bg-rose-600 text-white font-bold";
                                       }
                                     } else if (isSelected) {
                                       containerStyle =
-                                        "border-primary bg-primary/10 text-foreground font-semibold ring-2 ring-primary shadow-xs";
+                                        "border-primary bg-primary/10 text-slate-950 dark:text-foreground font-bold ring-2 ring-primary/40 shadow-sm";
                                       letterBadgeStyle =
-                                        "bg-primary text-primary-foreground";
+                                        "bg-primary text-primary-foreground font-bold";
                                     }
 
                                     return (
@@ -684,7 +684,7 @@ export default function CourseWorkspacePage({
                                             [q.id]: optIdx,
                                           })
                                         }
-                                        className={`w-full text-left px-4 py-3.5 rounded-xl text-sm font-medium border-2 transition-all cursor-pointer flex items-center justify-between ${containerStyle}`}
+                                        className={`w-full text-left px-4 py-3.5 rounded-xl text-sm font-semibold border-2 transition-all duration-150 cursor-pointer flex items-center justify-between ${containerStyle}`}
                                       >
                                         <div className="flex items-center gap-3">
                                           <span
@@ -699,7 +699,7 @@ export default function CourseWorkspacePage({
                                           <span className="leading-snug">{opt}</span>
                                         </div>
                                         {isSelected && !qResult && (
-                                          <span className="w-2.5 h-2.5 rounded-full bg-primary flex-shrink-0" />
+                                          <span className="w-2.5 h-2.5 rounded-full bg-primary flex-shrink-0 animate-pulse" />
                                         )}
                                       </button>
                                     );
