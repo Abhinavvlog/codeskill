@@ -101,7 +101,7 @@ api.interceptors.response.use(
     notifyMutationFailure(reqUrl, error.config?.method || "", error);
 
     if (status && status >= 500) {
-      logger.error("API service error", {
+      logger.warn("API service error", {
         requestId,
         status,
         url: reqUrl,
