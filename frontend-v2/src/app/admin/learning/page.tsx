@@ -86,10 +86,25 @@ export default function AdminLearningDashboard() {
         adminLearningAPI.getCertificates(),
       ]);
 
-      if (overviewRes.status === "fulfilled") setMetrics(overviewRes.value.data);
-      if (pathsRes.status === "fulfilled") setPaths(pathsRes.value.data || []);
-      if (badgesRes.status === "fulfilled") setBadges(badgesRes.value.data || []);
-      if (certsRes.status === "fulfilled") setCertificates(certsRes.value.data || []);
+      if (overviewRes.status === "fulfilled") {
+        const d = overviewRes.value?.data;
+        setMetrics(d?.data || d);
+      }
+      if (pathsRes.status === "fulfilled") {
+        const d = pathsRes.value?.data;
+        const list = Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : [];
+        setPaths(list);
+      }
+      if (badgesRes.status === "fulfilled") {
+        const d = badgesRes.value?.data;
+        const list = Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : [];
+        setBadges(list);
+      }
+      if (certsRes.status === "fulfilled") {
+        const d = certsRes.value?.data;
+        const list = Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : [];
+        setCertificates(list);
+      }
     } catch (err) {
       console.error("Failed to load admin learning data", err);
     } finally {

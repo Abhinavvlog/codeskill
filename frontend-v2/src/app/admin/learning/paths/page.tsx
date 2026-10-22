@@ -52,9 +52,16 @@ export default function AdminLearningPathsPage() {
     try {
       setLoading(true);
       const res = await adminLearningAPI.getPaths();
-      setPaths(res.data || []);
+      const raw = res.data;
+      const list = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.data)
+        ? raw.data
+        : [];
+      setPaths(list);
     } catch (err) {
       console.error("Failed to load paths", err);
+      setPaths([]);
     } finally {
       setLoading(false);
     }
