@@ -15,6 +15,11 @@ import { AssessmentSectionDto } from './create-assessment.dto';
 class UpdateAssessmentProctoringDto {
   @IsString()
   @IsOptional()
+  @IsEnum(['system_default', 'student_select'])
+  cameraSelectionPolicy?: 'system_default' | 'student_select';
+
+  @IsString()
+  @IsOptional()
   @IsEnum(['fully_proctored', 'partial_proctored', 'non_proctored'])
   mode?: 'fully_proctored' | 'partial_proctored' | 'non_proctored';
 

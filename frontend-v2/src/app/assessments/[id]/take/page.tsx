@@ -79,6 +79,7 @@ interface Question {
 
 interface AssessmentProctoring {
   mode?: 'fully_proctored' | 'partial_proctored' | 'non_proctored';
+  cameraSelectionPolicy?: 'system_default' | 'student_select';
   violationPenaltyMarks?: number;
   useCamera?: boolean;
   enforceFullscreen?: boolean;
@@ -367,6 +368,7 @@ export default function TakeAssessmentPage({
     stopCamera,
   } = useAssessmentMedia(
     id, proctoring?.useCamera !== false && loadedAssessmentId === id && questions.length > 0 && !isLoading && timeLeftSeconds > 0, recordViolation,
+    proctoring?.cameraSelectionPolicy || 'student_select',
   );
 
   // 3. Submit Attempt Handler
