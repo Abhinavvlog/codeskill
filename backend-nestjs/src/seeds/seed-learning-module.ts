@@ -575,7 +575,8 @@ $$\\text{Memory (Bytes)} = 2 \\times \\text{layers} \\times \\text{heads}_{KV} \
       marks: 25,
       isMandatory: true,
       order: 1,
-      starterCode: `def calculate_kv_cache_gb(layers: int, kv_heads: int, head_dim: int, seq_len: int, batch_size: int, precision_bytes: int = 2) -> float:
+      starterCode: {
+        python: `def calculate_kv_cache_gb(layers: int, kv_heads: int, head_dim: int, seq_len: int, batch_size: int, precision_bytes: int = 2) -> float:
     """
     Calculate the total KV-cache memory in Gigabytes (GB).
     Formula: 2 * layers * kv_heads * head_dim * seq_len * batch_size * precision_bytes / (1024 ** 3)
@@ -587,6 +588,7 @@ $$\\text{Memory (Bytes)} = 2 \\times \\text{layers} \\times \\text{heads}_{KV} \
 # Llama-3-70B: layers=80, kv_heads=8, head_dim=128, seq_len=8192, batch_size=1, precision=2 bytes
 print(round(calculate_kv_cache_gb(80, 8, 128, 8192, 1, 2), 2))
 `,
+      },
       hints: [
         'Remember there is a factor of 2 because we cache BOTH Keys and Values.',
         'Divide total bytes by (1024 ** 3) to convert from bytes to Gigabytes (GiB).',
@@ -595,7 +597,6 @@ print(round(calculate_kv_cache_gb(80, 8, 128, 8192, 1, 2), 2))
 
     const aiMod3_2 = await adminService.createModule(aiCourse3.id, {
       title: 'Module 2: Reasoning Models & Test-Time Compute (o1, DeepSeek-R1)',
-      slug: 'reasoning-models-test-time-compute',
       description: 'The shift from pre-training scaling laws to test-time compute search, Tree-of-Thought backtracking, and GRPO reinforcement learning.',
       order: 2,
     });
@@ -791,7 +792,8 @@ Where $r_m(d)$ is document $d$'s rank in retriever $m$, and $k$ is a smoothing c
       marks: 25,
       isMandatory: true,
       order: 1,
-      starterCode: `def reciprocal_rank_fusion(dense_ranks: list[str], sparse_ranks: list[str], k: int = 60) -> list[tuple[str, float]]:
+      starterCode: {
+        python: `def reciprocal_rank_fusion(dense_ranks: list[str], sparse_ranks: list[str], k: int = 60) -> list[tuple[str, float]]:
     """
     Combine two ranked lists of document IDs using Reciprocal Rank Fusion.
     dense_ranks: ordered list of doc IDs from vector search (index 0 is rank 1)
@@ -814,6 +816,7 @@ dense = ["docA", "docB", "docC"]
 sparse = ["docB", "docD", "docA"]
 print(reciprocal_rank_fusion(dense, sparse))
 `,
+      },
       hints: [
         'Notice how docB appears near the top of both lists, so its combined RRF score will be highest.',
         'Use 1-indexed ranks (rank = index + 1).',
@@ -929,7 +932,6 @@ Modern LLMs (GPT-4o, Claude 3.5 Sonnet, Gemini 1.5 Pro) are fine-tuned to emit s
 
     const aiMod5_2 = await adminService.createModule(aiCourse5.id, {
       title: 'Module 2: Stateful Multi-Agent Orchestration with LangGraph',
-      slug: 'langgraph-multi-agent-orchestration',
       description: 'Cyclic graphs, state persistence, supervisor pattern, and human-in-the-loop approvals.',
       order: 2,
     });
@@ -982,7 +984,8 @@ Traditional orchestration engines (Airflow, basic LangChain chains) are **Direct
       marks: 25,
       isMandatory: true,
       order: 1,
-      starterCode: `from typing import Literal
+      starterCode: {
+        python: `from typing import Literal
 
 def supervisor_router(state: dict) -> Literal["coder", "security_auditor", "deployer", "__end__"]:
     """
@@ -1005,6 +1008,7 @@ sample_state = {
 }
 print(supervisor_router(sample_state))  # Expected: 'deployer'
 `,
+      },
       hints: [
         'Check conditions in priority order: code existence -> tests passing -> security verification -> deployment state.',
       ],
