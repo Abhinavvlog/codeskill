@@ -73,7 +73,7 @@ export default function ContestForm({ contestId }: { contestId?: string }) {
   useEffect(() => {
     let active = true;
     Promise.all([
-      adminProblemsAPI.getAll({ contestEligible: true }),
+      adminProblemsAPI.getAll({ contestEligible: true, limit: 1000 }),
       contestId ? adminContestsAPI.getById(contestId) : Promise.resolve(null),
     ]).then(([problemsResponse, contestResponse]) => {
       if (!active) return;
