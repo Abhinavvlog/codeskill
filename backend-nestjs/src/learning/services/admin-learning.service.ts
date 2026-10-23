@@ -71,6 +71,26 @@ export class AdminLearningService {
     }
   }
 
+  async acquireAdvisoryLock(lockId: number): Promise<boolean> {
+    try {
+      const res = await this.moduleRepo.query(
+        `SELECT pg_try_advisory_lock(${lockId}) as acquired`,
+      );
+      return res?.[0]?.acquired === true || res?.[0]?.acquired === 't';
+    } catch (err: any) {
+      this.logger.debug(`Advisory lock check fallback: ${err?.message}`);
+      return true;
+    }
+  }
+
+  async releaseAdvisoryLock(lockId: number): Promise<void> {
+    try {
+      await this.moduleRepo.query(`SELECT pg_advisory_unlock(${lockId})`);
+    } catch {
+      // Ignored
+    }
+  }
+
   // ── Learning Paths ──────────────────────────────────────────────────────────
 
   async getAllPaths() {

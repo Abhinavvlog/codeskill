@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { AdminLearningService } from './admin-learning.service';
+import { seedEnterpriseCurriculum } from './enterprise-curriculum.seed';
 
 @Injectable()
 export class LearningAutoSeedService implements OnApplicationBootstrap {
@@ -24,95 +25,165 @@ export class LearningAutoSeedService implements OnApplicationBootstrap {
    * Main idempotent curriculum seeding logic
    */
   async seedCurriculumIfNotExist(): Promise<void> {
-    this.logger.log('🔍 Checking curriculum seeds (idempotent if-not-exists)...');
-    await this.adminService.runMigrationColumnsIfNotExist();
+    const lockAcquired = await this.adminService.acquireAdvisoryLock(1902230165);
+    if (!lockAcquired) {
+      this.logger.log('Curriculum auto-seeding is currently in progress on another process/instance; skipping.');
+      return;
+    }
 
-    // ==========================================
-    // 1. BADGES (Gamification Rewards)
-    // ==========================================
-    const badges = [
-      {
-        code: 'FIRST_SOLUTION',
-        name: 'First Solution',
-        description: 'Passed your first coding or quiz exercise in a learning course.',
-        iconUrl: '/images/badges/first-solution.svg',
-        rarity: 'common' as const,
-        category: 'milestone' as const,
-        criteria: { type: 'problem_solved', count: 1 },
-      },
-      {
-        code: 'KNOWLEDGE_SEEKER',
-        name: 'Knowledge Seeker',
-        description: 'Completed your first 5 structured reading lessons.',
-        iconUrl: '/images/badges/knowledge-seeker.svg',
-        rarity: 'common' as const,
-        category: 'skills' as const,
-        criteria: { type: 'lesson_completed', count: 5 },
-      },
-      {
-        code: 'AI_PIONEER',
-        name: 'AI Pioneer',
-        description: 'Mastered Large Language Models, prompt tuning, and generative AI foundations.',
-        iconUrl: '/images/badges/ai-pioneer.svg',
-        rarity: 'rare' as const,
-        category: 'skills' as const,
-        criteria: { type: 'course_completed', slug: 'ai-foundations-llm' },
-      },
-      {
-        code: 'PROMPT_WIZARD',
-        name: 'Prompt Wizard',
-        description: 'Mastered Few-Shot, Chain-of-Thought, ReAct cognitive patterns and guardrails.',
-        iconUrl: '/images/badges/prompt-wizard.svg',
-        rarity: 'epic' as const,
-        category: 'mastery' as const,
-        criteria: { type: 'course_completed', slug: 'advanced-prompt-engineering' },
-      },
-      {
-        code: 'DBMS_ARCHITECT',
-        name: 'DBMS Architect',
-        description: 'Mastered Relational Algebra, SQL, Normalization, ACID transactions, and B-Tree indexing.',
-        iconUrl: '/images/badges/dbms-architect.svg',
-        rarity: 'epic' as const,
-        category: 'skills' as const,
-        criteria: { type: 'course_completed', slug: 'dbms-core-engineering' },
-      },
-      {
-        code: 'JAVA_CHAMPION',
-        name: 'Java Champion',
-        description: 'Mastered JVM internals, OOP principles, Collections Framework, and Java Streams concurrency.',
-        iconUrl: '/images/badges/java-champion.svg',
-        rarity: 'epic' as const,
-        category: 'skills' as const,
-        criteria: { type: 'course_completed', slug: 'java-programming-mastery' },
-      },
-      {
-        code: 'COMPUTER_ARCHITECT',
-        name: 'Computer Architect',
-        description: 'Mastered Digital Logic, CPU Architecture, Memory Hierarchy, and Computer Networking.',
-        iconUrl: '/images/badges/computer-architect.svg',
-        rarity: 'rare' as const,
-        category: 'skills' as const,
-        criteria: { type: 'course_completed', slug: 'computer-fundamentals-architecture' },
-      },
-      {
-        code: 'OS_KERNEL_MASTER',
-        name: 'OS Kernel Master',
-        description: 'Mastered Process Management, CPU Scheduling, Synchronization, Deadlocks, and Paging.',
-        iconUrl: '/images/badges/os-master.svg',
-        rarity: 'legendary' as const,
-        category: 'mastery' as const,
-        criteria: { type: 'course_completed', slug: 'operating-systems-engineering' },
-      },
-      {
-        code: 'CS_CORE_DISTINCTION',
-        name: 'CS Core Engineering Distinction',
-        description: 'Completed the full Computer Science Core Curriculum across all 4 foundational pillars.',
-        iconUrl: '/images/badges/cs-core.svg',
-        rarity: 'legendary' as const,
-        category: 'mastery' as const,
-        criteria: { type: 'path_completed', slug: 'cs-core-engineering' },
-      },
-    ];
+    try {
+      this.logger.log('🔍 Checking curriculum seeds (idempotent if-not-exists)...');
+      await this.adminService.runMigrationColumnsIfNotExist();
+
+      // ==========================================
+      // 1. BADGES (Gamification Rewards)
+      // ==========================================
+      const badges = [
+        {
+          code: 'FIRST_SOLUTION',
+          name: 'First Solution',
+          description: 'Passed your first coding or quiz exercise in a learning course.',
+          iconUrl: '/images/badges/first-solution.svg',
+          rarity: 'common' as const,
+          category: 'milestone' as const,
+          criteria: { type: 'problem_solved', count: 1 },
+        },
+        {
+          code: 'KNOWLEDGE_SEEKER',
+          name: 'Knowledge Seeker',
+          description: 'Completed your first 5 structured reading lessons.',
+          iconUrl: '/images/badges/knowledge-seeker.svg',
+          rarity: 'common' as const,
+          category: 'skills' as const,
+          criteria: { type: 'lesson_completed', count: 5 },
+        },
+        {
+          code: 'AI_PIONEER',
+          name: 'AI Pioneer',
+          description: 'Mastered Large Language Models, prompt tuning, and generative AI foundations.',
+          iconUrl: '/images/badges/ai-pioneer.svg',
+          rarity: 'rare' as const,
+          category: 'skills' as const,
+          criteria: { type: 'course_completed', slug: 'ai-foundations-llm' },
+        },
+        {
+          code: 'PROMPT_WIZARD',
+          name: 'Prompt Wizard',
+          description: 'Mastered Few-Shot, Chain-of-Thought, ReAct cognitive patterns and guardrails.',
+          iconUrl: '/images/badges/prompt-wizard.svg',
+          rarity: 'epic' as const,
+          category: 'mastery' as const,
+          criteria: { type: 'course_completed', slug: 'advanced-prompt-engineering' },
+        },
+        {
+          code: 'GENAI_ARCHITECT',
+          name: 'GenAI Architect',
+          description: 'Mastered Transformer mechanics, RoPE embeddings, KV-cache, and test-time reasoning models.',
+          iconUrl: '/images/badges/genai-architect.svg',
+          rarity: 'epic' as const,
+          category: 'skills' as const,
+          criteria: { type: 'course_completed', slug: 'genai-transformers-reasoning-models' },
+        },
+        {
+          code: 'RAG_SPECIALIST',
+          name: 'RAG Specialist',
+          description: 'Engineered production RAG pipelines with Hybrid Search (BM25 + Dense) and Ragas evaluation.',
+          iconUrl: '/images/badges/rag-specialist.svg',
+          rarity: 'epic' as const,
+          category: 'skills' as const,
+          criteria: { type: 'course_completed', slug: 'enterprise-rag-vector-databases' },
+        },
+        {
+          code: 'AGENTIC_ENGINEER',
+          name: 'Agentic Systems Engineer',
+          description: 'Mastered autonomous multi-agent orchestration, tool calling, and state graphs with LangGraph.',
+          iconUrl: '/images/badges/agentic-engineer.svg',
+          rarity: 'legendary' as const,
+          category: 'mastery' as const,
+          criteria: { type: 'course_completed', slug: 'agentic-ai-langchain-langgraph' },
+        },
+        {
+          code: 'PYTHON_MASTER',
+          name: 'Python Master',
+          description: 'Mastered Python from fundamentals through OOP, decorators, and memory-efficient generators.',
+          iconUrl: '/images/badges/python-master.svg',
+          rarity: 'epic' as const,
+          category: 'skills' as const,
+          criteria: { type: 'path_completed', slug: 'python-complete-mastery' },
+        },
+        {
+          code: 'JS_NINJA',
+          name: 'JavaScript Ninja',
+          description: 'Conquered JavaScript closures, the V8 event loop, and asynchronous concurrency.',
+          iconUrl: '/images/badges/js-ninja.svg',
+          rarity: 'epic' as const,
+          category: 'skills' as const,
+          criteria: { type: 'path_completed', slug: 'javascript-mastery' },
+        },
+        {
+          code: 'PATH_CHAMPION',
+          name: 'Path Champion',
+          description: 'Completed an entire learning path curriculum and received a verified credential.',
+          iconUrl: '/images/badges/path-champion.svg',
+          rarity: 'epic' as const,
+          category: 'mastery' as const,
+          criteria: { type: 'path_completed' },
+        },
+        {
+          code: 'ALGORITHM_MASTER',
+          name: 'Algorithm Master',
+          description: 'Mastered algorithmic foundations across searching, sorting, and dynamic programming.',
+          iconUrl: '/images/badges/algo-master.svg',
+          rarity: 'legendary' as const,
+          category: 'skills' as const,
+          criteria: { type: 'path_completed', slug: 'dsa-mastery' },
+        },
+        {
+          code: 'DBMS_ARCHITECT',
+          name: 'DBMS Architect',
+          description: 'Mastered Relational Algebra, SQL, Normalization, ACID transactions, and B-Tree indexing.',
+          iconUrl: '/images/badges/dbms-architect.svg',
+          rarity: 'epic' as const,
+          category: 'skills' as const,
+          criteria: { type: 'course_completed', slug: 'dbms-core-engineering' },
+        },
+        {
+          code: 'JAVA_CHAMPION',
+          name: 'Java Champion',
+          description: 'Mastered JVM internals, OOP principles, Collections Framework, and Java Streams concurrency.',
+          iconUrl: '/images/badges/java-champion.svg',
+          rarity: 'epic' as const,
+          category: 'skills' as const,
+          criteria: { type: 'course_completed', slug: 'java-programming-mastery' },
+        },
+        {
+          code: 'COMPUTER_ARCHITECT',
+          name: 'Computer Architect',
+          description: 'Mastered Digital Logic, CPU Architecture, Memory Hierarchy, and Computer Networking.',
+          iconUrl: '/images/badges/computer-architect.svg',
+          rarity: 'rare' as const,
+          category: 'skills' as const,
+          criteria: { type: 'course_completed', slug: 'computer-fundamentals-architecture' },
+        },
+        {
+          code: 'OS_KERNEL_MASTER',
+          name: 'OS Kernel Master',
+          description: 'Mastered Process Management, CPU Scheduling, Synchronization, Deadlocks, and Paging.',
+          iconUrl: '/images/badges/os-master.svg',
+          rarity: 'legendary' as const,
+          category: 'mastery' as const,
+          criteria: { type: 'course_completed', slug: 'operating-systems-engineering' },
+        },
+        {
+          code: 'CS_CORE_DISTINCTION',
+          name: 'CS Core Engineering Distinction',
+          description: 'Completed the full Computer Science Core Curriculum across all 4 foundational pillars.',
+          iconUrl: '/images/badges/cs-core.svg',
+          rarity: 'legendary' as const,
+          category: 'mastery' as const,
+          criteria: { type: 'path_completed', slug: 'cs-core-engineering' },
+        },
+      ];
 
     for (const b of badges) {
       try {
@@ -2512,6 +2583,17 @@ print("Total Page Faults (capacity=3):", count_page_faults_lru(refs, 3))
       this.logger.debug(`computer-fundamentals-mastery path setup: ${err?.message}`);
     }
 
-    this.logger.log('🎉 All 5 Core Courses and Paths auto-seeded and published successfully!');
+      this.logger.log('🎉 All 5 CS Core Courses and Paths auto-seeded and published successfully!');
+
+      // ==========================================
+      // 8. ENTERPRISE AI, PYTHON, JAVASCRIPT & DSA CURRICULUM
+      // ==========================================
+      this.logger.log('🚀 Auto-seeding Enterprise AI, Python, JavaScript & DSA Curriculum...');
+      await seedEnterpriseCurriculum(this.adminService, this.logger);
+
+      this.logger.log('✨ All CodeSkill curriculum paths and courses are fully up-to-date.');
+    } finally {
+      await this.adminService.releaseAdvisoryLock(1902230165);
+    }
   }
 }
