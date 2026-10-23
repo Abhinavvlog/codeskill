@@ -7,6 +7,8 @@ import { Assessment } from '../database/entities/assessment.entity';
 import { Question } from '../database/entities/question.entity';
 import { ExamSecurityEvent } from '../database/entities/exam-security-event.entity';
 import { AuditLog } from '../database/entities/audit-log.entity';
+import { User } from '../database/entities/user.entity';
+import { Submission } from '../database/entities/submission.entity';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { AuditLog } from '../database/entities/audit-log.entity';
       Question,
       ExamSecurityEvent,
       AuditLog,
+      User,
+      Submission,
     ]),
   ],
   providers: [AnalyticsService],

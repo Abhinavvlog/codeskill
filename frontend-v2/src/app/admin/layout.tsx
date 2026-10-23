@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { authAPI } from "@/config/api";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Spinner } from "@/components/ui/spinner";
-import { ChevronDown, UserCog, SlidersHorizontal, LogOut } from "lucide-react";
+import { ChevronDown, UserCog, SlidersHorizontal, LogOut, Menu } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -23,6 +23,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const { user, loading, updateUserLocal, logout } = useAuth();
   const [isVerifying, setIsVerifying] = useState(true);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const isLoginPage = pathname === "/admin/login";
 
@@ -118,10 +119,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="admin-shell flex h-screen bg-background overflow-hidden font-sans">
-      <AdminSidebar />
+      <AdminSidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Standardized Admin Header with CodeSkill Branding & Theme Toggle */}
-        <header className="bg-card/90 backdrop-blur-md border-b border-border h-[72px] flex items-center justify-between gap-3 px-2 sm:px-6 sticky top-0 z-10 shrink-0 shadow-xs">
+        <header className="bg-card/90 backdrop-blur-md border-b border-border h-[72px] flex items-center justify-between gap-3 px-3 sm:px-6 sticky top-0 z-10 shrink-0 shadow-xs">
+          {/* Mobile hamburger menu & CodeSkill branding */}
+          <div className="flex items-center gap-2.5 md:hidden min-w-0">
+            <button
+              type="button"
+              onClick={() => setMobileOpen(true)}
+              className="p-2 -ml-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer shrink-0"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-7 h-7 rounded-lg bg-slate-950 border border-border/80 flex items-center justify-center p-0.5 shrink-0 shadow-xs">
+                <img src="/icon.svg" alt="CodeSkill" className="w-full h-full object-contain" />
+              </div>
+              <span className="text-sm font-bold text-foreground truncate">
+                Code<span className="text-emerald-700 dark:text-emerald-400">Skill</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Desktop CU Branding & Department of Skill Development */}
           <div className="hidden md:flex items-center gap-3 min-w-0">
             <div
               className="flex items-center h-[38px] px-2.5 py-1 rounded-xl bg-white border border-border shadow-xs shrink-0"
