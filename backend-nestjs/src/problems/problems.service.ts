@@ -119,14 +119,20 @@ const bankPublicSql = `lower(q."questionType") IN ('dsa', 'coding', 'algorithmic
   AND lower(q.status) IN ('approved', 'active', 'published')
   AND lower(btrim(q.metadata->>'visibility')) IN ('published', 'public')
   AND coalesce(q.metadata->>'contestOnly', 'false') <> 'true'`;
-function bankPublished(question: Question) {
+function bankExecutionEligible(question: Question) {
   const metadata = object(question.metadata);
   return (
     codingTypes.includes(text(question.questionType).toLowerCase()) &&
     ['approved', 'active', 'published'].includes(
       text(question.status).toLowerCase(),
     ) &&
-    published(metadata.visibility) &&
+    published(metadata.visibility)
+  );
+}
+function bankPublished(question: Question) {
+  const metadata = object(question.metadata);
+  return (
+    bankExecutionEligible(question) &&
     metadata.contestOnly !== true
   );
 }
@@ -523,7 +529,7 @@ export class ProblemsService {
       const question = await this.questionRepository.findOne({ where: { id } });
       if (question) {
         if (
-          !bankPublished(question) ||
+          !bankExecutionEligible(question) ||
           (await this.hasMetadataCounterpart(question))
         )
           throw new NotFoundException('Problem not found');
