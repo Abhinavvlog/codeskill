@@ -4,6 +4,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Prevent horizontal overflow on mobile viewports */
+html,
+body {
+  overflow-x: clip;
+  max-width: 100%;
+}
+
 /* Visible, contained scrolling for long questions in the fullscreen exam. */
 .assessment-scroll {
   scrollbar-width: auto;

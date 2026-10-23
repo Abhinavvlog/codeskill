@@ -87,7 +87,7 @@ export default function RootLayout({
         <Providers>
           <Background />
           <Navbar />
-          <main className="flex-1 flex flex-col">
+          <main className="flex-1 flex flex-col w-full max-w-full overflow-x-clip">
             <TelemetryBoundary>
               {children}
             </TelemetryBoundary>

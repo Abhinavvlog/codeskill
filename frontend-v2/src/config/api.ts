@@ -16,6 +16,7 @@ const getDynamicBaseURL = (): string => {
 
 const api = axios.create({
   baseURL: getDynamicBaseURL(),
+  timeout: 15000,
 });
 
 // Attach JWT token to every request and ensure correct baseURL/URL formatting
@@ -101,7 +102,7 @@ api.interceptors.response.use(
     notifyMutationFailure(reqUrl, error.config?.method || "", error);
 
     if (status && status >= 500) {
-      logger.error("API service error", {
+      logger.warn("API service error", {
         requestId,
         status,
         url: reqUrl,
@@ -668,8 +669,20 @@ export const studentAssessmentsAPI = {
 
 
 export const analyticsAPI = {
+  // Platform-wide analytics endpoints connected to backend & PostgreSQL
+  getPlatformOverview: () => api.get("/admin/analytics/overview"),
+  getActivity: (params?: { period?: string; startDate?: string; endDate?: string }) =>
+    api.get("/admin/analytics/activity", { params }),
+  getLanguages: () => api.get("/admin/analytics/languages"),
+  getLeaderboard: (params?: { page?: number; limit?: number; type?: string }) =>
+    api.get("/admin/analytics/leaderboard", { params }),
+  getAssessments: () => api.get("/admin/analytics/assessments"),
+  getRetention: () => api.get("/admin/analytics/retention"),
+
+  // Assessment-specific analytics endpoints
   getOverview: (assessmentId: string) => api.get(`/admin/analytics/assessment/${assessmentId}/overview`),
-  getLeaderboard: (assessmentId: string, params?: { page?: number; limit?: number }) => api.get(`/admin/analytics/assessment/${assessmentId}/leaderboard`, { params }),
+  getAssessmentLeaderboard: (assessmentId: string, params?: { page?: number; limit?: number }) =>
+    api.get(`/admin/analytics/assessment/${assessmentId}/leaderboard`, { params }),
   getQuestionAnalytics: (assessmentId: string) => api.get(`/admin/analytics/assessment/${assessmentId}/questions`),
 };
 
