@@ -161,14 +161,18 @@ export class CertificationService {
       estimatedHours: cert.metadata?.totalHours || 10,
       signatories: [
         {
-          name: 'Prof. (Dr.) Manpreet Singh',
-          role: 'Dean, Academic Affairs & Engineering',
+          name: 'Prof. (Dr.) Satbir Singh Sehgal',
+          role: 'Vice-Chancellor',
           organization: 'Chandigarh University',
+          employeeId: 'E18146',
+          email: 'vc@cumail.in',
         },
         {
-          name: 'Dr. Gurpreet Singh',
-          role: 'Director, Technical Training & Research',
-          organization: 'CodeSkill Centre of Excellence',
+          name: 'Ishdeep Singla',
+          role: 'Head - Technical Training (CSE)',
+          organization: 'Chandigarh University',
+          employeeId: 'E16430',
+          email: 'ad.skill@cumail.in',
         },
       ],
     };

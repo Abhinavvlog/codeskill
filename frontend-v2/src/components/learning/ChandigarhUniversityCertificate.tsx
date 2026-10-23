@@ -240,36 +240,52 @@ export function ChandigarhUniversityCertificate({
               </div>
             </div>
 
-            {/* Right: Academic Signatures */}
+            {/* Right: Academic Signatures with Official University Heads */}
             <div className="flex flex-col items-end text-right space-y-2">
-              <div className="w-32 sm:w-44 text-center">
-                <div className="h-6 flex items-end justify-center mb-0.5">
-                  <svg viewBox="0 0 160 30" className="w-24 sm:w-28 h-5 text-slate-800 fill-none stroke-current stroke-[1.8]">
-                    <path d="M10 22 Q 30 5, 50 20 T 90 15 T 120 12 T 150 20 M 35 12 L 75 10" />
-                  </svg>
+              {/* Head 1: Vice-Chancellor */}
+              <div className="w-36 sm:w-48 text-right">
+                <div className="flex items-center justify-end gap-1.5 mb-0.5">
+                  <div className="h-5 flex items-end justify-center">
+                    <svg viewBox="0 0 160 30" className="w-20 sm:w-24 h-4.5 text-slate-800 fill-none stroke-current stroke-[1.8]">
+                      <path d="M10 22 Q 30 5, 50 20 T 90 15 T 120 12 T 150 20 M 35 12 L 75 10" />
+                    </svg>
+                  </div>
+                  <img
+                    src="/satbir-singh-sehgal.png"
+                    alt="Prof. (Dr.) Satbir Singh Sehgal"
+                    className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border border-amber-600/70 shadow-2xs object-cover shrink-0"
+                  />
                 </div>
                 <div className="border-t border-slate-700/80 pt-0.5">
                   <div className="text-[9.5px] sm:text-[10.5px] font-bold text-slate-900 leading-tight">
-                    Prof. (Dr.) Manpreet Singh
+                    Prof. (Dr.) Satbir Singh Sehgal
                   </div>
                   <div className="text-[8px] sm:text-[8.5px] text-slate-600 leading-tight">
-                    Dean, Academic Affairs · CU
+                    Vice-Chancellor · Chandigarh University
                   </div>
                 </div>
               </div>
 
-              <div className="w-32 sm:w-44 text-center">
-                <div className="h-6 flex items-end justify-center mb-0.5">
-                  <svg viewBox="0 0 160 30" className="w-24 sm:w-28 h-5 text-slate-800 fill-none stroke-current stroke-[1.8]">
-                    <path d="M15 20 Q 40 8, 65 18 T 105 14 T 135 20 M 50 14 Q 80 5, 110 18" />
-                  </svg>
+              {/* Head 2: Head - Technical Training */}
+              <div className="w-36 sm:w-48 text-right">
+                <div className="flex items-center justify-end gap-1.5 mb-0.5">
+                  <div className="h-5 flex items-end justify-center">
+                    <svg viewBox="0 0 160 30" className="w-20 sm:w-24 h-4.5 text-slate-800 fill-none stroke-current stroke-[1.8]">
+                      <path d="M15 20 Q 40 8, 65 18 T 105 14 T 135 20 M 50 14 Q 80 5, 110 18" />
+                    </svg>
+                  </div>
+                  <img
+                    src="/ishdeep-singla.png"
+                    alt="Ishdeep Singla"
+                    className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border border-amber-600/70 shadow-2xs object-cover shrink-0"
+                  />
                 </div>
                 <div className="border-t border-slate-700/80 pt-0.5">
                   <div className="text-[9.5px] sm:text-[10.5px] font-bold text-slate-900 leading-tight">
-                    Dr. Gurpreet Singh
+                    Ishdeep Singla
                   </div>
                   <div className="text-[8px] sm:text-[8.5px] text-slate-600 leading-tight">
-                    Director, Computer Science · CodeSkill
+                    Head - Technical Training (CSE) · CU
                   </div>
                 </div>
               </div>

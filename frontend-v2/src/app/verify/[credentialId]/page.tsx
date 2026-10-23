@@ -297,6 +297,41 @@ export default function PublicCertificateVerificationPage({
                 </span>
               </div>
             </div>
+
+            {/* Official University Institutional Authorities */}
+            <div className="pt-3 border-t border-border flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5">
+                <img
+                  src="/satbir-singh-sehgal.png"
+                  alt="Prof. (Dr.) Satbir Singh Sehgal"
+                  className="w-8 h-8 rounded-full border border-amber-500/60 object-cover shadow-2xs"
+                />
+                <div>
+                  <div className="font-bold text-foreground text-[11px] leading-tight">
+                    Prof. (Dr.) Satbir Singh Sehgal
+                  </div>
+                  <div className="text-[10px] text-muted-foreground leading-tight">
+                    Vice-Chancellor · E18146 · vc@cumail.in
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <img
+                  src="/ishdeep-singla.png"
+                  alt="Ishdeep Singla"
+                  className="w-8 h-8 rounded-full border border-amber-500/60 object-cover shadow-2xs"
+                />
+                <div>
+                  <div className="font-bold text-foreground text-[11px] leading-tight">
+                    Ishdeep Singla
+                  </div>
+                  <div className="text-[10px] text-muted-foreground leading-tight">
+                    Head - Technical Training (CSE) · E16430 · ad.skill@cumail.in
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </main>
