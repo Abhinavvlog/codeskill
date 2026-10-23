@@ -300,6 +300,7 @@ export default function TakeAssessmentPage({
         ? await studentAssessmentsAPI.retakeAttempt(id)
         : await studentAssessmentsAPI.startAttempt(id);
       const data = res.data;
+      setQuestions(data.questions || []);
       const resolvedDurationMinutes = data.durationMinutes !== undefined && data.durationMinutes > 0
         ? data.durationMinutes
         : 0.5; // 30-second standardized default when duration is missing
