@@ -138,18 +138,13 @@ export default function PublicCertificateVerificationPage({
       ? "CU-CS-2026-X89K2A"
       : credentialId;
 
-  const currentUrl =
-    typeof window !== "undefined"
-      ? window.location.href
-          .replace(/https?:\/\/localhost(:\d+)?/gi, officialOrigin)
-          .replace(/\/verify\/demo\b/gi, `/verify/${displayId}`)
-      : `${officialOrigin}/verify/${displayId}`;
+  const currentUrl = `${officialOrigin}/verify/${displayId}`;
 
   const certName = result?.learningPath || "Data Structures & Algorithms in Practice";
   const orgName = "Chandigarh University";
-  const issueDate = result?.issuedAt ? new Date(result.issuedAt) : new Date();
-  const issueYear = issueDate.getFullYear();
-  const issueMonth = issueDate.getMonth() + 1;
+  const issueDate = result?.issuedAt ? new Date(result.issuedAt) : null;
+  const issueYear = issueDate ? issueDate.getFullYear() : 2026;
+  const issueMonth = issueDate ? issueDate.getMonth() + 1 : 10;
 
   const linkedInAddUrl = `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(
     certName
