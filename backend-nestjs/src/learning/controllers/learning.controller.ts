@@ -99,6 +99,16 @@ export class LearningController {
     return this.practiceService.trackTimeSpent(lessonId, studentId, dto.seconds);
   }
 
+  @Get('lessons/:id/completion-status')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Check detailed requirements and reasons for module completion' })
+  async getLessonCompletionStatus(
+    @Param('id') lessonId: string,
+    @CurrentUser('id') studentId: string,
+  ) {
+    return this.practiceService.checkLessonCompletion(lessonId, studentId);
+  }
+
   @Post('lessons/:id/complete')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Mark verified lesson complete' })

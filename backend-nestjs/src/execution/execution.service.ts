@@ -479,6 +479,9 @@ export class ExecutionService {
           );
         }
       } catch (err: any) {
+        if (!config?.allowLocalFallback) {
+          throw err;
+        }
         this.logger.warn(
           `Remote execution provider (${this.provider}) unavailable (${err?.message}). Falling back to local execution.`,
         );

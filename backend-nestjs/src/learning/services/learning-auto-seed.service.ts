@@ -519,8 +519,8 @@ The common attributes must form a superkey in at least one of the decomposed tab
       title: 'Module 3: Transactions, ACID & Concurrency Control',
       description: 'ACID properties, Serializability, Two-Phase Locking (2PL), and Deadlock resolution.',
       order: 3,
-      requiredTimeMinutes: 2,
-      requiredTimeSeconds: 120,
+      requiredTimeMinutes: 1,
+      requiredTimeSeconds: 30,
     });
 
     const dbmsL4 = await this.adminService.createLesson(dbmsMod3.id, {

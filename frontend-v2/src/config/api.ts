@@ -380,7 +380,7 @@ export interface ComplexityAnalysis {
 
 export const runAPI = {
   runtimes: () => api.get<Array<{ language: string; version?: string; enabled: boolean }>>("/execution/runtimes"),
-  run: (data: { code: string; language: string; testCases: any[]; config?: any }) =>
+  run: (data: { code: string; language: string; testCases: any[]; config?: any; executionId?: string }) =>
     api.post("/execution/run", data, { timeout: 60000 }),
   getJob: (jobId: string) => api.get(`/execution/jobs/${jobId}`, { timeout: 60000 }),
   analyzeComplexity: (data: { code: string; language: string }) =>
@@ -680,6 +680,20 @@ export const learningAPI = {
   enroll: (pathId: string) => api.post(`/learning/paths/${pathId}/enroll`),
   getCourse: (courseId: string) => api.get(`/learning/courses/${courseId}`),
   getLesson: (lessonId: string) => api.get(`/learning/lessons/${lessonId}`),
+  getLessonCompletionStatus: (lessonId: string) =>
+    api.get<{
+      lessonId: string;
+      canComplete: boolean;
+      reasons: string[];
+      criteria: {
+        timeSpent: number;
+        requiredTime: number;
+        timeRemaining: number;
+        timeMet: boolean;
+        quizMet: boolean;
+        codingMet: boolean;
+      };
+    }>(`/learning/lessons/${lessonId}/completion-status`),
   trackTimeSpent: (lessonId: string, seconds: number) =>
     api.post(`/learning/lessons/${lessonId}/time-spent`, { seconds }),
   completeLesson: (lessonId: string, timeSpentSeconds?: number) =>

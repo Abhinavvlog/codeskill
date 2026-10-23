@@ -135,6 +135,11 @@ export default function PublicCertificateVerificationPage({
           </Link>
 
           <div className="flex items-center gap-2">
+            <img
+              src="/cu-logo.png"
+              alt="Chandigarh University"
+              className="w-7 h-7 object-contain"
+            />
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>Official University Ledger</span>

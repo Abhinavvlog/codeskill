@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect, use, useMemo } from "react";
+import { useState, useEffect, use, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useActivityTimer } from "@/hooks/useActivityTimer";
+import { ModuleCompletionModal, CompletionCriteria } from "@/components/learning/ModuleCompletionModal";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -622,7 +624,7 @@ export default function CourseWorkspacePage({
   const [terminalTab, setTerminalTab] = useState<"output" | "tests">("output");
   const [isExecutingRealtime, setIsExecutingRealtime] = useState(false);
 
-  // W3Schools Fill in the Blank state
+  // Chandigarh University Practice Exercises state
   const [w3Index, setW3Index] = useState<number>(0);
   const [w3BlankValues, setW3BlankValues] = useState<Record<string, Record<string, string>>>({});
   const [w3Feedback, setW3Feedback] = useState<
@@ -631,35 +633,47 @@ export default function CourseWorkspacePage({
   const [w3ShowAnswer, setW3ShowAnswer] = useState<Record<string, boolean>>({});
   const [activeTabMode, setActiveTabMode] = useState<"content" | "coding" | "w3" | "quiz">("coding");
 
+  // Completion Reason Modal State
+  const [completionModal, setCompletionModal] = useState<{
+    isOpen: boolean;
+    title?: string;
+    reasons: string[];
+    criteria?: CompletionCriteria;
+  }>({
+    isOpen: false,
+    reasons: [],
+  });
+
   // Stopwatch & Minimum Time Spent Tracker
-  const [timeSpent, setTimeSpent] = useState<number>(0);
-  const [requiredTime, setRequiredTime] = useState<number>(120);
-  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(true);
+  const [requiredTime, setRequiredTime] = useState<number>(30); // 30s standardized default
+  const [initialSpent, setInitialSpent] = useState<number>(0);
   const [celebrationGlow, setCelebrationGlow] = useState<boolean>(false);
+  const activeExecutionIdRef = useRef<string | null>(null);
 
-  // Active stopwatch counting
-  useEffect(() => {
-    if (!isTimerRunning) return;
-    const interval = setInterval(() => {
-      setTimeSpent((prev) => {
-        const next = prev + 1;
-        if (next === requiredTime && requiredTime > 0) {
-          setCelebrationGlow(true);
-          setTimeout(() => setCelebrationGlow(false), 4000);
-        }
-        return next;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isTimerRunning, requiredTime]);
+  // High-precision, drift-free timer
+  const activityTimer = useActivityTimer({
+    id: activeLessonId || undefined,
+    durationSeconds: requiredTime,
+    initialTimeSpent: initialSpent,
+    mode: "stopwatch",
+    checkpointIntervalSeconds: 15,
+    onCheckpoint: async (spent) => {
+      if (activeLessonId) {
+        await learningAPI.trackTimeSpent(activeLessonId, spent).catch(() => {});
+      }
+    },
+  });
 
-  // Periodic persistence of time spent (every 15 seconds)
+  const timeSpent = activityTimer.timeSpentSeconds;
+
+  // Trigger celebration glow when requirement is reached
   useEffect(() => {
-    if (!activeLessonId || timeSpent <= 0) return;
-    if (timeSpent % 15 === 0) {
-      learningAPI.trackTimeSpent(activeLessonId, timeSpent).catch(() => {});
+    if (activityTimer.hasMetRequirement && requiredTime > 0) {
+      setCelebrationGlow(true);
+      const timer = setTimeout(() => setCelebrationGlow(false), 4000);
+      return () => clearTimeout(timer);
     }
-  }, [timeSpent, activeLessonId]);
+  }, [activityTimer.hasMetRequirement, requiredTime]);
 
   useEffect(() => {
     loadCourse();
@@ -714,10 +728,10 @@ export default function CourseWorkspacePage({
       const targetTime =
         lessonData?.module?.requiredTimeSeconds ||
         lessonData?.requiredTimeSeconds ||
-        120;
-      setTimeSpent(initialTime);
+        30;
+      setInitialSpent(initialTime);
       setRequiredTime(targetTime);
-      setIsTimerRunning(true);
+      activityTimer.reset(targetTime, initialTime);
 
       const codingEx = lessonData?.exercises?.find(
         (e: any) => e.type === "coding" || e.type === "debugging",
@@ -814,6 +828,8 @@ export default function CourseWorkspacePage({
 
   // Run Code in Real-Time (instant sandbox execution with output terminal)
   const handleRunCodeRealtime = async () => {
+    const executionId = crypto.randomUUID();
+    activeExecutionIdRef.current = executionId;
     setIsExecutingRealtime(true);
     setTerminalTab("output");
     const startTime = performance.now();
@@ -825,10 +841,11 @@ export default function CourseWorkspacePage({
     }> = [
       {
         type: "system",
-        text: `> Compiling & Executing ${language.toUpperCase()} in live sandbox...`,
+        text: `> [Run ID: ${executionId.slice(0, 8)}] Compiling & Executing ${language.toUpperCase()} in live sandbox...`,
         time: timestamp,
       },
     ];
+    setTerminalLogs(newLogs);
 
     if (language === "javascript") {
       try {
@@ -867,6 +884,8 @@ export default function CourseWorkspacePage({
         const returned = executor(sandboxConsole);
         const elapsed = Math.round(performance.now() - startTime);
 
+        if (activeExecutionIdRef.current !== executionId) return;
+
         if (capturedLogs.length > 0) {
           capturedLogs.forEach((msg) => {
             newLogs.push({ type: "stdout", text: msg, time: new Date().toLocaleTimeString() });
@@ -896,6 +915,7 @@ export default function CourseWorkspacePage({
         });
         setTerminalLogs(newLogs);
       } catch (err: any) {
+        if (activeExecutionIdRef.current !== executionId) return;
         const elapsed = Math.round(performance.now() - startTime);
         newLogs.push({
           type: "stderr",
@@ -909,12 +929,15 @@ export default function CourseWorkspacePage({
         });
         setTerminalLogs(newLogs);
       } finally {
-        setIsExecutingRealtime(false);
+        if (activeExecutionIdRef.current === executionId) {
+          setIsExecutingRealtime(false);
+        }
       }
     } else {
       // Server-side real-time execution runner for Python/Java/C++
       try {
         const res = await learningAPI.runPlayground({ code, language });
+        if (activeExecutionIdRef.current !== executionId) return;
         const resultData = (res.data as any)?.data || res.data;
         const elapsed = resultData?.durationMs ?? Math.round(performance.now() - startTime);
 
@@ -957,6 +980,7 @@ export default function CourseWorkspacePage({
         });
         setTerminalLogs(newLogs);
       } catch (err: any) {
+        if (activeExecutionIdRef.current !== executionId) return;
         const elapsed = Math.round(performance.now() - startTime);
         newLogs.push({
           type: "stderr",
@@ -972,12 +996,14 @@ export default function CourseWorkspacePage({
         });
         setTerminalLogs(newLogs);
       } finally {
-        setIsExecutingRealtime(false);
+        if (activeExecutionIdRef.current === executionId) {
+          setIsExecutingRealtime(false);
+        }
       }
     }
   };
 
-  // W3Schools Fill in the Blank answer evaluation
+  // Chandigarh University Fill in the Blank answer evaluation
   const handleCheckW3Blank = (exercise: W3ExerciseItem) => {
     const userAnswers = w3BlankValues[exercise.id] || {};
     let allCorrect = true;
@@ -1069,19 +1095,22 @@ export default function CourseWorkspacePage({
 
   const handleCompleteAndNext = async () => {
     if (!lesson) return;
-    if (!hasMetTimeRequirement && requiredTime > 0) {
-      setPopupModal({
-        isOpen: true,
-        title: "Module Study Time Requirement",
-        message: `Admin has set a required minimum study time of ${Math.ceil(
-          requiredTime / 60
-        )} minute(s) on this module to ensure you master the concepts before progressing. You have ${remainingSeconds} second(s) remaining.`,
-        type: "warning",
-      });
-      return;
-    }
     try {
       setCompleting(true);
+
+      // 1. Verify lesson completion requirements from authoritative status endpoint
+      const statusRes = await learningAPI.getLessonCompletionStatus(lesson.id).catch(() => null);
+      if (statusRes?.data && !statusRes.data.canComplete) {
+        setCompletionModal({
+          isOpen: true,
+          title: "Module Incomplete",
+          reasons: statusRes.data.reasons || [],
+          criteria: statusRes.data.criteria,
+        });
+        return;
+      }
+
+      // 2. Submit completion
       await learningAPI.completeLesson(lesson.id, timeSpent);
       if (course) {
         setCourse({
@@ -1103,15 +1132,16 @@ export default function CourseWorkspacePage({
         router.push(`/learning/${pathSlug}`);
       }
     } catch (err: any) {
-      // Instead of jarring browser alert(), open a polished modal dialog window!
-      const errorMsg =
-        err.response?.data?.message ||
-        "Please complete and pass all required practice exercises in this lesson before proceeding.";
-      setPopupModal({
+      const errorData = err.response?.data;
+      const reasons = errorData?.reasons || [
+        errorData?.message ||
+        "Please complete and pass all required practice exercises in this lesson before proceeding.",
+      ];
+      setCompletionModal({
         isOpen: true,
-        title: "Practice Exercise Required",
-        message: errorMsg,
-        type: "warning",
+        title: "Module Incomplete",
+        reasons: Array.isArray(reasons) ? reasons : [String(reasons)],
+        criteria: errorData?.criteria,
       });
     } finally {
       setCompleting(false);
@@ -1180,7 +1210,7 @@ export default function CourseWorkspacePage({
               }`}
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>W3Schools Fill in Blanks</span>
+              <span>Chandigarh University Practice</span>
               <span className="px-1.5 py-0.2 rounded text-[10px] bg-primary/10 text-primary font-bold">
                 {w3List.length}
               </span>
@@ -1421,14 +1451,14 @@ export default function CourseWorkspacePage({
           </div>
         )}
 
-        {/* MODE B: W3Schools Fill in the Blanks / Complete the Code */}
+        {/* MODE B: Chandigarh University Lab Fill in the Blanks / Complete the Code */}
         {activeTabMode === "w3" && currentEx && (
           <div className="p-5 rounded-2xl bg-card border-2 border-border shadow-xs space-y-5">
             {/* W3 Header & Stepper Navigation */}
             <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border">
               <div className="flex items-center gap-2">
                 <span className="px-2.5 py-1 rounded-md text-[11px] font-extrabold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  W3Schools Exercise
+                  Chandigarh University Lab
                 </span>
                 <h4 className="text-sm font-bold text-foreground">
                   {currentEx.title}
@@ -1826,7 +1856,7 @@ export default function CourseWorkspacePage({
                       >
                         <Timer
                           className={`w-5 h-5 ${
-                            isTimerRunning && !hasMetTimeRequirement ? "animate-pulse" : ""
+                            activityTimer.isRunning && !hasMetTimeRequirement ? "animate-pulse" : ""
                           }`}
                         />
                       </div>
@@ -2148,7 +2178,7 @@ export default function CourseWorkspacePage({
                           </div>
                         )}
 
-                        {/* Coding & W3Schools Practice Suite */}
+                        {/* Coding & Chandigarh University Practice Suite */}
                         {(ex.type === "coding" || ex.type === "debugging") &&
                           renderInteractivePracticeSuite(ex)
                         }
@@ -2157,13 +2187,13 @@ export default function CourseWorkspacePage({
                   </div>
                 )}
 
-                {/* Always-Accessible Hands-on Interactive Practice & W3Schools Exercises */}
+                {/* Always-Accessible Hands-on Interactive Practice & Chandigarh University Lab Exercises */}
                 {!lesson.exercises?.some((e) => e.type === "coding" || e.type === "debugging") && (
                   <div className="pt-8 border-t border-border space-y-6">
                     <div className="flex items-center justify-between">
                       <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
                         <Code2 className="w-5 h-5 text-primary" />
-                        <span>Interactive Practice & W3Schools Exercises</span>
+                        <span>Interactive Practice & Chandigarh University Exercises</span>
                       </h2>
                       <span className="text-xs text-muted-foreground font-medium">
                         Real-time code compiler & concept fill-in-the-blanks
@@ -2244,6 +2274,18 @@ export default function CourseWorkspacePage({
           </main>
         </div>
       </div>
+
+      {/* ── Module Incompletion Reasons Popup Modal ── */}
+      <ModuleCompletionModal
+        isOpen={completionModal.isOpen}
+        onClose={() => setCompletionModal((prev) => ({ ...prev, isOpen: false }))}
+        title={completionModal.title}
+        reasons={completionModal.reasons}
+        criteria={completionModal.criteria}
+        onNavigateTab={(tab) => {
+          setActiveTabMode(tab);
+        }}
+      />
 
       {/* ── Interactive Modal Popup Window (Standard Replacement for window.alert) ── */}
       {popupModal?.isOpen && (

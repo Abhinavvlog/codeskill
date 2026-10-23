@@ -141,7 +141,11 @@ export default function ProblemWorkspace({ params }: { params: Promise<{ id: str
 
   useEffect(() => {
     if (!timerRunning) return;
-    const interval = window.setInterval(() => setElapsedSeconds((seconds) => seconds + 1), 1000);
+    const startMs = Date.now() - (elapsedSeconds * 1000);
+    const tick = () => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startMs) / 1000)));
+    };
+    const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
   }, [timerRunning]);
 

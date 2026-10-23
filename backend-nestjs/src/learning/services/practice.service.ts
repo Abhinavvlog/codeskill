@@ -160,6 +160,7 @@ export class PracticeService {
             timeLimit: 3000,
             memoryLimit: 256,
             customInput: !hasExpectedOutput,
+            allowLocalFallback: true,
           },
         );
       } catch (err: any) {
@@ -258,6 +259,77 @@ export class PracticeService {
   }
 
   /**
+   * Check if a student meets all criteria to complete a lesson/module
+   */
+  async checkLessonCompletion(lessonId: string, studentId: string, timeSpentSeconds?: number) {
+    const lesson = await this.lessonRepo.findOne({
+      where: { id: lessonId },
+      relations: { exercises: true, module: true },
+    });
+    if (!lesson) {
+      throw new NotFoundException(`Lesson not found: ${lessonId}`);
+    }
+
+    const progress = await this.lessonProgressRepo.findOne({
+      where: { studentId, lessonId },
+    });
+
+    const currentSpent = Math.max(progress?.timeSpentSeconds || 0, timeSpentSeconds || 0);
+
+    // Standardized duration: default to 30 seconds if missing or 0
+    const rawRequired = (lesson.module as any)?.requiredTimeSeconds;
+    const requiredSeconds = typeof rawRequired === 'number' && rawRequired > 0 ? rawRequired : 30;
+
+    const reasons: string[] = [];
+    const timeRemaining = Math.max(0, requiredSeconds - currentSpent);
+    const timeMet = currentSpent >= requiredSeconds;
+
+    if (!timeMet) {
+      reasons.push(
+        `Study time requirement not met: You must spend at least ${requiredSeconds} seconds on this module before completing (${timeRemaining}s remaining).`
+      );
+    }
+
+    const mandatoryExercises = (lesson.exercises || []).filter((e) => e.isMandatory);
+    let quizMet = true;
+    let codingMet = true;
+
+    if (mandatoryExercises.length > 0) {
+      const quizEx = mandatoryExercises.filter((e) => e.type === 'quiz');
+      const codingEx = mandatoryExercises.filter((e) => e.type === 'coding' || e.type === 'debugging');
+
+      if (!progress || progress.status !== 'completed') {
+        if (quizEx.length > 0) {
+          quizMet = false;
+          reasons.push(
+            `Quiz not passed: Please complete the required module quiz with a passing score of at least ${lesson.passingScore || 70}%.`
+          );
+        }
+        if (codingEx.length > 0) {
+          codingMet = false;
+          reasons.push(
+            `Coding exercise not completed: All test cases in the hands-on coding sandbox must pass.`
+          );
+        }
+      }
+    }
+
+    return {
+      lessonId,
+      canComplete: reasons.length === 0,
+      reasons,
+      criteria: {
+        timeSpent: currentSpent,
+        requiredTime: requiredSeconds,
+        timeRemaining,
+        timeMet,
+        quizMet,
+        codingMet,
+      },
+    };
+  }
+
+  /**
    * Complete reading lesson
    */
   async completeLesson(lessonId: string, studentId: string, timeSpentSeconds?: number) {
@@ -269,33 +341,20 @@ export class PracticeService {
       throw new NotFoundException(`Lesson not found: ${lessonId}`);
     }
 
+    const check = await this.checkLessonCompletion(lessonId, studentId, timeSpentSeconds);
+    if (!check.canComplete) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: check.reasons.join(' • '),
+        reasons: check.reasons,
+        criteria: check.criteria,
+      });
+    }
+
     let progress = await this.lessonProgressRepo.findOne({
       where: { studentId, lessonId },
     });
-
-    const currentSpent = Math.max(progress?.timeSpentSeconds || 0, timeSpentSeconds || 0);
-
-    // Verify minimum time requirement if configured on module
-    const requiredSeconds = (lesson.module as any)?.requiredTimeSeconds || 0;
-    if (requiredSeconds > 0 && currentSpent < requiredSeconds) {
-      const remaining = requiredSeconds - currentSpent;
-      const minText = requiredSeconds >= 60 ? `${Math.ceil(requiredSeconds / 60)} minute(s)` : `${requiredSeconds} seconds`;
-      throw new BadRequestException(
-        `Please spend at least ${minText} engaging with this module's concepts before completing (remaining: ${remaining}s).`,
-      );
-    }
-
-    // If lesson has mandatory exercises, ensure all are passed before allowing complete
-    const mandatoryExercises = (lesson.exercises || []).filter((e) => e.isMandatory);
-    if (mandatoryExercises.length > 0) {
-      // For lessons with mandatory exercises, exercises must be submitted and passed
-      // We check if progress is already completed
-      if (!progress || progress.status !== 'completed') {
-        throw new BadRequestException(
-          'Please complete and pass all required practice exercises in this lesson before proceeding',
-        );
-      }
-    }
+    const currentSpent = check.criteria.timeSpent;
 
     if (!progress) {
       progress = this.lessonProgressRepo.create({
@@ -511,6 +570,7 @@ export class PracticeService {
           timeLimit: 5000,
           memoryLimit: 256,
           customInput: true,
+          allowLocalFallback: true,
         },
       );
       const elapsed = Date.now() - startTime;
