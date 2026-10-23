@@ -5,6 +5,7 @@ import { applyAssessmentAudienceTargetingMigration } from './migrations/assessme
 import { applyAssessmentProctorCapturesMigration } from './migrations/assessment-proctor-captures';
 import { applyAssessmentProctoringModesMigration } from './migrations/assessment-proctoring-modes';
 import { applyAssessmentResumeLimitMigration } from './migrations/assessment-resume-limit';
+import { applyLearningModuleMigration } from './migrations/learning-module';
 
 /** Idempotent schema additions applied on every container rollout before starting the API. */
 export async function runAssessmentSchemaMigrations(): Promise<void> {
@@ -23,6 +24,7 @@ export async function runAssessmentSchemaMigrations(): Promise<void> {
         await applyAssessmentProctorCapturesMigration(runner);
         await applyAssessmentProctoringModesMigration(runner);
         await applyAssessmentResumeLimitMigration(runner);
+        await applyLearningModuleMigration(runner);
         await runner.commitTransaction();
       } catch (error) {
         await runner.rollbackTransaction();

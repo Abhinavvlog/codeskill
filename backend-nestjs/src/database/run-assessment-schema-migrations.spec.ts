@@ -1,6 +1,7 @@
 import { DataSource } from 'typeorm';
 import { runAssessmentSchemaMigrations } from './run-assessment-schema-migrations';
 import { applyAssessmentResumeLimitMigration } from './migrations/assessment-resume-limit';
+import { applyLearningModuleMigration } from './migrations/learning-module';
 
 jest.mock('typeorm', () => ({ DataSource: jest.fn() }));
 jest.mock('./run-practice-submission-source', () => ({
@@ -8,6 +9,9 @@ jest.mock('./run-practice-submission-source', () => ({
 }));
 jest.mock('./migrations/assessment-resume-limit', () => ({
   applyAssessmentResumeLimitMigration: jest.fn(),
+}));
+jest.mock('./migrations/learning-module', () => ({
+  applyLearningModuleMigration: jest.fn(),
 }));
 
 function setup() {
@@ -33,6 +37,7 @@ it('serializes rollout migrations and adds the attempt columns before committing
   expect(runner.query).toHaveBeenCalledWith(expect.stringContaining('contestFormat'));
   expect(runner.query).toHaveBeenCalledWith(expect.stringContaining('ADD COLUMN IF NOT EXISTS "captures"'));
   expect(applyAssessmentResumeLimitMigration).toHaveBeenCalledWith(runner);
+  expect(applyLearningModuleMigration).toHaveBeenCalledWith(runner);
   expect(runner.commitTransaction).toHaveBeenCalledTimes(1);
   expect(runner.rollbackTransaction).not.toHaveBeenCalled();
   expect(runner.release).toHaveBeenCalledTimes(1);
