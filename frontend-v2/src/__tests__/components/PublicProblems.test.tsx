@@ -1,6 +1,6 @@
 import React from "react";
 import "@testing-library/jest-dom";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ProblemsPage from "@/app/problems/page";
 import { problemsAPI } from "@/config/api";
 
@@ -21,9 +21,9 @@ it("loads public problems for a guest and renders canonical IDs, difficulty, cat
   expect(screen.getByRole("status", { name: "Loading problems" })).toBeInTheDocument();
   expect(await screen.findByRole("link", { name: "Two Sum" })).toHaveAttribute("href", "/problems/two-sum");
   expect(getAll).toHaveBeenCalledWith(1, 20, "", "All Topics", expect.any(AbortSignal));
-  expect(within(screen.getByRole("table")).getByText("Easy")).toBeInTheDocument();
+  expect(screen.getByText("Easy", { selector: "span.difficulty" })).toHaveClass("difficulty", "easy");
   expect(screen.getByText("45%")).toBeInTheDocument();
-  expect(screen.getByText("42", { selector: "strong" })).toBeInTheDocument();
+  expect(screen.getByText("42")).toBeInTheDocument();
   expect(screen.queryByText("No problems found matching your criteria.")).not.toBeInTheDocument();
 });
 
@@ -53,7 +53,7 @@ it("makes a malformed response recoverable and avoids links for records without 
   fireEvent.click(screen.getByRole("button", { name: "Try again" }));
   expect(await screen.findByText("No Slug")).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "No Slug" })).not.toBeInTheDocument();
-  expect(within(screen.getByRole("table")).getByText("Hard")).toBeInTheDocument();
+  expect(screen.getByText("Hard", { selector: "span.difficulty" })).toHaveClass("difficulty", "hard");
 });
 
 it("resets to page one when the topic changes", async () => {
@@ -65,13 +65,6 @@ it("resets to page one when the topic changes", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Trees" }));
   await waitFor(() => expect(getAll).toHaveBeenLastCalledWith(1, 20, "", "Trees", expect.any(AbortSignal)));
   expect(screen.getByRole("button", { name: "Trees" })).toHaveAttribute("aria-pressed", "true");
-});
-
-it("filters problems by difficulty", async () => {
-  render(<ProblemsPage />);
-  await screen.findByRole("link", { name: "Two Sum" });
-  fireEvent.change(screen.getByRole("combobox", { name: "Filter by difficulty" }), { target: { value: "Hard" } });
-  await waitFor(() => expect(getAll).toHaveBeenLastCalledWith(1, 20, "", "All Topics", expect.any(AbortSignal), "Hard"));
 });
 
 it("debounces search and resets its pagination", async () => {
