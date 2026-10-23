@@ -74,30 +74,52 @@ export function ChandigarhUniversityCertificate({
             size: A4 landscape;
             margin: 0mm;
           }
+          html,
           body {
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          .print-certificate-container {
             width: 297mm !important;
             height: 210mm !important;
             max-width: 297mm !important;
             max-height: 210mm !important;
-            margin: 0 auto !important;
+            overflow: hidden !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          #printable-university-certificate,
+          #printable-university-certificate * {
+            visibility: visible !important;
+          }
+          #printable-university-certificate {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 297mm !important;
+            height: 210mm !important;
+            max-width: 297mm !important;
+            max-height: 210mm !important;
+            min-width: 297mm !important;
+            min-height: 210mm !important;
+            margin: 0 !important;
             padding: 0 !important;
             border-radius: 0 !important;
             box-shadow: none !important;
+            z-index: 9999999 !important;
             page-break-after: avoid !important;
+            page-break-before: avoid !important;
             page-break-inside: avoid !important;
+            background: #fdfcf9 !important;
           }
         }
       `}</style>
 
       {/* Main Certificate Canvas: Standard A4 Landscape Proportions (297mm x 210mm) */}
       <div
+        id="printable-university-certificate"
         className={`print-certificate-container relative w-full max-w-[940px] mx-auto aspect-[1.414/1] bg-[#fdfcf9] text-slate-900 shadow-2xl rounded-sm overflow-hidden select-none font-serif flex flex-col justify-between ${className}`}
         style={{
           boxShadow:

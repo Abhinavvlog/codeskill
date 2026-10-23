@@ -13,12 +13,14 @@ import {
   Sparkles,
   ExternalLink,
   Printer,
+  Download,
   Share2,
   Copy,
   Check,
   ArrowLeft,
   X,
   Info,
+  Loader2,
 } from "lucide-react";
 import { certificateVerificationAPI } from "@/config/api";
 import { Spinner } from "@/components/ui/spinner";
@@ -42,6 +44,7 @@ export default function PublicCertificateVerificationPage({
   const { credentialId } = use(params);
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showLinkedInModal, setShowLinkedInModal] = useState(false);
@@ -83,7 +86,44 @@ export default function PublicCertificateVerificationPage({
   };
 
   const handlePrint = () => {
+    document.body.classList.add("certificate-print-mode");
     window.print();
+    setTimeout(() => {
+      document.body.classList.remove("certificate-print-mode");
+    }, 1500);
+  };
+
+  const handleDownloadImage = async () => {
+    try {
+      setDownloading(true);
+      const element = document.getElementById("printable-university-certificate");
+      if (!element) {
+        handlePrint();
+        return;
+      }
+
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(element, {
+        scale: 3, // 300 DPI high-definition resolution
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#fdfcf9",
+        logging: false,
+      });
+
+      const dataUrl = canvas.toDataURL("image/png", 1.0);
+      const link = document.createElement("a");
+      const safeRecipient = (result?.recipientName || "Student")
+        .replace(/[^a-zA-Z0-9_-]/g, "_");
+      link.download = `Chandigarh_University_Certificate_${safeRecipient}_${credentialId}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error("Direct download failed, falling back to print dialog", err);
+      handlePrint();
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const currentUrl = typeof window !== "undefined" ? window.location.href : "";
@@ -170,34 +210,56 @@ export default function PublicCertificateVerificationPage({
 
         {/* Action Toolbar (Hidden on Print) */}
         {result?.valid && (
-          <div className="print:hidden flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 py-1">
+          <div className="print:hidden flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 py-1">
             <Button
               onClick={handlePrint}
               variant="default"
               size="sm"
-              className="gap-1.5 bg-primary text-primary-foreground font-semibold shadow-sm text-xs h-8"
+              className="gap-1.5 bg-primary text-primary-foreground font-semibold shadow-sm text-xs h-8 cursor-pointer"
+              title="Print certificate or save as PDF via your browser's print dialog"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Print / Download PDF</span>
+              <span>Print / Save as PDF</span>
+            </Button>
+
+            <Button
+              onClick={handleDownloadImage}
+              disabled={downloading}
+              variant="secondary"
+              size="sm"
+              className="gap-1.5 border border-border bg-card text-foreground hover:bg-muted font-semibold shadow-sm text-xs h-8 cursor-pointer"
+              title="Download high-resolution 300 DPI certificate image directly"
+            >
+              {downloading ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                  <span>Generating Certificate...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5 text-primary" />
+                  <span>Download Certificate</span>
+                </>
+              )}
             </Button>
 
             <Button
               onClick={() => setShowLinkedInModal(true)}
               variant="outline"
               size="sm"
-              className="gap-1.5 border-border bg-card text-foreground hover:bg-muted font-semibold shadow-sm text-xs h-8"
+              className="gap-1.5 border-border bg-card text-foreground hover:bg-muted font-semibold shadow-sm text-xs h-8 cursor-pointer"
             >
               <svg className="w-3.5 h-3.5 fill-[#0A66C2]" viewBox="0 0 24 24">
                 <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 8.76c-.97 0-1.75-.79-1.75-1.76s.78-1.75 1.75-1.75 1.75.78 1.75 1.75-.78 1.76-1.75 1.76m1.4 9.74v-8.37H5.06v8.37h2.8z" />
               </svg>
-              <span>Add / Post to LinkedIn</span>
+              <span>Add to LinkedIn</span>
             </Button>
 
             <Button
               onClick={handleCopyLink}
               variant="outline"
               size="sm"
-              className="gap-1.5 border-border bg-card text-foreground hover:bg-muted font-semibold shadow-sm text-xs h-8"
+              className="gap-1.5 border-border bg-card text-foreground hover:bg-muted font-semibold shadow-sm text-xs h-8 cursor-pointer"
             >
               {copied ? (
                 <>
