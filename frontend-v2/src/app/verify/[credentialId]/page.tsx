@@ -148,7 +148,7 @@ export default function PublicCertificateVerificationPage({
         </div>
       </header>
 
-      <main className="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-4 lg:p-6 space-y-4">
+      <main className="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-4 lg:p-6 space-y-4 print:p-0 print:m-0 print:max-w-none print:w-full print:space-y-0">
         {/* Verification Status Overview Banner (Hidden on Print) */}
         <div className="print:hidden text-center max-w-2xl mx-auto space-y-2 pt-1">
           <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[11px] font-bold tracking-wide uppercase bg-muted text-foreground border border-border">
@@ -216,7 +216,7 @@ export default function PublicCertificateVerificationPage({
 
         {/* Certificate Display Area */}
         {result?.valid ? (
-          <div className="py-1">
+          <div className="py-1 print:p-0 print:m-0">
             <ChandigarhUniversityCertificate data={result} />
           </div>
         ) : (
