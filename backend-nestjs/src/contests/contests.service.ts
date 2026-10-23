@@ -316,13 +316,40 @@ export class ContestsService {
       throw new BadRequestException(
         'Contest is outside its participation window',
       );
-    const problems = await Promise.all(
-      (contest.problems || []).map(async (problemId) => {
-        const problem =
-          await this.problemsService.getExecutionProblem(problemId);
-        return { id: problem.id, title: problem.title, slug: problem.slug };
-      }),
+    const problems = (
+      await Promise.all(
+        (contest.problems || []).map(async (problemId) => {
+          try {
+            const problem =
+              await this.problemsService.getExecutionProblem(problemId);
+            return { id: problem.id, title: problem.title, slug: problem.slug };
+          } catch {
+            try {
+              const res = await this.problemsService.getProblemBySlug(problemId);
+              if (res?.data?.id) {
+                return {
+                  id: res.data.id,
+                  title: res.data.title,
+                  slug: res.data.slug,
+                };
+              }
+            } catch {
+              // Ignore fallback failure
+            }
+            this.logger.warn(
+              `Contest ${contest.id} problem "${problemId}" could not be loaded`,
+            );
+            return null;
+          }
+        }),
+      )
+    ).filter(
+      (p): p is { id: string; title: string; slug: string } => p !== null,
     );
+
+    if (problems.length === 0 && (contest.problems || []).length > 0) {
+      throw new NotFoundException('Problem not found');
+    }
 
     // Create first attempt or ignore if row exists
     await this.attemptRepo

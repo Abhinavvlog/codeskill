@@ -129,13 +129,6 @@ function bankExecutionEligible(question: Question) {
     published(metadata.visibility)
   );
 }
-function bankPublished(question: Question) {
-  const metadata = object(question.metadata);
-  return (
-    bankExecutionEligible(question) &&
-    metadata.contestOnly !== true
-  );
-}
 function bankSlug(question: Question) {
   return text(question.slug) || `question-${question.id}`;
 }
@@ -396,7 +389,7 @@ export class ProblemsService {
       .getOne();
     if (question) {
       if (
-        !bankPublished(question) ||
+        !bankExecutionEligible(question) ||
         (await this.hasMetadataCounterpart(question))
       )
         throw new NotFoundException('Problem not found');
