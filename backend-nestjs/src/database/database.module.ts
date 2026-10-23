@@ -2,6 +2,7 @@ import { parseSubmissionShardingConfig } from './sharding/sharding.config';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
+import { DatabaseAutoMigrationService } from './database-auto-migration.service';
 
 import { User } from './entities/user.entity';
 import { Problem } from './entities/problem.entity';
@@ -178,6 +179,7 @@ const entities = [
     }),
     TypeOrmModule.forFeature(entities),
   ],
-  exports: [TypeOrmModule],
+  providers: [DatabaseAutoMigrationService],
+  exports: [TypeOrmModule, DatabaseAutoMigrationService],
 })
 export class DatabaseModule {}

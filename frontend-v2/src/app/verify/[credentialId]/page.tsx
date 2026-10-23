@@ -73,8 +73,12 @@ export default function PublicCertificateVerificationPage({
   };
 
   const handleCopyLink = () => {
-    const url = window.location.href;
-    navigator.clipboard.writeText(url);
+    const officialOrigin = "https://codeskill.chandigarhuniversity.ac.in";
+    const shareableUrl =
+      typeof window !== "undefined"
+        ? window.location.href.replace(/https?:\/\/localhost(:\d+)?/gi, officialOrigin)
+        : `${officialOrigin}/verify/${credentialId}`;
+    navigator.clipboard.writeText(shareableUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
@@ -107,7 +111,7 @@ export default function PublicCertificateVerificationPage({
         scale: 3, // 300 DPI high-definition resolution
         useCORS: true,
         allowTaint: true,
-        backgroundColor: "#fdfcf9",
+        backgroundColor: "#ffffff",
         logging: false,
       });
 
@@ -115,7 +119,7 @@ export default function PublicCertificateVerificationPage({
       const link = document.createElement("a");
       const safeRecipient = (result?.recipientName || "Student")
         .replace(/[^a-zA-Z0-9_-]/g, "_");
-      link.download = `Chandigarh_University_Certificate_${safeRecipient}_${credentialId}.png`;
+      link.download = `Chandigarh_University_Certificate_${safeRecipient}_${displayId}.png`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
@@ -126,12 +130,21 @@ export default function PublicCertificateVerificationPage({
     }
   };
 
-  const currentUrl = typeof window !== "undefined" ? window.location.href : "";
+  const officialOrigin = "https://codeskill.chandigarhuniversity.ac.in";
+  const displayId =
+    result?.credentialId && result.credentialId !== "demo"
+      ? result.credentialId
+      : credentialId === "demo"
+      ? "CU-CS-2026-X89K2A"
+      : credentialId;
+
+  const currentUrl = `${officialOrigin}/verify/${displayId}`;
+
   const certName = result?.learningPath || "Data Structures & Algorithms in Practice";
   const orgName = "Chandigarh University";
-  const issueDate = result?.issuedAt ? new Date(result.issuedAt) : new Date();
-  const issueYear = issueDate.getFullYear();
-  const issueMonth = issueDate.getMonth() + 1;
+  const issueDate = result?.issuedAt ? new Date(result.issuedAt) : null;
+  const issueYear = issueDate ? issueDate.getFullYear() : 2026;
+  const issueMonth = issueDate ? issueDate.getMonth() + 1 : 10;
 
   const linkedInAddUrl = `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(
     certName
@@ -139,9 +152,9 @@ export default function PublicCertificateVerificationPage({
     orgName
   )}&issueYear=${issueYear}&issueMonth=${issueMonth}&certUrl=${encodeURIComponent(
     currentUrl
-  )}&certId=${encodeURIComponent(result?.credentialId || credentialId)}`;
+  )}&certId=${encodeURIComponent(displayId)}`;
 
-  const linkedInPostText = `🎓 Proud to share that I have earned the Certificate of Excellence in ${certName} from Chandigarh University via CodeSkill! 🚀\n\nVerified Credential ID: ${credentialId}\nCheck authenticity record: ${currentUrl}\n\n#ChandigarhUniversity #CodeSkill #DSA #ContinuousLearning #EngineeringExcellence`;
+  const linkedInPostText = `🎓 Proud to share that I have earned the Certificate of Completion in ${certName} from Chandigarh University via CodeSkill! 🚀\n\nVerified Credential ID: ${displayId}\nCheck authenticity record: ${currentUrl}\n\n#ChandigarhUniversity #CodeSkill #DSA #ContinuousLearning #EngineeringExcellence`;
 
   const handleOpenLinkedInPost = () => {
     navigator.clipboard.writeText(linkedInPostText);
@@ -200,11 +213,11 @@ export default function PublicCertificateVerificationPage({
             Certificate Authenticity Record
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            Verification ID:{" "}
+            Credential ID:{" "}
             <span className="font-mono text-foreground font-bold bg-muted px-2 py-0.5 rounded">
-              {credentialId}
+              {displayId}
             </span>{" "}
-            · Issued under the academic auspices of Chandigarh University
+            · Validated against the official Chandigarh University Ledger
           </p>
         </div>
 
