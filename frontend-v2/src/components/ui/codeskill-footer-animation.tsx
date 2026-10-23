@@ -7,11 +7,13 @@ import { cn } from "@/lib/utils";
 export interface CodeSkillFooterAnimationProps {
   className?: string;
   brandName?: string;
+  showGiantText?: boolean;
 }
 
 export function CodeSkillFooterAnimation({
   className = "",
   brandName = "CodeSkill",
+  showGiantText = true,
 }: CodeSkillFooterAnimationProps) {
   const footerRef = useRef<HTMLElement>(null);
   const giantRef = useRef<HTMLDivElement>(null);
@@ -57,6 +59,8 @@ export function CodeSkillFooterAnimation({
 
   // Full-Screen Edge-to-Edge auto-fit calculation matching codeskill-footer-animation.html
   useEffect(() => {
+    if (!showGiantText) return;
+
     const fit = () => {
       const giant = giantRef.current;
       const txt = giantTxtRef.current;
@@ -86,7 +90,7 @@ export function CodeSkillFooterAnimation({
       window.removeEventListener("resize", fit);
       window.removeEventListener("load", fit);
     };
-  }, []);
+  }, [showGiantText]);
 
   // Scroll Progress and Circular Back to Top Button
   useEffect(() => {
@@ -137,6 +141,7 @@ export function CodeSkillFooterAnimation({
         className={cn(
           "codeskill-custom-footer relative w-full",
           isInView ? "in" : "",
+          !showGiantText && "no-giant",
           className
         )}
       >
@@ -346,28 +351,30 @@ export function CodeSkillFooterAnimation({
           </div>
         </div>
 
-        {/* Giant Half-Cut Edge-to-Edge Animated Text (Full Screen) */}
-        <div
-          ref={giantRef}
-          id="giant"
-          className="giant"
-          aria-hidden="true"
-        >
+        {/* Giant Half-Cut Edge-to-Edge Animated Text (Full Screen - landing page only) */}
+        {showGiantText && (
           <div
-            ref={giantTxtRef}
-            id="giantTxt"
-            className="txt"
+            ref={giantRef}
+            id="giant"
+            className="giant"
+            aria-hidden="true"
           >
-            {giantLetters.map((char, i) => (
-              <span
-                key={i}
-                style={{ "--i": i } as React.CSSProperties}
-              >
-                {char}
-              </span>
-            ))}
+            <div
+              ref={giantTxtRef}
+              id="giantTxt"
+              className="txt"
+            >
+              {giantLetters.map((char, i) => (
+                <span
+                  key={i}
+                  style={{ "--i": i } as React.CSSProperties}
+                >
+                  {char}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </footer>
 
       {/* Circular Progress Back to Top Button */}
@@ -431,6 +438,10 @@ export function CodeSkillFooterAnimation({
           padding: 4.5rem var(--pad) 0;
           color: var(--ink);
           box-sizing: border-box;
+        }
+
+        .codeskill-custom-footer.no-giant {
+          padding-bottom: 2.5rem;
         }
 
         :global(.dark) .codeskill-custom-footer {

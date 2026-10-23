@@ -16,6 +16,7 @@ import { BadgeDefinition } from '../entities/badge-definition.entity';
 import { CertificateTemplate } from '../entities/certificate-template.entity';
 import { Certificate } from '../entities/certificate.entity';
 import { LearningEnrollment } from '../entities/learning-enrollment.entity';
+import { applyLearningModuleMigration } from '../../database/migrations/learning-module';
 import {
   CreateLearningPathDto,
   UpdateLearningPathDto,
@@ -61,6 +62,7 @@ export class AdminLearningService {
 
   async runMigrationColumnsIfNotExist() {
     try {
+      await applyLearningModuleMigration(this.moduleRepo);
       await this.moduleRepo.query(`
         ALTER TABLE "course_modules" ADD COLUMN IF NOT EXISTS "requiredTimeMinutes" integer NOT NULL DEFAULT 2;
         ALTER TABLE "course_modules" ADD COLUMN IF NOT EXISTS "requiredTimeSeconds" integer NOT NULL DEFAULT 30;
@@ -68,6 +70,26 @@ export class AdminLearningService {
       `);
     } catch (err: any) {
       this.logger.debug(`Migration check ignored: ${err?.message}`);
+    }
+  }
+
+  async acquireAdvisoryLock(lockId: number): Promise<boolean> {
+    try {
+      const res = await this.moduleRepo.query(
+        `SELECT pg_try_advisory_lock(${lockId}) as acquired`,
+      );
+      return res?.[0]?.acquired === true || res?.[0]?.acquired === 't';
+    } catch (err: any) {
+      this.logger.debug(`Advisory lock check fallback: ${err?.message}`);
+      return true;
+    }
+  }
+
+  async releaseAdvisoryLock(lockId: number): Promise<void> {
+    try {
+      await this.moduleRepo.query(`SELECT pg_advisory_unlock(${lockId})`);
+    } catch {
+      // Ignored
     }
   }
 
