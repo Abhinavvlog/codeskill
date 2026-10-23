@@ -119,7 +119,7 @@ export default function PublicCertificateVerificationPage({
       const link = document.createElement("a");
       const safeRecipient = (result?.recipientName || "Student")
         .replace(/[^a-zA-Z0-9_-]/g, "_");
-      link.download = `Chandigarh_University_Certificate_${safeRecipient}_${credentialId}.png`;
+      link.download = `Chandigarh_University_Certificate_${safeRecipient}_${displayId}.png`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
@@ -131,10 +131,20 @@ export default function PublicCertificateVerificationPage({
   };
 
   const officialOrigin = "https://codeskill.chandigarhuniversity.ac.in";
+  const displayId =
+    result?.credentialId && result.credentialId !== "demo"
+      ? result.credentialId
+      : credentialId === "demo"
+      ? "CU-CS-2026-X89K2A"
+      : credentialId;
+
   const currentUrl =
     typeof window !== "undefined"
-      ? window.location.href.replace(/https?:\/\/localhost(:\d+)?/gi, officialOrigin)
-      : `${officialOrigin}/verify/${credentialId}`;
+      ? window.location.href
+          .replace(/https?:\/\/localhost(:\d+)?/gi, officialOrigin)
+          .replace(/\/verify\/demo\b/gi, `/verify/${displayId}`)
+      : `${officialOrigin}/verify/${displayId}`;
+
   const certName = result?.learningPath || "Data Structures & Algorithms in Practice";
   const orgName = "Chandigarh University";
   const issueDate = result?.issuedAt ? new Date(result.issuedAt) : new Date();
@@ -147,9 +157,9 @@ export default function PublicCertificateVerificationPage({
     orgName
   )}&issueYear=${issueYear}&issueMonth=${issueMonth}&certUrl=${encodeURIComponent(
     currentUrl
-  )}&certId=${encodeURIComponent(result?.credentialId || credentialId)}`;
+  )}&certId=${encodeURIComponent(displayId)}`;
 
-  const linkedInPostText = `🎓 Proud to share that I have earned the Certificate of Excellence in ${certName} from Chandigarh University via CodeSkill! 🚀\n\nVerified Credential ID: ${credentialId}\nCheck authenticity record: ${currentUrl}\n\n#ChandigarhUniversity #CodeSkill #DSA #ContinuousLearning #EngineeringExcellence`;
+  const linkedInPostText = `🎓 Proud to share that I have earned the Certificate of Completion in ${certName} from Chandigarh University via CodeSkill! 🚀\n\nVerified Credential ID: ${displayId}\nCheck authenticity record: ${currentUrl}\n\n#ChandigarhUniversity #CodeSkill #DSA #ContinuousLearning #EngineeringExcellence`;
 
   const handleOpenLinkedInPost = () => {
     navigator.clipboard.writeText(linkedInPostText);
@@ -208,11 +218,11 @@ export default function PublicCertificateVerificationPage({
             Certificate Authenticity Record
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            Verification ID:{" "}
+            Credential ID:{" "}
             <span className="font-mono text-foreground font-bold bg-muted px-2 py-0.5 rounded">
-              {credentialId}
+              {displayId}
             </span>{" "}
-            · Issued under the academic auspices of Chandigarh University
+            · Validated against the official Chandigarh University Ledger
           </p>
         </div>
 
