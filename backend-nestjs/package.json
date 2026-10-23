@@ -11,6 +11,7 @@
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "typeorm:sync": "node dist/sync-db.js",
+    "db:auto-migrate": "ts-node -r tsconfig-paths/register src/database/run-all-auto-migrations.ts",
     "db:migrate": "node dist/database/run-practice-submission-source.js",
     "db:migrate:ts": "ts-node -r tsconfig-paths/register src/database/run-practice-submission-source.ts",
     "db:assessment-proctor-captures:migrate": "ts-node -r tsconfig-paths/register src/database/run-assessment-proctor-captures-migration.ts",

@@ -73,8 +73,12 @@ export default function PublicCertificateVerificationPage({
   };
 
   const handleCopyLink = () => {
-    const url = window.location.href;
-    navigator.clipboard.writeText(url);
+    const officialOrigin = "https://codeskill.chandigarhuniversity.ac.in";
+    const shareableUrl =
+      typeof window !== "undefined"
+        ? window.location.href.replace(/https?:\/\/localhost(:\d+)?/gi, officialOrigin)
+        : `${officialOrigin}/verify/${credentialId}`;
+    navigator.clipboard.writeText(shareableUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
@@ -107,7 +111,7 @@ export default function PublicCertificateVerificationPage({
         scale: 3, // 300 DPI high-definition resolution
         useCORS: true,
         allowTaint: true,
-        backgroundColor: "#fdfcf9",
+        backgroundColor: "#ffffff",
         logging: false,
       });
 
@@ -126,7 +130,11 @@ export default function PublicCertificateVerificationPage({
     }
   };
 
-  const currentUrl = typeof window !== "undefined" ? window.location.href : "";
+  const officialOrigin = "https://codeskill.chandigarhuniversity.ac.in";
+  const currentUrl =
+    typeof window !== "undefined"
+      ? window.location.href.replace(/https?:\/\/localhost(:\d+)?/gi, officialOrigin)
+      : `${officialOrigin}/verify/${credentialId}`;
   const certName = result?.learningPath || "Data Structures & Algorithms in Practice";
   const orgName = "Chandigarh University";
   const issueDate = result?.issuedAt ? new Date(result.issuedAt) : new Date();
