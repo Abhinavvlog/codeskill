@@ -30,6 +30,7 @@ it('serializes rollout migrations and adds the attempt columns before committing
   const { runner, source } = setup();
   await runAssessmentSchemaMigrations();
   expect(runner.query.mock.calls[0][0]).toBe('SELECT pg_advisory_xact_lock(1902230159)');
+  expect(runner.query).toHaveBeenCalledWith(expect.stringContaining('contestFormat'));
   expect(runner.query).toHaveBeenCalledWith(expect.stringContaining('ADD COLUMN IF NOT EXISTS "captures"'));
   expect(applyAssessmentResumeLimitMigration).toHaveBeenCalledWith(runner);
   expect(runner.commitTransaction).toHaveBeenCalledTimes(1);
