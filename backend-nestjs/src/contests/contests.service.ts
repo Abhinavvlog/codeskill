@@ -15,6 +15,8 @@ import { Contest } from '../database/entities/contest.entity';
 import { ContestAttempt } from '../database/entities/contest-attempt.entity';
 import { SubmissionStore } from '../database/sharding/submission-store';
 import { ContestReattemptGrant } from '../database/entities/contest-reattempt-grant.entity';
+import { Question } from '../database/entities/question.entity';
+import { ProblemMetadata } from '../database/entities/problem-metadata.entity';
 
 @Injectable()
 export class ContestsService {
@@ -29,6 +31,12 @@ export class ContestsService {
     @Optional()
     @InjectRepository(ContestReattemptGrant)
     private readonly reattemptGrantRepo?: Repository<ContestReattemptGrant>,
+    @Optional()
+    @InjectRepository(Question)
+    private readonly questionRepo?: Repository<Question>,
+    @Optional()
+    @InjectRepository(ProblemMetadata)
+    private readonly problemMetadataRepo?: Repository<ProblemMetadata>,
   ) {}
 
   async getContests() {
@@ -324,23 +332,73 @@ export class ContestsService {
               await this.problemsService.getExecutionProblem(problemId);
             return { id: problem.id, title: problem.title, slug: problem.slug };
           } catch {
-            try {
-              const res = await this.problemsService.getProblemBySlug(problemId);
-              if (res?.data?.id) {
+            // Execution problem lookup failed (e.g. MCQ or contestOnly non-coding)
+          }
+
+          const isUuid =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+              problemId,
+            );
+
+          try {
+            const questionRepo =
+              this.questionRepo ||
+              this.contestRepo.manager?.getRepository(Question);
+            if (questionRepo) {
+              const question = await questionRepo.findOne({
+                where: isUuid
+                  ? [{ id: problemId }, { mongoId: problemId }]
+                  : { mongoId: problemId },
+              });
+              if (question) {
                 return {
-                  id: res.data.id,
-                  title: res.data.title,
-                  slug: res.data.slug,
+                  id: question.id,
+                  title: question.title?.trim() || question.question,
+                  slug: question.slug?.trim() || `question-${question.id}`,
                 };
               }
-            } catch {
-              // Ignore fallback failure
             }
-            this.logger.warn(
-              `Contest ${contest.id} problem "${problemId}" could not be loaded`,
-            );
-            return null;
+          } catch {
+            // Ignore question repo lookup failure
           }
+
+          try {
+            const metadataRepo =
+              this.problemMetadataRepo ||
+              this.contestRepo.manager?.getRepository(ProblemMetadata);
+            if (metadataRepo && isUuid) {
+              const meta = await metadataRepo.findOne({
+                where: { id: problemId },
+              });
+              if (meta) {
+                return {
+                  id: meta.id,
+                  title: meta.title,
+                  slug: meta.slug || `problem-${meta.id}`,
+                };
+              }
+            }
+          } catch {
+            // Ignore metadata repo lookup failure
+          }
+
+          try {
+            const res = await this.problemsService.getProblemBySlug(problemId);
+            if (res?.data?.id) {
+              return {
+                id: res.data.id,
+                title: res.data.title,
+                slug: res.data.slug,
+              };
+            }
+          } catch {
+            // Ignore fallback failure
+          }
+
+          this.logger.warn(
+            `Contest ${contest.id} problem "${problemId}" could not be loaded`,
+          );
+          return null;
         }),
       )
     ).filter(
