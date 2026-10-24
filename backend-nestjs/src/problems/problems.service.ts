@@ -454,6 +454,9 @@ export class ProblemsService {
           testCases: {
             cases: cases(question.testCases).filter((test) => !test.isHidden),
           },
+          questionType: question.questionType || 'single_choice',
+          options: question.options || [],
+          codeSnippet: question.codeSnippet,
         },
       };
     }
@@ -589,5 +592,16 @@ export class ProblemsService {
         supportedLanguages: strings(problem.supportedLanguages),
       },
     };
+  }
+
+  async getQuestionById(id: string): Promise<Question | null> {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        id,
+      )
+    ) {
+      return null;
+    }
+    return this.questionRepository.findOne({ where: { id } });
   }
 }
